@@ -1,11 +1,22 @@
 services:
   app:
     build:
-      context: .
+      context: ..
       dockerfile: deployments/Dockerfile
     ports:
       - "8080:8080"
     environment:
-      ENV: production
       PORT: 8080
+      ENV: production
+    volumes:
+      - app-data:/app/data  # ← Persist SQLite file!
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  app-data:
