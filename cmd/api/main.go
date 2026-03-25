@@ -13,7 +13,7 @@ import (
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	_ "modernc.org/sqlite"
+	
 )
 
 func main() {
@@ -26,19 +26,18 @@ func main() {
 		logger.Fatal("failed to create data directory: ", err)
 	}
 
-	db, err := gorm.Open(gorm.Dialector(&sqlite.Dialector{
-		DSN: "data/app.db",
-	}), &gorm.Config{})
-	if err != nil {
-		logger.Fatal("SQLite connection failed:", err)
-	}
+	db, err := gorm.Open(sqlite.Open("data/app.db"), &gorm.Config{
+	 
+})
+if err != nil {
+	logger.Fatal("SQLite connection failed: ", err)
+}
 
 	// Миграции
-	err = db.AutoMigrate(&models.ProjectObject{})
-	if err != nil {
-		logger.Fatal("failed to migrate database: ", err)
-	}
-	logger.Info("SQLite connected and migrated")
+	if err := db.AutoMigrate(&models.ProjectObject{}, &models.GanttTask{}); err != nil {
+	logger.Fatal("failed to migrate database: ", err)
+}
+logger.Info("SQLite connected and migrated")
 
 
 	// Репозиторий + sample data
