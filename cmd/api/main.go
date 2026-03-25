@@ -11,7 +11,8 @@ import (
 	"github.com/AleksKAG/construction-manager/internal/services"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	"gorm.io/driver/sqlite"
+	"modernc.org/sqlite"
+	
 	"gorm.io/gorm"
 
 	
@@ -22,19 +23,23 @@ func main() {
 	logger.SetFormatter(&logrus.TextFormatter{})
 
 	// SQLite
+	// ====================== SQLite (без CGO) ======================
 	if err := os.MkdirAll("data", 0755); err != nil {
-		logger.Fatal(err)
+		logger.Fatal("failed to create data directory: ", err)
 	}
 
 	db, err := gorm.Open(sqlite.Open("data/app.db"), &gorm.Config{})
 	if err != nil {
-		logger.Fatal("SQLite connection failed:", err)
+		logger.Fatal("failed to connect to sqlite: ", err)
 	}
 
 	// Миграции
-	db.AutoMigrate(&models.ProjectObject{})
+	err = db.AutoMigrate(&models.ProjectObject{})
+	if err != nil {
+		logger.Fatal("failed to migrate database: ", err)
+	}
+	logger.Info("SQLite connected and migrated")
 
-	logger.Info("SQLite connected successfully")
 
 	// Репозиторий + sample data
 	repo := repository.NewProjectRepository(db)
