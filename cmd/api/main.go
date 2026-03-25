@@ -27,9 +27,7 @@ func main() {
 	}
 
 	// Подключение к SQLite
-	db, err := gorm.Open(gorm.Dialector(&sqlite.Dialector{
-		DSN: "data/app.db",
-	}), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("data/app.db"), &gorm.Config{})
 	if err != nil {
 		logger.Fatal("SQLite connection failed:", err)
 	}
@@ -39,7 +37,7 @@ func main() {
 		logger.Fatal("Migration failed:", err)
 	}
 
-	logger.Info("✅ SQLite connected and migrated successfully")
+	logger.Info("SQLite connected and migrated successfully")
 
 	// Репозиторий + sample data
 	repo := repository.NewProjectRepository(db)
@@ -66,7 +64,7 @@ func main() {
 		port = "8080"
 	}
 
-	logger.Infof("🚀 Server started on http://0.0.0.0:%s", port)
+	logger.Infof("Server started on http://0.0.0.0:%s", port)
 	if err := r.Run(":" + port); err != nil {
 		logger.Fatal(err)
 	}
