@@ -11,8 +11,7 @@ import (
 	"github.com/AleksKAG/construction-manager/internal/services"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	
-	"gorm.io/driver/sqlite"
+	"modernc.org/sqlite"
 	
 	"gorm.io/gorm"
 
