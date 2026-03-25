@@ -2,24 +2,27 @@ services:
   app:
     build:
       context: .
-      dockerfile: deployments/Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:
-      ENV: production
+      # App settings
       PORT: 8080
-      DB_PATH: /app/data/app.db
-      JWT_SECRET: ${JWT_SECRET:-timeweb_dev_secret_2026}
+      ENV: production
       GIN_MODE: release
-    volumes:
-      - app-data:/app/data
+      
+      # SQLite settings (встроенная БД, не требует volumes)
+      DB_PATH: /tmp/construction_ai.db
+      
+      # JWT secret (обязательно смените на случайную строку!)
+      JWT_SECRET: ${JWT_SECRET:-timeweb_dev_secret_2026}
+    
     restart: unless-stopped
+    
+    # Health check для мониторинга
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
-
-volumes:
-  app-data:
