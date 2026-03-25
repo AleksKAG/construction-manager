@@ -21,7 +21,6 @@ func main() {
 	logger.SetFormatter(&logrus.TextFormatter{})
 
 	// SQLite
-	// ====================== SQLite (без CGO) ======================
 	if err := os.MkdirAll("data", 0755); err != nil {
 		logger.Fatal("failed to create data directory: ", err)
 	}
@@ -53,7 +52,8 @@ logger.Info("SQLite connected and migrated")
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", nil)
 	})
-
+getEnv("DB_PATH", "/app/data/app.db") 
+port := getEnv("PORT", "8080")
 	// API
 	api := r.Group("/api/v1")
 	{
@@ -62,7 +62,7 @@ logger.Info("SQLite connected and migrated")
 		api.GET("/objects/:id", handlers.GetObject(repo))
 	}
 
-	port := os.Getenv("PORT")
+	port = os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
@@ -71,4 +71,10 @@ logger.Info("SQLite connected and migrated")
 	if err := r.Run(":" + port); err != nil {
 		logger.Fatal(err)
 	}
+}
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }
