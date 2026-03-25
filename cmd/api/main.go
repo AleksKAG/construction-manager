@@ -1,7 +1,6 @@
 package main
 
 import (
-	
 	"net/http"
 	"os"
 
@@ -11,11 +10,10 @@ import (
 	"github.com/AleksKAG/construction-manager/internal/services"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	"modernc.org/sqlite"
-	
-	"gorm.io/gorm"
 
-	
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	_ "modernc.org/sqlite"
 )
 
 func main() {
@@ -28,9 +26,11 @@ func main() {
 		logger.Fatal("failed to create data directory: ", err)
 	}
 
-	db, err := gorm.Open(sqlite.Open("data/app.db"), &gorm.Config{})
+	db, err := gorm.Open(gorm.Dialector(&sqlite.Dialector{
+		DSN: "data/app.db",
+	}), &gorm.Config{})
 	if err != nil {
-		logger.Fatal("failed to connect to sqlite: ", err)
+		logger.Fatal("SQLite connection failed:", err)
 	}
 
 	// Миграции
