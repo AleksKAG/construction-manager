@@ -61,19 +61,11 @@ func main() {
 	r.Use(gin.Recovery())
 	
 	// Static files
-	r.Static("/static", "./web/static")
-	r.LoadHTMLGlob("web/*.html")
+	r.Static("/static/css", "./web/css")
+	r.Static("/static/js", "./web/js")
+	r.StaticFile("/", "./web/index.html")
 
-	// Страницы
-	r.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "index.html", nil)
-	})
-	r.GET("/login", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "login.html", nil)
-	})
-	r.GET("/objects", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "objects.html", nil)
-	})
+	// Страницы - теперь обрабатываются через StaticFile
 
 	// API
 	api := r.Group("/api/v1")

@@ -3,6 +3,7 @@ package models
 import (
 	"time"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // ProjectObject — строительный объект
@@ -20,7 +21,7 @@ type ProjectObject struct {
 }
 
 // BeforeCreate — генерация UUID перед сохранением
-func (p *ProjectObject) BeforeCreate() error {
+func (p *ProjectObject) BeforeCreate(tx *gorm.DB) error {
 	if p.ID == "" {
 		p.ID = uuid.New().String()
 	}
@@ -40,7 +41,7 @@ type GanttTask struct {
 }
 
 // BeforeCreate — генерация UUID
-func (t *GanttTask) BeforeCreate() error {
+func (t *GanttTask) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == "" {
 		t.ID = uuid.New().String()
 	}
