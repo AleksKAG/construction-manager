@@ -3,16 +3,107 @@
 class ConstructionApp {
     constructor() {
         this.currentPage = 'dashboard';
-        this.data = {
-            objects: [],
-            organizations: [],
-            specialists: [],
-            documents: [],
-            approvals: [],
-            schedule: [],
-            risks: []
-        };
+        this.initializeMockData();
         this.init();
+    }
+
+    initializeMockData() {
+        this.data = {
+            objects: [
+                {
+                    id: '1',
+                    name: 'Жилой комплекс "Северный"',
+                    address: 'г. Москва, ул. Ленина, 45',
+                    type: 'новое строительство',
+                    status: 'строительство',
+                    start_date: '2024-01-15',
+                    end_date: '2025-12-30',
+                    client_id: '1',
+                    client_name: 'ООО "СтройИнвест"',
+                    characteristics: {
+                        'Площадь': '15 000 м²',
+                        'Этажность': '25 этажей',
+                        'Тип фундамента': 'свайный',
+                        'Материал стен': 'монолит'
+                    },
+                    cost_estimates: {
+                        'Проектирование': 12500000,
+                        'СМР': 450000000,
+                        'Оборудование': 85000000
+                    }
+                },
+                {
+                    id: '2',
+                    name: 'Торговый центр "Плаза"',
+                    address: 'г. Москва, пр. Мира, 120',
+                    type: 'реконструкция',
+                    status: 'проектирование',
+                    start_date: '2024-06-01',
+                    end_date: '2025-06-30',
+                    client_id: '2',
+                    client_name: 'ЗАО "ТоргЦентр"',
+                    characteristics: {
+                        'Площадь': '8 500 м²',
+                        'Этажность': '3 этажа',
+                        'Парковка': '200 машиномест'
+                    },
+                    cost_estimates: {
+                        'Проектирование': 5200000,
+                        'СМР': 180000000
+                    }
+                },
+                {
+                    id: '3',
+                    name: 'Школа №125',
+                    address: 'г. Москва, ул. Гагарина, 78',
+                    type: 'капитальный ремонт',
+                    status: 'сдан',
+                    start_date: '2023-03-01',
+                    end_date: '2024-08-31',
+                    client_id: '4',
+                    client_name: 'Департамент образования',
+                    characteristics: {
+                        'Площадь': '4 200 м²',
+                        'Вместимость': '550 учащихся',
+                        'Спортивный зал': 'да'
+                    },
+                    cost_estimates: {
+                        'Проектирование': 2100000,
+                        'СМР': 95000000
+                    }
+                }
+            ],
+            organizations: [
+                { id: '1', name: 'ООО "СтройИнвест"', type: 'заказчик', contact_person: 'Иванов П.С.', phone: '+7 (495) 123-45-67', email: 'info@stroyinvest.ru' },
+                { id: '2', name: 'ЗАО "ТоргЦентр"', type: 'заказчик', contact_person: 'Петрова А.М.', phone: '+7 (495) 987-65-43', email: 'contact@torgcenter.ru' },
+                { id: '3', name: 'ООО "СтройМонтаж"', type: 'генподрядчик', contact_person: 'Сидоров В.К.', phone: '+7 (495) 555-12-34', email: 'info@stroymontazh.ru' },
+                { id: '4', name: 'Проектное бюро "Архитектор"', type: 'проектировщик', contact_person: 'Козлов Д.А.', phone: '+7 (495) 777-88-99', email: 'project@architect.ru' }
+            ],
+            specialists: [
+                { id: '1', full_name: 'Смирнов Алексей Петрович', role: 'Главный инженер', organization_id: '3', organization: 'ООО "СтройМонтаж"', phone: '+7 (903) 111-22-33', email: 'smirnov@stroymontazh.ru' },
+                { id: '2', full_name: 'Волкова Мария Ивановна', role: 'Архитектор', organization_id: '4', organization: 'Проектное бюро "Архитектор"', phone: '+7 (903) 444-55-66', email: 'volkova@architect.ru' },
+                { id: '3', full_name: 'Николаев Сергей Владимирович', role: 'Прораб', organization_id: '3', organization: 'ООО "СтройМонтаж"', phone: '+7 (903) 777-88-99', email: 'nikolaev@stroymontazh.ru' }
+            ],
+            documents: [
+                { id: '1', item_id: '1', code: 'АР-01', title: 'Архитектурные решения', stage: 'П', status: 'согласован', uploaded_at: '2024-01-20', version: 1 },
+                { id: '2', item_id: '2', code: 'КР-05', title: 'Конструктивные решения', stage: 'Р', status: 'в работе', uploaded_at: '2024-02-15', version: 2 },
+                { id: '3', item_id: '3', code: 'ОВ-03', title: 'Отопление и вентиляция', stage: 'П', status: 'на согласовании', uploaded_at: '2024-02-28', version: 1 }
+            ],
+            approvals: [
+                { id: '1', document_id: '1', approver: 'Мосгосстройнадзор', approval_type: 'внешнее', status: 'ожидает', comment: '', approved_at: null },
+                { id: '2', document_id: '2', approver: 'Внутреннее согласование', approval_type: 'внутреннее', status: 'одобрено', comment: 'Замечаний нет', approved_at: '2024-02-20' }
+            ],
+            schedule: [
+                { id: '1', object_id: '1', work_type: 'Подготовительные работы', start_date: '2024-01-15', end_date: '2024-02-28', status: 'завершено', duration: 45 },
+                { id: '2', object_id: '1', work_type: 'Нулевой цикл', start_date: '2024-03-01', end_date: '2024-05-31', status: 'в работе', duration: 92 },
+                { id: '3', object_id: '1', work_type: 'Возведение каркаса', start_date: '2024-06-01', end_date: '2024-12-31', status: 'запланирован', duration: 214 }
+            ],
+            risks: [
+                { id: '1', object_id: '1', description: 'Задержка поставки материалов', type: 'поставки', probability: 0.7, impact: 'высокий', mitigation_plan: 'Поиск альтернативных поставщиков', status: 'активен' },
+                { id: '2', object_id: '1', description: 'Неблагоприятные погодные условия', type: 'погода', probability: 0.4, impact: 'средний', mitigation_plan: 'Корректировка графика', status: 'мониторинг' },
+                { id: '3', object_id: '2', description: 'Изменения в проектной документации', type: 'согласования', probability: 0.5, impact: 'высокий', mitigation_plan: 'Раннее согласование всех изменений', status: 'активен' }
+            ]
+        };
     }
 
     init() {
@@ -264,6 +355,7 @@ class ConstructionApp {
     }
 
     renderObjects() {
+        const objects = this.data.objects;
         return `
             <div class="card">
                 <div class="card-header">
@@ -283,47 +375,256 @@ class ConstructionApp {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
-                                <td>ЖК "Северный"</td>
-                                <td>ул. Ленина, 45</td>
-                                <td>новое строительство</td>
-                                <td><span class="badge badge-success">строительство</span></td>
-                                <td>01.01.2025</td>
-                                <td>31.12.2026</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>ТЦ "Плаза"</td>
-                                <td>пр. Мира, 12</td>
-                                <td>реконструкция</td>
-                                <td><span class="badge badge-warning">проектирование</span></td>
-                                <td>01.03.2025</td>
-                                <td>30.06.2026</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>Школа №45</td>
-                                <td>ул. Гагарина, 8</td>
-                                <td>капитальный ремонт</td>
-                                <td><span class="badge badge-info">сдан</span></td>
-                                <td>01.09.2024</td>
-                                <td>31.08.2025</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
+                            ${objects.map(obj => `
+                                <tr>
+                                    <td>${obj.name}</td>
+                                    <td>${obj.address}</td>
+                                    <td>${obj.type}</td>
+                                    <td><span class="badge badge-${this.getStatusClass(obj.status)}">${obj.status}</span></td>
+                                    <td>${this.formatDate(obj.start_date)}</td>
+                                    <td>${this.formatDate(obj.end_date)}</td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm" onclick="app.viewObject('${obj.id}')">👁️</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="app.editObject('${obj.id}')">✏️</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="app.deleteObject('${obj.id}')">🗑️</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
                         </tbody>
                     </table>
                 </div>
             </div>
         `;
+    }
+
+    getStatusClass(status) {
+        const classes = {
+            'строительство': 'success',
+            'проектирование': 'warning',
+            'сдан': 'info',
+            'приостановлен': 'danger',
+            'завершено': 'success',
+            'в работе': 'warning',
+            'запланирован': 'secondary'
+        };
+        return classes[status] || 'secondary';
+    }
+
+    formatDate(dateStr) {
+        if (!dateStr) return '-';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('ru-RU');
+    }
+
+    viewObject(id) {
+        const obj = this.data.objects.find(o => o.id === id);
+        if (!obj) return;
+        
+        const characteristicsHtml = Object.entries(obj.characteristics || {}).map(([key, value]) => 
+            `<div class="detail-row"><span class="detail-label">${key}:</span><span class="detail-value">${value}</span></div>`
+        ).join('');
+        
+        const costEstimatesHtml = Object.entries(obj.cost_estimates || {}).map(([key, value]) => 
+            `<div class="detail-row"><span class="detail-label">${key}:</span><span class="detail-value">${this.formatMoney(value)}</span></div>`
+        ).join('');
+        
+        const modalBody = `
+            <div class="object-details">
+                <div class="detail-section">
+                    <h3>Основная информация</h3>
+                    <div class="detail-row"><span class="detail-label">Название:</span><span class="detail-value">${obj.name}</span></div>
+                    <div class="detail-row"><span class="detail-label">Адрес:</span><span class="detail-value">${obj.address}</span></div>
+                    <div class="detail-row"><span class="detail-label">Тип:</span><span class="detail-value">${obj.type}</span></div>
+                    <div class="detail-row"><span class="detail-label">Статус:</span><span class="detail-value"><span class="badge badge-${this.getStatusClass(obj.status)}">${obj.status}</span></span></div>
+                    <div class="detail-row"><span class="detail-label">Заказчик:</span><span class="detail-value">${obj.client_name || '-'}</span></div>
+                    <div class="detail-row"><span class="detail-label">Начало работ:</span><span class="detail-value">${this.formatDate(obj.start_date)}</span></div>
+                    <div class="detail-row"><span class="detail-label">Окончание работ:</span><span class="detail-value">${this.formatDate(obj.end_date)}</span></div>
+                </div>
+                
+                <div class="detail-section">
+                    <h3>Характеристики объекта</h3>
+                    ${characteristicsHtml || '<p>Характеристики не указаны</p>'}
+                </div>
+                
+                <div class="detail-section">
+                    <h3>Оценки стоимости</h3>
+                    ${costEstimatesHtml || '<p>Оценки не указаны</p>'}
+                </div>
+            </div>
+        `;
+        
+        this.showModal('Объект: ' + obj.name, modalBody);
+    }
+
+    formatMoney(amount) {
+        return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(amount);
+    }
+
+    editObject(id) {
+        const obj = this.data.objects.find(o => o.id === id);
+        if (!obj) return;
+        
+        const formHtml = this.getObjectForm(obj);
+        const modalBody = `<form id="objectForm">${formHtml}</form>`;
+        
+        this.showModal('Редактировать объект', modalBody, () => {
+            this.saveObject(id);
+        });
+    }
+
+    deleteObject(id) {
+        if (confirm('Вы уверены, что хотите удалить этот объект?')) {
+            this.data.objects = this.data.objects.filter(o => o.id !== id);
+            this.loadPage('objects');
+        }
+    }
+
+    getObjectForm(data = {}) {
+        return `
+            <div class="form-group">
+                <label for="objName">Название объекта *</label>
+                <input type="text" id="objName" name="name" value="${data.name || ''}" required>
+            </div>
+            <div class="form-group">
+                <label for="objAddress">Адрес</label>
+                <input type="text" id="objAddress" name="address" value="${data.address || ''}">
+            </div>
+            <div class="form-group">
+                <label for="objType">Тип объекта *</label>
+                <select id="objType" name="type" required>
+                    <option value="">Выберите тип</option>
+                    <option value="новое строительство" ${data.type === 'новое строительство' ? 'selected' : ''}>Новое строительство</option>
+                    <option value="реконструкция" ${data.type === 'реконструкция' ? 'selected' : ''}>Реконструкция</option>
+                    <option value="капитальный ремонт" ${data.type === 'капитальный ремонт' ? 'selected' : ''}>Капитальный ремонт</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="objStatus">Статус *</label>
+                <select id="objStatus" name="status" required>
+                    <option value="">Выберите статус</option>
+                    <option value="проектирование" ${data.status === 'проектирование' ? 'selected' : ''}>Проектирование</option>
+                    <option value="строительство" ${data.status === 'строительство' ? 'selected' : ''}>Строительство</option>
+                    <option value="сдан" ${data.status === 'сдан' ? 'selected' : ''}>Сдан</option>
+                    <option value="приостановлен" ${data.status === 'приостановлен' ? 'selected' : ''}>Приостановлен</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="objClient">Заказчик</label>
+                <select id="objClient" name="client_id">
+                    <option value="">Выберите заказчика</option>
+                    ${this.data.organizations.filter(o => o.type === 'заказчик').map(org => 
+                        `<option value="${org.id}" ${data.client_id === org.id ? 'selected' : ''}>${org.name}</option>`
+                    ).join('')}
+                </select>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="objStartDate">Дата начала</label>
+                    <input type="date" id="objStartDate" name="start_date" value="${data.start_date || ''}">
+                </div>
+                <div class="form-group">
+                    <label for="objEndDate">Дата окончания</label>
+                    <input type="date" id="objEndDate" name="end_date" value="${data.end_date || ''}">
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <h4>Характеристики объекта</h4>
+                <div id="characteristicsContainer">
+                    ${this.renderKeyValueFields(data.characteristics, 'characteristic')}
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.addKeyValueField('characteristicsContainer', 'characteristic')">+ Добавить характеристику</button>
+            </div>
+            
+            <div class="form-section">
+                <h4>Оценки стоимости</h4>
+                <div id="costEstimatesContainer">
+                    ${this.renderKeyValueFields(data.cost_estimates, 'cost', true)}
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.addKeyValueField('costEstimatesContainer', 'cost', true)">+ Добавить оценку</button>
+            </div>
+        `;
+    }
+
+    renderKeyValueFields(data = {}, prefix, isNumber = false) {
+        const entries = Object.entries(data);
+        if (entries.length === 0) {
+            return this.getKeyValueFieldHTML('', '', prefix, isNumber);
+        }
+        return entries.map(([key, value]) => this.getKeyValueFieldHTML(key, value, prefix, isNumber)).join('');
+    }
+
+    getKeyValueFieldHTML(key, value, prefix, isNumber) {
+        const inputType = isNumber ? 'number' : 'text';
+        return `
+            <div class="key-value-row">
+                <input type="text" name="${prefix}_key[]" placeholder="Наименование" value="${key}" class="kv-key">
+                <input type="${inputType}" name="${prefix}_value[]" placeholder="Значение" value="${value}" class="kv-value">
+                <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">🗑️</button>
+            </div>
+        `;
+    }
+
+    addKeyValueField(containerId, prefix, isNumber = false) {
+        const container = document.getElementById(containerId);
+        const row = document.createElement('div');
+        row.className = 'key-value-row';
+        row.innerHTML = this.getKeyValueFieldHTML('', '', prefix, isNumber);
+        container.appendChild(row);
+    }
+
+    saveObject(id = null) {
+        const form = document.getElementById('objectForm');
+        if (!form) return;
+        
+        const formData = new FormData(form);
+        const characteristics = {};
+        const costEstimates = {};
+        
+        const charKeys = formData.getAll('characteristic_key[]');
+        const charValues = formData.getAll('characteristic_value[]');
+        charKeys.forEach((key, index) => {
+            if (key.trim()) {
+                characteristics[key.trim()] = charValues[index];
+            }
+        });
+        
+        const costKeys = formData.getAll('cost_key[]');
+        const costValues = formData.getAll('cost_value[]');
+        costKeys.forEach((key, index) => {
+            if (key.trim() && costValues[index]) {
+                costEstimates[key.trim()] = parseFloat(costValues[index]);
+            }
+        });
+        
+        const clientSelect = document.getElementById('objClient');
+        const clientName = clientSelect.options[clientSelect.selectedIndex]?.text || '';
+        
+        const objectData = {
+            name: formData.get('name'),
+            address: formData.get('address'),
+            type: formData.get('type'),
+            status: formData.get('status'),
+            start_date: formData.get('start_date'),
+            end_date: formData.get('end_date'),
+            client_id: formData.get('client_id'),
+            client_name: clientName,
+            characteristics,
+            cost_estimates: costEstimates
+        };
+        
+        if (id) {
+            const index = this.data.objects.findIndex(o => o.id === id);
+            if (index !== -1) {
+                this.data.objects[index] = { ...this.data.objects[index], ...objectData };
+            }
+        } else {
+            objectData.id = Date.now().toString();
+            this.data.objects.push(objectData);
+        }
+        
+        this.closeModal();
+        this.loadPage('objects');
     }
 
     renderOrganizations() {
@@ -665,7 +966,7 @@ class ConstructionApp {
         switch(this.currentPage) {
             case 'objects':
                 modalTitle.textContent = 'Добавить объект';
-                formHtml = this.getObjectsForm();
+                formHtml = `<form id="addObjectForm">${this.getObjectForm()}</form>`;
                 break;
             case 'organizations':
                 modalTitle.textContent = 'Добавить организацию';
@@ -679,13 +980,15 @@ class ConstructionApp {
         modalBody.innerHTML = formHtml;
         modal.classList.add('active');
         
-        // Bind form submit
-        const form = modalBody.querySelector('form');
-        if (form) {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.handleFormSubmit(form);
-            });
+        // Bind form submit for objects
+        if (this.currentPage === 'objects') {
+            const form = modalBody.querySelector('form');
+            if (form) {
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.saveObject();
+                });
+            }
         }
     }
 
@@ -791,6 +1094,23 @@ class ConstructionApp {
     closeModal() {
         const modal = document.getElementById('addModal');
         modal.classList.remove('active');
+    }
+
+    showModal(title, bodyHtml, onSaveCallback = null) {
+        const modal = document.getElementById('addModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+        
+        modalTitle.textContent = title;
+        modalBody.innerHTML = bodyHtml;
+        modal.classList.add('active');
+        
+        // Store callback for potential save button
+        if (onSaveCallback) {
+            this.modalSaveCallback = onSaveCallback;
+        } else {
+            this.modalSaveCallback = null;
+        }
     }
 }
 
