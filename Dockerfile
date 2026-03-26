@@ -32,7 +32,7 @@ COPY --from=builder /construction-manager .
 COPY web/ ./web/
 COPY migrations/ ./migrations/
 
-# Создаём папку для базы данных SQLite (важно!)
+# Создаём папку для базы данных SQLite 
 RUN mkdir -p /data
 
 EXPOSE 8080
