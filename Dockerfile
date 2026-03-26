@@ -11,6 +11,6 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates wget
 WORKDIR /app
 COPY --from=builder /app/main .
-COPY --from=builder /app/web ./web 2>/dev/null || true
+COPY --from=builder /app/web ./web 
 EXPOSE 8080
 CMD ["./main"]
