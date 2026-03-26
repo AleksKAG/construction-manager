@@ -1,23 +1,41 @@
 FROM golang:1.25-alpine AS builder
-RUN apk add --no-cache git
 
 WORKDIR /app
 
+# Устанавливаем необходимые пакеты для CGO + SQLite
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    sqlite-dev
+
+# Кэшируем зависимости
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Копируем весь код
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o main ./cmd/api
 
+# Собираем с CGO_ENABLED=1
+RUN CGO_ENABLED=1 GOOS=linux go build -o /construction-manager ./cmd/api/main.go
+
+# Финальный образ
 FROM alpine:latest
-RUN apk --no-cache add ca-certificates
 
-WORKDIR /app
+RUN apk --no-cache add ca-certificates tzdata sqlite-libs
 
-COPY --from=builder /app/main .
-COPY --from=builder /app/web ./web
+WORKDIR /root/
 
-RUN mkdir -p /app/data
+# Копируем бинарник
+COPY --from=builder /construction-manager .
+
+# Копируем веб-файлы и миграции (если есть)
+COPY web/ ./web/
+COPY migrations/ ./migrations/
+
+# Создаём папку для базы данных SQLite (важно!)
+RUN mkdir -p /data
 
 EXPOSE 8080
-CMD ["./main"]
+
+# Запуск
+CMD ["./construction-manager"]
