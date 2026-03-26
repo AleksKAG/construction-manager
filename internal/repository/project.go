@@ -35,8 +35,8 @@ func (r *ProjectRepository) FindByID(ctx context.Context, id string) (*models.Pr
 }
 
 // GetTasksForObject — получение задач для объекта (вместо ProjectGraph)
-func (r *ProjectRepository) GetTasksForObject(ctx context.Context, objectID string) ([]*models.GanttTask, error) {
-	var tasks []*models.GanttTask
-	err := r.DB.WithContext(ctx).Where("object_id = ?", objectID).Find(&tasks).Error
-	return tasks, err
-}
+//func (r *ProjectRepository) GetTasksForObject(ctx context.Context, objectID string) ([]*models.GanttTask, error) {
+//	var tasks []*models.GanttTask
+//	err := r.DB.WithContext(ctx).Where("object_id = ?", objectID).Find(&tasks).Error
+//	return tasks, err
+//}
