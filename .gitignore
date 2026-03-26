@@ -1,23 +1,15 @@
 ```
 # Compiled and build artifacts
-main
-*.o
-*.obj
-*.out
-
+*.css.map
+*.js.map
+*.min.css
+*.min.js
 # Dependencies
-go.sum
-
-# Logs and temp files
-*.log
-*.tmp
-
+node_modules/
 # Editors
 .vscode/
 .idea/
-
-# Environment
-.env
-.env.local
-*.env.*
+# Logs and temp files
+*.log
+*.tmp
 ```
