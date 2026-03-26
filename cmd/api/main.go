@@ -14,8 +14,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	
-	
-	_ "modernc.org/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"

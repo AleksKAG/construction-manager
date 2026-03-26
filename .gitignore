@@ -1,0 +1,33 @@
+```
+# Dependencies
+vendor/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Build artifacts
+*.o
+*.obj
+*.out
+*.exe
+*.dll
+*.so
+*.a
+
+# Go-specific
+*.test
+*.prof
+cover.out
+```
