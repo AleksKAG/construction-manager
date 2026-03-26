@@ -17,7 +17,18 @@ class ConstructionApp {
 
     init() {
         this.bindEvents();
-        this.loadPage('dashboard');
+        // Check hash first, default to dashboard
+        const hash = window.location.hash.substring(1);
+        const page = hash || 'dashboard';
+        this.loadPage(page);
+        
+        // Listen for hash changes
+        window.addEventListener('hashchange', () => {
+            const newHash = window.location.hash.substring(1);
+            if (newHash) {
+                this.loadPage(newHash);
+            }
+        });
     }
 
     bindEvents() {
@@ -26,6 +37,7 @@ class ConstructionApp {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
                 const page = item.dataset.page;
+                window.location.hash = page;
                 this.loadPage(page);
             });
         });
