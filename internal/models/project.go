@@ -38,7 +38,7 @@ type GanttTask struct {
 }
 
 func (t *GanttTask) BeforeCreate() error {
-	if t.ID == "" {
+		if t.ID == "" {
 		t.ID = uuid.New().String()
 	}
 	return nil

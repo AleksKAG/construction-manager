@@ -38,7 +38,7 @@ if err := db.AutoMigrate(&models.ProjectObject{}); err != nil {
 logger.Fatal("Migration failed:", err)
 }
 
-logger.Info("SQLite connected and migrated successfully")
+logger.Info("✅ SQLite connected and migrated successfully")
 
 repo := repository.NewProjectRepository(db)
 services.LoadSampleData(repo)
@@ -54,9 +54,9 @@ c.HTML(http.StatusOK, "index.html", nil)
 
 api := r.Group("/api/v1")
 {
-api.GET("/projects", handlers.ListObjects(repo))
-api.POST("/projects", handlers.CreateObject(repo))
-api.GET("/projects/:id", handlers.GetObject(repo))
+api.GET("/projects", handlers.ListProjects(repo))
+api.POST("/projects", handlers.CreateProject(repo))
+api.GET("/projects/:id", handlers.GetProject(repo))
 }
 
 port := os.Getenv("PORT")
