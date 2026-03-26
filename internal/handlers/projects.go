@@ -1,13 +1,13 @@
 package handlers
 
 import (
-"fmt"
+	"fmt"
 	"net/http"
-"strconv"
+	"strconv"
 
-"github.com/AleksKAG/construction-manager/internal/models"
-"github.com/AleksKAG/construction-manager/internal/repository"
-"github.com/gin-gonic/gin"
+	"github.com/AleksKAG/ai-construction-manager/internal/models"
+	"github.com/AleksKAG/ai-construction-manager/internal/repository"
+	"github.com/gin-gonic/gin"
 )
 
 func ListProjects(repo *repository.ProjectRepository) gin.HandlerFunc {

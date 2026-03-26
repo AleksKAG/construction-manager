@@ -6,27 +6,32 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/AleksKAG/construction-manager/internal/handlers"
-	"github.com/AleksKAG/construction-manager/internal/models"
-	"github.com/AleksKAG/construction-manager/internal/repository"
-	"github.com/AleksKAG/construction-manager/internal/services"
+	"github.com/AleksKAG/ai-construction-manager/internal/handlers"
+	"github.com/AleksKAG/ai-construction-manager/internal/models"
+	"github.com/AleksKAG/ai-construction-manager/internal/repository"
+	"github.com/AleksKAG/ai-construction-manager/internal/services"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
-
-	// ✅ SQLite драйверы (pure Go, без CGO):
-	"gorm.io/driver/sqlite" // GORM driver для SQLite
+	
+	
+	_ "modernc.org/sqlite"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	gormLogger "gorm.io/gorm/logger" // ← алиас! чтобы не конфликтовал с logrus
-	_ "modernc.org/sqlite"           // blank import для регистрации
+	gormLogger "gorm.io/gorm/logger"
 )
 
 func main() {
+	// Загрузка .env
+	_ = godotenv.Load()
+
+	// Логгер
 	logger := logrus.New()
 	logger.SetFormatter(&logrus.TextFormatter{})
+	logger.SetLevel(logrus.InfoLevel)
 
 	// === SQLite подключение ===
-	// Используем /tmp для TimeWeb (не требует volumes)
-	dbPath := getEnv("DB_PATH", "/tmp/app.db")
+	dbPath := getEnv("DB_PATH", "/tmp/construction_ai.db")
 	
 	// Создаём директорию если нет
 	_ = os.MkdirAll(filepath.Dir(dbPath), 0755)
@@ -34,7 +39,7 @@ func main() {
 	logger.Info("🗄️ Connecting to SQLite: ", dbPath)
 	
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Warn), // ← gormLogger, не logger!
+		Logger: gormLogger.Default.LogMode(gormLogger.Warn),
 	})
 	if err != nil {
 		logger.Fatal("❌ SQLite connection failed: ", err)
@@ -43,7 +48,7 @@ func main() {
 
 	// Миграции — только простые модели!
 	// ⚠️ НЕ добавляйте ProjectGraph с []GanttTask!
-	if err := db.AutoMigrate(&models.ProjectObject{}); err != nil {
+	if err := db.AutoMigrate(&models.ProjectObject{}, &models.GanttTask{}); err != nil {
 		logger.Fatal("❌ Migration failed: ", err)
 	}
 	logger.Info("✅ Migrations done")
@@ -54,12 +59,21 @@ func main() {
 
 	// === Router ===
 	r := gin.Default()
-	r.LoadHTMLGlob("web/*.html")
+	r.Use(gin.Recovery())
+	
+	// Static files
 	r.Static("/static", "./web/static")
+	r.LoadHTMLGlob("web/*.html")
 
 	// Страницы
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", nil)
+	})
+	r.GET("/login", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "login.html", nil)
+	})
+	r.GET("/objects", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "objects.html", nil)
 	})
 
 	// API
@@ -74,9 +88,12 @@ func main() {
 			})
 		})
 		
+		api.GET("/menu", handlers.MenuHandler)
 		api.GET("/objects", handlers.ListObjects(repo))
 		api.POST("/objects", handlers.CreateObject(repo))
 		api.GET("/objects/:id", handlers.GetObject(repo))
+		
+		
 	}
 
 	// Запуск

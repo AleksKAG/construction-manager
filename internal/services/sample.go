@@ -2,11 +2,10 @@ package services
 
 import (
 	"context"
-	"github.com/AleksKAG/construction-manager/internal/models"
-	"github.com/AleksKAG/construction-manager/internal/repository"
+	"github.com/AleksKAG/ai-construction-manager/internal/models"
+	"github.com/AleksKAG/ai-construction-manager/internal/repository"
 )
 
-// LoadSampleData загружает тестовые данные при первом запуске
 func LoadSampleData(repo *repository.ProjectRepository) {
 	ctx := context.Background()
 	
@@ -14,7 +13,7 @@ func LoadSampleData(repo *repository.ProjectRepository) {
 	var count int64
 	repo.DB.Model(&models.ProjectObject{}).Count(&count)
 	if count > 0 {
-		return // данные уже существуют
+		return
 	}
 
 	sampleProjects := []*models.ProjectObject{
@@ -42,7 +41,6 @@ func LoadSampleData(repo *repository.ProjectRepository) {
 	}
 
 	for _, project := range sampleProjects {
-		// Игнорируем ошибки — данные опциональны
 		_ = repo.Create(ctx, project)
 	}
 }
