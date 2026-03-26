@@ -16,7 +16,7 @@ RUN go mod download
 COPY . .
 
 # Собираем с CGO_ENABLED=1
-RUN CGO_ENABLED=1 GOOS=linux go build -o /construction-manager ./cmd/api/main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -x /construction-manager ./cmd/api/main.go
 
 # Финальный образ
 FROM alpine:latest
@@ -38,4 +38,4 @@ RUN mkdir -p /data
 EXPOSE 8080
 
 # Запуск
-CMD ["./construction-manager"]
+CMD ["./main"]
