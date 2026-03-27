@@ -35,22 +35,21 @@ func main() {
 	// Создаём директорию если нет
 	_ = os.MkdirAll(filepath.Dir(dbPath), 0755)
 	
-	logger.Info("🗄️ Connecting to SQLite: ", dbPath)
+	logger.Info("Connecting to SQLite: ", dbPath)
 	
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Warn),
 	})
 	if err != nil {
-		logger.Fatal("❌ SQLite connection failed: ", err)
+		logger.Fatal("SQLite connection failed: ", err)
 	}
-	logger.Info("✅ SQLite connected")
+	logger.Info("SQLite connected")
 
-	// Миграции — только простые модели!
-	// ⚠️ НЕ добавляйте ProjectGraph с []GanttTask!
+
 	if err := db.AutoMigrate(&models.ProjectObject{}, &models.GanttTask{}); err != nil {
-		logger.Fatal("❌ Migration failed: ", err)
+		logger.Fatal("Migration failed: ", err)
 	}
-	logger.Info("✅ Migrations done")
+	logger.Info("Migrations done")
 
 	// Репозиторий + sample data
 	repo := repository.NewProjectRepository(db)
@@ -66,11 +65,10 @@ func main() {
 	r.StaticFile("/", "./web/index.html")
 
 	// Страницы - теперь обрабатываются через StaticFile
-
 	// API
 	api := r.Group("/api/v1")
 	{
-		// ✅ Health check — БЕЗ auth middleware!
+		// Health check — БЕЗ auth middleware!
 		api.GET("/health", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"status":    "ok",
@@ -89,7 +87,7 @@ func main() {
 
 	// Запуск
 	port := getEnv("PORT", "8080")
-	logger.Infof("🚀 Server starting on :%s", port)
+	logger.Infof("Server starting on :%s", port)
 	if err := r.Run(":" + port); err != nil {
 		logger.Fatal(err)
 	}
