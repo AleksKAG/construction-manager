@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/AleksKAG/ai-construction-manager/internal/handlers"
-	"github.com/AleksKAG/ai-construction-manager/internal/models"
-	"github.com/AleksKAG/ai-construction-manager/internal/repository"
-	"github.com/AleksKAG/ai-construction-manager/internal/services"
+	"github.com/AleksKAG/construction-manager/internal/handlers"
+	"github.com/AleksKAG/construction-manager/internal/models"
+	"github.com/AleksKAG/construction-manager/internal/repository"
+	"github.com/AleksKAG/construction-manager/internal/services"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
-	
+
 	_ "github.com/mattn/go-sqlite3"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -31,12 +31,12 @@ func main() {
 
 	// === SQLite подключение ===
 	dbPath := getEnv("DB_PATH", "/tmp/construction_ai.db")
-	
+
 	// Создаём директорию если нет
 	_ = os.MkdirAll(filepath.Dir(dbPath), 0755)
-	
+
 	logger.Info("Connecting to SQLite: ", dbPath)
-	
+
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Warn),
 	})
@@ -44,7 +44,6 @@ func main() {
 		logger.Fatal("SQLite connection failed: ", err)
 	}
 	logger.Info("SQLite connected")
-
 
 	if err := db.AutoMigrate(&models.ProjectObject{}, &models.GanttTask{}); err != nil {
 		logger.Fatal("Migration failed: ", err)
@@ -58,7 +57,7 @@ func main() {
 	// === Router ===
 	r := gin.Default()
 	r.Use(gin.Recovery())
-	
+
 	// Static files
 	r.Static("/static/css", "./web/css")
 	r.Static("/static/js", "./web/js")
@@ -76,13 +75,12 @@ func main() {
 				"timestamp": time.Now(),
 			})
 		})
-		
+
 		api.GET("/menu", handlers.MenuHandler)
 		api.GET("/objects", handlers.ListObjects(repo))
 		api.POST("/objects", handlers.CreateObject(repo))
 		api.GET("/objects/:id", handlers.GetObject(repo))
-		
-		
+
 	}
 
 	// Запуск

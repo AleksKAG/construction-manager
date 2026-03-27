@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/AleksKAG/ai-construction-manager/internal/models"
+	"github.com/AleksKAG/construction-manager/internal/models"
 	"gorm.io/gorm"
 )
 

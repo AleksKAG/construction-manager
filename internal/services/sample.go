@@ -2,13 +2,14 @@ package services
 
 import (
 	"context"
-	"github.com/AleksKAG/ai-construction-manager/internal/models"
-	"github.com/AleksKAG/ai-construction-manager/internal/repository"
+
+	"github.com/AleksKAG/construction-manager/internal/models"
+	"github.com/AleksKAG/construction-manager/internal/repository"
 )
 
 func LoadSampleData(repo *repository.ProjectRepository) {
 	ctx := context.Background()
-	
+
 	// Проверяем, есть ли уже данные
 	var count int64
 	repo.DB.Model(&models.ProjectObject{}).Count(&count)

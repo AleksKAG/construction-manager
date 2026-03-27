@@ -3,8 +3,8 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/AleksKAG/ai-construction-manager/internal/models"
-	"github.com/AleksKAG/ai-construction-manager/internal/repository"
+	"github.com/AleksKAG/construction-manager/internal/models"
+	"github.com/AleksKAG/construction-manager/internal/repository"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,7 +21,7 @@ func ListObjects(repo *repository.ProjectRepository) gin.HandlerFunc {
 
 func CreateObject(repo *repository.ProjectRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var p models.ProjectObject  // ← ✅ Правильно: models.ProjectObject
+		var p models.ProjectObject // ← ✅ Правильно: models.ProjectObject
 		if err := c.ShouldBindJSON(&p); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return

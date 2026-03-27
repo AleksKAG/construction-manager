@@ -1,4 +1,4 @@
-module github.com/AleksKAG/ai-construction-manager
+module github.com/AleksKAG/construction-manager
 
 go 1.23
 
