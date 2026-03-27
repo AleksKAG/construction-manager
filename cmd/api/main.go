@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/AleksKAG/construction-manager/internal/handlers"
@@ -52,11 +55,24 @@ func main() {
 
 	// Репозиторий + sample data
 	repo := repository.NewProjectRepository(db)
-	services.LoadSampleData(repo)
+	if err := services.LoadSampleData(repo, logger); err != nil {
+		logger.Warn("Failed to load sample data: ", err)
+	}
 
 	// === Router ===
 	r := gin.Default()
 	r.Use(gin.Recovery())
+
+	// CORS middleware
+	r.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+	})
 
 	// Static files
 	r.Static("/static/css", "./web/css")
@@ -77,18 +93,52 @@ func main() {
 		})
 
 		api.GET("/menu", handlers.MenuHandler)
+		
+		// Objects endpoints
 		api.GET("/objects", handlers.ListObjects(repo))
 		api.POST("/objects", handlers.CreateObject(repo))
 		api.GET("/objects/:id", handlers.GetObject(repo))
-
+		api.PUT("/objects/:id", handlers.UpdateObject(repo))
+		api.DELETE("/objects/:id", handlers.DeleteObject(repo))
+		
+		// Gantt Tasks endpoints
+		api.GET("/objects/:object_id/tasks", handlers.ListTasks(repo))
+		api.POST("/tasks", handlers.CreateTask(repo))
+		api.GET("/tasks/:id", handlers.GetTask(repo))
+		api.PUT("/tasks/:id", handlers.UpdateTask(repo))
+		api.DELETE("/tasks/:id", handlers.DeleteTask(repo))
 	}
 
 	// Запуск
 	port := getEnv("PORT", "8080")
 	logger.Infof("Server starting on :%s", port)
-	if err := r.Run(":" + port); err != nil {
-		logger.Fatal(err)
+	
+	// Graceful shutdown
+	server := &http.Server{
+		Addr:    ":" + port,
+		Handler: r.Handler(),
 	}
+	
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal(err)
+		}
+	}()
+	
+	// Ожидание сигнала завершения
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	
+	logger.Info("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Fatal("Server forced to shutdown: ", err)
+	}
+	
+	logger.Info("Server exiting")
 }
 
 func getEnv(key, fallback string) string {
