@@ -1,5 +1,7 @@
 // Construction AI - Frontend Application
 
+const API_BASE = '/api/v1';
+
 class ConstructionApp {
     constructor() {
         this.currentPage = 'dashboard';
@@ -15,9 +17,21 @@ class ConstructionApp {
         this.init();
     }
 
-    init() {
+    async init() {
         this.bindEvents();
+        await this.loadObjects();
         this.loadPage('dashboard');
+    }
+
+    async loadObjects() {
+        try {
+            const response = await fetch(`${API_BASE}/objects`);
+            if (response.ok) {
+                this.data.objects = await response.json();
+            }
+        } catch (error) {
+            console.error('Failed to load objects:', error);
+        }
     }
 
     bindEvents() {
@@ -252,6 +266,27 @@ class ConstructionApp {
     }
 
     renderObjects() {
+        const objects = this.data.objects.length > 0 ? this.data.objects : [];
+        
+        let rows = '';
+        if (objects.length === 0) {
+            rows = '<tr><td colspan="7" style="text-align:center;">Нет данных</td></tr>';
+        } else {
+            rows = objects.map(obj => `
+                <tr>
+                    <td>${this.escapeHtml(obj.name || 'Без названия')}</td>
+                    <td>${this.escapeHtml(obj.address || '')}</td>
+                    <td><span class="badge badge-${this.getStatusClass(obj.status)}">${this.escapeHtml(obj.status || 'planning')}</span></td>
+                    <td>${obj.budget ? this.formatCurrency(obj.budget) : '-'}</td>
+                    <td>${obj.duration_days || '-'}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="app.editObject('${obj.id}')">✏️</button>
+                        <button class="btn btn-secondary btn-sm" onclick="app.deleteObject('${obj.id}')">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
         return `
             <div class="card">
                 <div class="card-header">
@@ -263,55 +298,145 @@ class ConstructionApp {
                             <tr>
                                 <th>Название</th>
                                 <th>Адрес</th>
-                                <th>Тип</th>
                                 <th>Статус</th>
-                                <th>Начало</th>
-                                <th>Окончание</th>
+                                <th>Бюджет</th>
+                                <th>Длительность (дней)</th>
                                 <th>Действия</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
-                                <td>ЖК "Северный"</td>
-                                <td>ул. Ленина, 45</td>
-                                <td>новое строительство</td>
-                                <td><span class="badge badge-success">строительство</span></td>
-                                <td>01.01.2025</td>
-                                <td>31.12.2026</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>ТЦ "Плаза"</td>
-                                <td>пр. Мира, 12</td>
-                                <td>реконструкция</td>
-                                <td><span class="badge badge-warning">проектирование</span></td>
-                                <td>01.03.2025</td>
-                                <td>30.06.2026</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>Школа №45</td>
-                                <td>ул. Гагарина, 8</td>
-                                <td>капитальный ремонт</td>
-                                <td><span class="badge badge-info">сдан</span></td>
-                                <td>01.09.2024</td>
-                                <td>31.08.2025</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
+                            ${rows}
                         </tbody>
                     </table>
                 </div>
             </div>
         `;
+    }
+
+    formatCurrency(value) {
+        if (!value) return '-';
+        return new Intl.NumberFormat('ru-RU', { 
+            style: 'currency', 
+            currency: 'RUB',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(value);
+    }
+
+    getStatusClass(status) {
+        const statusMap = {
+            'planning': 'warning',
+            'active': 'success',
+            'completed': 'info',
+            'on_hold': 'secondary'
+        };
+        return statusMap[status] || 'secondary';
+    }
+
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    async editObject(id) {
+        const obj = this.data.objects.find(o => o.id === id);
+        if (!obj) return;
+
+        const modal = document.getElementById('addModal');
+        document.getElementById('modalTitle').textContent = 'Редактировать объект';
+        document.getElementById('modalBody').innerHTML = `
+            <form id="editObjectForm">
+                <input type="hidden" id="editObjId" value="${obj.id}">
+                <div class="form-group">
+                    <label class="form-label" for="editObjName">Название *</label>
+                    <input type="text" id="editObjName" class="form-input" value="${this.escapeHtml(obj.name)}" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editObjAddress">Адрес</label>
+                    <input type="text" id="editObjAddress" class="form-input" value="${this.escapeHtml(obj.address || '')}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editObjStatus">Статус *</label>
+                    <select id="editObjStatus" class="form-select" required>
+                        <option value="planning" ${obj.status === 'planning' ? 'selected' : ''}>Планирование</option>
+                        <option value="active" ${obj.status === 'active' ? 'selected' : ''}>Активный</option>
+                        <option value="completed" ${obj.status === 'completed' ? 'selected' : ''}>Завершен</option>
+                        <option value="on_hold" ${obj.status === 'on_hold' ? 'selected' : ''}>Приостановлен</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editObjBudget">Бюджет</label>
+                    <input type="number" id="editObjBudget" class="form-input" value="${obj.budget || ''}" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editObjDuration">Длительность (дней)</label>
+                    <input type="number" id="editObjDuration" class="form-input" value="${obj.duration_days || ''}">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="app.closeModal()">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        `;
+        modal.classList.add('active');
+
+        document.getElementById('editObjectForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveObjectEdit(id);
+        });
+    }
+
+    async saveObjectEdit(id) {
+        const data = {
+            name: document.getElementById('editObjName').value,
+            address: document.getElementById('editObjAddress').value,
+            status: document.getElementById('editObjStatus').value,
+            budget: parseFloat(document.getElementById('editObjBudget').value) || 0,
+            duration_days: parseInt(document.getElementById('editObjDuration').value) || 0
+        };
+
+        try {
+            const response = await fetch(`${API_BASE}/objects/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                await this.loadObjects();
+                this.renderContent(this.currentPage);
+                this.closeModal();
+                alert('Объект успешно обновлен!');
+            } else {
+                alert('Ошибка при обновлении объекта');
+            }
+        } catch (error) {
+            console.error('Error updating object:', error);
+            alert('Ошибка при обновлении объекта');
+        }
+    }
+
+    async deleteObject(id) {
+        if (!confirm('Вы уверены, что хотите удалить этот объект?')) return;
+
+        try {
+            const response = await fetch(`${API_BASE}/objects/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                await this.loadObjects();
+                this.renderContent(this.currentPage);
+                alert('Объект успешно удален!');
+            } else {
+                alert('Ошибка при удалении объекта');
+            }
+        } catch (error) {
+            console.error('Error deleting object:', error);
+            alert('Ошибка при удалении объекта');
+        }
     }
 
     renderOrganizations() {
@@ -689,31 +814,22 @@ class ConstructionApp {
                     <input type="text" id="objAddress" class="form-input" placeholder="Город, улица, дом">
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="objType">Тип *</label>
-                    <select id="objType" class="form-select" required>
-                        <option value="">Выберите тип</option>
-                        <option value="новое строительство">Новое строительство</option>
-                        <option value="реконструкция">Реконструкция</option>
-                        <option value="капитальный ремонт">Капитальный ремонт</option>
-                    </select>
-                </div>
-                <div class="form-group">
                     <label class="form-label" for="objStatus">Статус *</label>
                     <select id="objStatus" class="form-select" required>
                         <option value="">Выберите статус</option>
-                        <option value="проектирование">Проектирование</option>
-                        <option value="строительство">Строительство</option>
-                        <option value="сдан">Сдан</option>
-                        <option value="приостановлен">Приостановлен</option>
+                        <option value="planning">Планирование</option>
+                        <option value="active">Активный</option>
+                        <option value="completed">Завершен</option>
+                        <option value="on_hold">Приостановлен</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="objStartDate">Дата начала</label>
-                    <input type="date" id="objStartDate" class="form-input">
+                    <label class="form-label" for="objBudget">Бюджет (₽)</label>
+                    <input type="number" id="objBudget" class="form-input" placeholder="0" min="0" step="1">
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="objEndDate">Дата окончания</label>
-                    <input type="date" id="objEndDate" class="form-input">
+                    <label class="form-label" for="objDuration">Длительность (дней)</label>
+                    <input type="number" id="objDuration" class="form-input" placeholder="0" min="0">
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="app.closeModal()">Отмена</button>
@@ -765,15 +881,39 @@ class ConstructionApp {
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
         
+        // Преобразуем числовые поля
+        if (data.budget) data.budget = parseFloat(data.budget);
+        if (data.duration_days) data.duration_days = parseInt(data.duration_days);
+        
         console.log('Form submitted:', data);
         
-        // Here you would typically send data to backend
-        // For now, just show success message and close modal
-        alert('Данные успешно сохранены! (демо режим)');
-        this.closeModal();
-        
-        // Reload current page to show updated data
-        this.renderContent(this.currentPage);
+        // Отправляем данные на бэкенд
+        this.createObject(data);
+    }
+
+    async createObject(data) {
+        try {
+            const response = await fetch(`${API_BASE}/objects`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Object created:', result);
+                alert('Объект успешно создан!');
+                this.closeModal();
+                await this.loadObjects();
+                this.renderContent(this.currentPage);
+            } else {
+                const error = await response.json();
+                alert('Ошибка при создании объекта: ' + (error.error || 'Неизвестная ошибка'));
+            }
+        } catch (error) {
+            console.error('Error creating object:', error);
+            alert('Ошибка при создании объекта: ' + error.message);
+        }
     }
 
     closeModal() {

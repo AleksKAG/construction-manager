@@ -54,3 +54,23 @@ func (r *ProjectRepository) GetTasksForObject(ctx context.Context, objectID stri
 func (r *ProjectRepository) CreateTask(ctx context.Context, task *models.GanttTask) error {
 	return r.DB.WithContext(ctx).Create(task).Error
 }
+
+// UpdateTask — обновление задачи
+func (r *ProjectRepository) UpdateTask(ctx context.Context, task *models.GanttTask) error {
+	return r.DB.WithContext(ctx).Save(task).Error
+}
+
+// DeleteTask — удаление задачи
+func (r *ProjectRepository) DeleteTask(ctx context.Context, id string) error {
+	return r.DB.WithContext(ctx).Delete(&models.GanttTask{}, "id = ?", id).Error
+}
+
+// GetTaskByID — получение задачи по ID
+func (r *ProjectRepository) GetTaskByID(ctx context.Context, id string) (*models.GanttTask, error) {
+	var task models.GanttTask
+	err := r.DB.WithContext(ctx).First(&task, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errors.New("task not found")
+	}
+	return &task, err
+}
