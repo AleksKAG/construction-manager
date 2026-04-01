@@ -58,6 +58,9 @@ func main() {
 		&models.MenuItem{},
 		&models.Dashboard{},
 		&models.DashboardWidget{},
+		&models.TemplateDefinition{},
+		&models.TemplateColumn{},
+		&models.ProjectTemplateRow{},
 	); err != nil {
 		logger.Fatal("Migration failed: ", err)
 	}
@@ -67,6 +70,9 @@ func main() {
 	repo := repository.NewProjectRepository(db)
 	if err := services.LoadSampleData(repo, logger); err != nil {
 		logger.Warn("Failed to load sample data: ", err)
+	}
+	if err := services.LoadStandardTemplates(repo, logger); err != nil {
+		logger.Warn("Failed to load standard templates: ", err)
 	}
 
 	// === Router ===
