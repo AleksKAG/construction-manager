@@ -17,15 +17,14 @@ type ProjectObject struct {
 	Budget          float64            `gorm:"type:real" json:"budget,omitempty"`
 	Status          string             `gorm:"type:text;default:'planning'" json:"status"`
 	DurationDays    int                `gorm:"type:integer;default:0" json:"duration_days,omitempty"`
-	Characteristics string             `gorm:"type:text" json:"-"` // Храним как JSON строку
-	CostEstimates   string             `gorm:"type:text" json:"-"` // Храним как JSON строку
-	CharMap         map[string]string  `gorm:"-" json:"characteristics,omitempty"` // Для JSON сериализации
-	CostMap         map[string]float64 `gorm:"-" json:"cost_estimates,omitempty"`  // Для JSON сериализации
+	Characteristics string             `gorm:"type:text" json:"-"`
+	CostEstimates   string             `gorm:"type:text" json:"-"`
+	CharMap         map[string]string  `gorm:"-" json:"characteristics,omitempty"`
+	CostMap         map[string]float64 `gorm:"-" json:"cost_estimates,omitempty"`
 	CreatedAt       time.Time          `gorm:"autoCreateTime" json:"created_at,omitempty"`
 	UpdatedAt       time.Time          `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
 }
 
-// BeforeSave — сериализация JSON полей перед сохранением
 func (p *ProjectObject) BeforeSave(tx *gorm.DB) error {
 	if p.CharMap != nil && len(p.CharMap) > 0 {
 		data, err := json.Marshal(p.CharMap)
@@ -36,7 +35,7 @@ func (p *ProjectObject) BeforeSave(tx *gorm.DB) error {
 	} else {
 		p.Characteristics = "{}"
 	}
-	
+
 	if p.CostMap != nil && len(p.CostMap) > 0 {
 		data, err := json.Marshal(p.CostMap)
 		if err != nil {
@@ -49,7 +48,6 @@ func (p *ProjectObject) BeforeSave(tx *gorm.DB) error {
 	return nil
 }
 
-// AfterFind — десериализация JSON полей после загрузки
 func (p *ProjectObject) AfterFind(tx *gorm.DB) error {
 	if p.Characteristics != "" && p.Characteristics != "{}" {
 		if err := json.Unmarshal([]byte(p.Characteristics), &p.CharMap); err != nil {
@@ -64,7 +62,6 @@ func (p *ProjectObject) AfterFind(tx *gorm.DB) error {
 	return nil
 }
 
-// BeforeCreate — генерация UUID перед сохранением
 func (p *ProjectObject) BeforeCreate(tx *gorm.DB) error {
 	if p.ID == "" {
 		p.ID = uuid.New().String()
@@ -72,7 +69,7 @@ func (p *ProjectObject) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// GanttTask — задача для графика (отдельная таблица)
+// GanttTask — задача для графика
 type GanttTask struct {
 	ID        string  `gorm:"primaryKey;type:text" json:"id"`
 	ObjectID  string  `gorm:"type:text;index" json:"object_id"`
@@ -84,7 +81,6 @@ type GanttTask struct {
 	Status    string  `gorm:"type:text;default:'не начато'" json:"status,omitempty"`
 }
 
-// BeforeCreate — генерация UUID
 func (t *GanttTask) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == "" {
 		t.ID = uuid.New().String()
@@ -92,3 +88,106 @@ func (t *GanttTask) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// User + RBAC
+type User struct {
+	ID        string    `gorm:"primaryKey;type:text" json:"id"`
+	FullName  string    `gorm:"type:text;not null" json:"full_name"`
+	Email     string    `gorm:"type:text;uniqueIndex;not null" json:"email"`
+	Status    string    `gorm:"type:text;default:'active'" json:"status"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (u *User) BeforeCreate(tx *gorm.DB) error {
+	if u.ID == "" {
+		u.ID = uuid.New().String()
+	}
+	return nil
+}
+
+type Role struct {
+	ID   string `gorm:"primaryKey;type:text" json:"id"`
+	Code string `gorm:"type:text;uniqueIndex;not null" json:"code"`
+	Name string `gorm:"type:text;not null" json:"name"`
+}
+
+func (r *Role) BeforeCreate(tx *gorm.DB) error {
+	if r.ID == "" {
+		r.ID = uuid.New().String()
+	}
+	return nil
+}
+
+type Permission struct {
+	ID       string `gorm:"primaryKey;type:text" json:"id"`
+	Resource string `gorm:"type:text;index;not null" json:"resource"`
+	Action   string `gorm:"type:text;index;not null" json:"action"`
+}
+
+func (p *Permission) BeforeCreate(tx *gorm.DB) error {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
+	}
+	return nil
+}
+
+type UserRole struct {
+	ID        string `gorm:"primaryKey;type:text" json:"id"`
+	UserID    string `gorm:"type:text;index;not null" json:"user_id"`
+	RoleID    string `gorm:"type:text;index;not null" json:"role_id"`
+	ProjectID string `gorm:"type:text;index" json:"project_id,omitempty"`
+}
+
+func (ur *UserRole) BeforeCreate(tx *gorm.DB) error {
+	if ur.ID == "" {
+		ur.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// Project-level menu and dashboards
+type MenuItem struct {
+	ID        string `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID string `gorm:"type:text;index" json:"project_id,omitempty"`
+	ParentID  string `gorm:"type:text;index" json:"parent_id,omitempty"`
+	Title     string `gorm:"type:text;not null" json:"title"`
+	ItemType  string `gorm:"type:text;default:'section'" json:"item_type"`
+	SortOrder int    `gorm:"type:integer;default:0" json:"sort_order"`
+}
+
+func (m *MenuItem) BeforeCreate(tx *gorm.DB) error {
+	if m.ID == "" {
+		m.ID = uuid.New().String()
+	}
+	return nil
+}
+
+type Dashboard struct {
+	ID        string `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID string `gorm:"type:text;index" json:"project_id,omitempty"`
+	Name      string `gorm:"type:text;not null" json:"name"`
+	Scope     string `gorm:"type:text;index;default:'project'" json:"scope"`
+}
+
+func (d *Dashboard) BeforeCreate(tx *gorm.DB) error {
+	if d.ID == "" {
+		d.ID = uuid.New().String()
+	}
+	return nil
+}
+
+type DashboardWidget struct {
+	ID          string `gorm:"primaryKey;type:text" json:"id"`
+	DashboardID string `gorm:"type:text;index;not null" json:"dashboard_id"`
+	Title       string `gorm:"type:text;not null" json:"title"`
+	WidgetType  string `gorm:"type:text;not null" json:"widget_type"`
+	ConfigJSON  string `gorm:"type:text" json:"config_json,omitempty"`
+	SortOrder   int    `gorm:"type:integer;default:0" json:"sort_order"`
+}
+
+func (dw *DashboardWidget) BeforeCreate(tx *gorm.DB) error {
+	if dw.ID == "" {
+		dw.ID = uuid.New().String()
+	}
+	return nil
+}

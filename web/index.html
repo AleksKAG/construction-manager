@@ -3,98 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title> Управление строительством</title>
+    <title>Construction Manager — Портфель проектов</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo">
-                    <span class="logo-icon"> 🏛️ </span>
-                    <span class="logo-text">Construction AI</span>
-                </div>
-                <button class="sidebar-toggle" id="sidebarToggle">☰</button>
-            </div>
-            
-            <nav class="sidebar-nav">
-                <a href="#dashboard" class="nav-item active" data-page="dashboard">
-                    <span class="nav-icon">📊</span>
-                    <span class="nav-text">Дашборд</span>
-                </a>
-                <a href="#objects" class="nav-item" data-page="objects">
-                    <span class="nav-icon">🏢</span>
-                    <span class="nav-text">Объекты</span>
-                </a>
-                <a href="#organizations" class="nav-item" data-page="organizations">
-                    <span class="nav-icon">🏛️</span>
-                    <span class="nav-text">Организации</span>
-                </a>
-                <a href="#specialists" class="nav-item" data-page="specialists">
-                    <span class="nav-icon">👥</span>
-                    <span class="nav-text">Специалисты</span>
-                </a>
-                <a href="#documents" class="nav-item" data-page="documents">
-                    <span class="nav-icon">📄</span>
-                    <span class="nav-text">Документы</span>
-                </a>
-                <a href="#approvals" class="nav-item" data-page="approvals">
-                    <span class="nav-icon">✅</span>
-                    <span class="nav-text">Согласования</span>
-                </a>
-                <a href="#schedule" class="nav-item" data-page="schedule">
-                    <span class="nav-icon">📅</span>
-                    <span class="nav-text">График работ</span>
-                </a>
-                <a href="#risks" class="nav-item" data-page="risks">
-                    <span class="nav-icon">⚠️</span>
-                    <span class="nav-text">Риски</span>
-                </a>
-            </nav>
-            
-            <div class="sidebar-footer">
-                <div class="user-info">
-                    <div class="user-avatar">👤</div>
-                    <div class="user-details">
-                        <div class="user-name">Администратор</div>
-                        <div class="user-role">Главный иженер</div>
-                    </div>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Main Content -->
-        <main class="main-content">
-            <header class="top-header">
-                <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
-                <h1 class="page-title" id="pageTitle">Дашборд</h1>
-                <div class="header-actions">
-                    <button class="btn btn-primary" id="addActionBtn">+ Добавить</button>
-                </div>
-            </header>
-
-            <div class="content-area" id="contentArea">
-                <!-- Dynamic content will be loaded here -->
-            </div>
-        </main>
-    </div>
-
-    <!-- Modal for adding items -->
-    <div class="modal" id="addModal">
-        <div class="modal-overlay"></div>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="modalTitle">Добавить</h2>
-                <button class="modal-close" id="modalClose">&times;</button>
-            </div>
-            <div class="modal-body" id="modalBody">
-                <!-- Form will be injected here -->
+<div class="layout">
+    <aside class="sidebar" id="sidebar">
+        <div class="brand">
+            <div class="brand-mark">CM</div>
+            <div>
+                <div class="brand-title">Construction Manager</div>
+                <div class="brand-subtitle">Технический заказчик</div>
             </div>
         </div>
-    </div>
 
-    <script src="/static/js/app.js"></script>
+        <div class="section-title">Основное</div>
+        <nav class="menu">
+            <button class="menu-item active" data-view="home">Главная</button>
+            <button class="menu-item" data-view="tasks">Мои задачи</button>
+            <button class="menu-item" data-view="account">Аккаунт</button>
+            <button class="menu-item" data-view="auth">Авторизация и роли</button>
+        </nav>
+
+        <div class="section-title">Проекты</div>
+        <div id="projectTree" class="tree"></div>
+
+        <button class="menu-item secondary" id="menuEditor">Редактировать меню (для аккаунта)</button>
+    </aside>
+
+    <main class="content">
+        <header class="header">
+            <button id="toggleSidebar" class="ghost">☰</button>
+            <h1 id="pageTitle">Главная</h1>
+            <button id="addBtn" class="primary">+ Добавить проект</button>
+        </header>
+
+        <section id="contentArea" class="grid"></section>
+    </main>
+</div>
+
+<div class="modal" id="projectModal">
+    <div class="overlay" data-close="true"></div>
+    <div class="dialog">
+        <h3>Добавить проект</h3>
+        <label>Наименование<input id="projectName" type="text" placeholder="Например: Наименование 3"></label>
+        <label>Описание<textarea id="projectDescription" rows="3" placeholder="Краткое описание проекта"></textarea></label>
+        <div class="actions">
+            <button class="ghost" data-close="true">Закрыть</button>
+            <button class="primary" id="saveProject">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/app.js"></script>
 </body>
 </html>
