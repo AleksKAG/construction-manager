@@ -1,153 +1,281 @@
 class ConstructionManagerUI {
   constructor() {
-    this.currentView = 'home';
-    this.projects = [
-      { id: 'p1', name: 'Наименование 1', description: 'Многофункциональный комплекс' },
-      { id: 'p2', name: 'Наименование 2', description: 'Реконструкция объекта' }
+    this.currentView = "home";
+    this.projects = [];
+    this.selectedProjectId = null;
+    this.templates = [
+      { code: "input_design_data", title: "Исходные данные" },
+      { code: "design_schedule", title: "График проектирования" },
+      { code: "tep", title: "ТЭП" },
+      { code: "summary_estimate", title: "Смета" },
+      { code: "smr_schedule", title: "График СМР" },
     ];
-    this.projectMenuTemplate = [
-      { title: 'Проектирование', children: ['График Проектирования', 'Документация (Проектирование): ИРД, Изыскания, Стадия П, Экспертиза, Стадия Р'] },
-      { title: 'Сметная документация', children: ['Согласованная в экспертизе', 'Корректировка смет: СВОР, КАЦ, Сметы изм, Экспертиза повторная'] },
-      { title: 'СМР', children: ['График СМР', 'Документация СМР', 'Авторский надзор', 'Технический надзор', 'График поставки оборудования'] },
-      { title: 'Ввод в эксплуатацию', children: ['График (дорожная карта)', 'Документация'] },
-      { title: 'Протоколы совещаний', children: ['Внутренние', 'Проектирование', 'СМР', 'Добавить раздел протоколов'] }
-    ];
-
     this.bind();
+    this.init();
+  }
+
+  async init() {
+    await this.loadProjects();
     this.renderMenu();
     this.renderContent();
   }
 
   bind() {
-    document.querySelectorAll('.menu-item[data-view]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.menu-item[data-view]').forEach(i => i.classList.remove('active'));
-        btn.classList.add('active');
+    document.querySelectorAll(".menu-item[data-view]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".menu-item[data-view]").forEach((i) => i.classList.remove("active"));
+        btn.classList.add("active");
         this.currentView = btn.dataset.view;
-        document.getElementById('pageTitle').textContent = btn.textContent;
+        document.getElementById("pageTitle").textContent = btn.textContent;
         this.renderContent();
       });
     });
 
-    document.getElementById('toggleSidebar').addEventListener('click', () => {
-      document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById("toggleSidebar").addEventListener("click", () => {
+      document.getElementById("sidebar").classList.toggle("open");
     });
 
-    document.getElementById('addBtn').addEventListener('click', () => this.openModal());
-    document.querySelectorAll('[data-close="true"]').forEach(el => el.addEventListener('click', () => this.closeModal()));
-    document.getElementById('saveProject').addEventListener('click', () => this.saveProject());
+    document.getElementById("addBtn").addEventListener("click", () => this.openModal());
+    document.querySelectorAll('[data-close="true"]').forEach((el) => el.addEventListener("click", () => this.closeModal()));
+    document.getElementById("saveProject").addEventListener("click", () => this.saveProject());
+    document.getElementById("menuEditor").addEventListener("click", () => alert("Редактор меню будет доступен в следующих версиях."));
+  }
 
-    document.getElementById('menuEditor').addEventListener('click', () => {
-      alert('Режим настройки меню: в БД предусмотрены menu_items + account_menu_permissions.');
+  async api(path, options = {}) {
+    const res = await fetch(`/api/v1${path}`, {
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      ...options,
     });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
+    return res.json().catch(() => ({}));
+  }
+
+  async loadProjects() {
+    try {
+      this.projects = await this.api("/objects");
+      if (!this.selectedProjectId && this.projects.length > 0) {
+        this.selectedProjectId = this.projects[0].id;
+      }
+    } catch (e) {
+      this.notify(`Ошибка загрузки проектов: ${e.message}`);
+    }
   }
 
   renderMenu() {
-    const tree = document.getElementById('projectTree');
-    const rows = [];
-    this.projects.forEach(project => {
-      rows.push(`<div class="tree-row">${project.name}</div>`);
-      this.projectMenuTemplate.forEach(section => {
-        rows.push(`<div class="tree-row level-1">/ ${section.title}</div>`);
-        section.children.forEach(item => rows.push(`<div class="tree-row level-2">// ${item}</div>`));
+    const tree = document.getElementById("projectTree");
+    const rows = this.projects
+      .map(
+        (project) => `
+        <button class="tree-row ${this.selectedProjectId === project.id ? "active" : ""}" data-project-id="${project.id}">
+          ${project.name}
+        </button>`
+      )
+      .join("");
+    tree.innerHTML = `${rows}<button class="tree-row add-project">+ Добавить проект</button>`;
+
+    tree.querySelectorAll("[data-project-id]").forEach((el) => {
+      el.addEventListener("click", () => {
+        this.selectedProjectId = el.dataset.projectId;
+        this.currentView = "home";
+        document.getElementById("pageTitle").textContent = "Главная";
+        document.querySelectorAll(".menu-item[data-view]").forEach((i) => i.classList.toggle("active", i.dataset.view === "home"));
+        this.renderMenu();
+        this.renderContent();
       });
     });
-    rows.push('<div class="tree-row">+ Добавить проект</div>');
-    tree.innerHTML = rows.join('');
+    const addBtn = tree.querySelector(".add-project");
+    if (addBtn) addBtn.addEventListener("click", () => this.openModal());
   }
 
-  renderContent() {
-    const area = document.getElementById('contentArea');
-    if (this.currentView === 'auth') {
+  get selectedProject() {
+    return this.projects.find((p) => p.id === this.selectedProjectId) || null;
+  }
+
+  async renderContent() {
+    const area = document.getElementById("contentArea");
+    if (this.currentView === "auth") {
       area.innerHTML = this.renderAuthModel();
       return;
     }
-    area.innerHTML = `
-      <article class="card col-8">
-        <span class="tag">Дашборд проекта</span>
-        <h3>Наименование проекта 1</h3>
-        <div class="metric">Сроки реализации всего проекта: 01.2025 — 12.2027</div>
-        <div class="kpi"><span>Стадия П</span><span>62%</span></div>
-        <div class="progress"><span style="width:62%"></span></div>
-        <div class="kpi"><span>Стадия Р</span><span>41%</span></div>
-        <div class="progress"><span style="width:41%"></span></div>
-        <div class="kpi"><span>СМР (строительная готовность)</span><span>36%</span></div>
-        <div class="progress"><span style="width:36%"></span></div>
-        <div class="kpi"><span>Авансирование / Выполнено</span><span>410 / 295 млн ₽</span></div>
-      </article>
+    if (!this.selectedProject) {
+      area.innerHTML = `<article class="card col-12"><h3>Нет проектов</h3><p>Добавьте первый проект.</p></article>`;
+      return;
+    }
 
-      <article class="card col-4">
-        <h3>В работе</h3>
-        <div class="kpi"><span>Просрочено по протоколам</span><strong style="color:#c62828">7</strong></div>
-        <div class="kpi"><span>Ближайшие вопросы</span><span>3</span></div>
-        <div class="kpi"><span>Новые документы СМР</span><span>5</span></div>
-      </article>
+    area.innerHTML = `<article class="card col-12"><h3>Загрузка...</h3></article>`;
+    try {
+      const tasks = await this.api(`/objects/${this.selectedProject.id}/tasks`);
+      const [tepRows, estimateRows, designRows, smrRows] = await Promise.all([
+        this.api(`/objects/${this.selectedProject.id}/templates/tep/rows`),
+        this.api(`/objects/${this.selectedProject.id}/templates/summary_estimate/rows`),
+        this.api(`/objects/${this.selectedProject.id}/templates/design_schedule/rows`),
+        this.api(`/objects/${this.selectedProject.id}/templates/smr_schedule/rows`),
+      ]);
 
-      <article class="card col-6">
-        <h3>График проектирования</h3>
-        <table class="table">
-          <thead><tr><th>Этап</th><th>План</th><th>Факт</th><th>%</th></tr></thead>
-          <tbody>
-            <tr><td>ИРД</td><td>01.02</td><td>04.02</td><td>100</td></tr>
-            <tr><td>Изыскания</td><td>15.03</td><td>12.03</td><td>100</td></tr>
-            <tr><td>Стадия П</td><td>20.06</td><td>—</td><td>62</td></tr>
-            <tr><td>Экспертиза</td><td>15.09</td><td>—</td><td>0</td></tr>
-          </tbody>
-        </table>
-      </article>
+      area.innerHTML = `
+        <article class="card col-12">
+          <span class="tag">Проект</span>
+          <h3>${this.selectedProject.name}</h3>
+          <div class="metric">${this.selectedProject.address || "Адрес не заполнен"}</div>
+        </article>
 
-      <article class="card col-6">
-        <h3>Сметная документация</h3>
-        <div class="kpi"><span>Сводный сметный расчет (баз/тек)</span><span>1.92 / 2.34 млрд ₽</span></div>
-        <div class="kpi"><span>Последние документы</span><span>СВОР_12.xlsx, КАЦ_07.xlsx</span></div>
-        <div class="kpi"><span>Готово к приемке</span><span>317 млн ₽</span></div>
-      </article>
+        <article class="card col-6">
+          <h3>График (задачи)</h3>
+          ${this.renderTasksTable(tasks)}
+          <button class="primary" id="addTaskBtn">+ Добавить задачу</button>
+        </article>
 
-      <article class="card col-12">
-        <h3>Показатели по графику проектирования</h3>
-        <div class="kpi"><span>Всего комплектов РД</span><span>56</span></div>
-        <div class="kpi"><span>Согласовано в производство</span><span>34</span></div>
-        <div class="kpi"><span>Выдано в производство работ</span><span>812 млн ₽</span></div>
-        <div class="kpi"><span>На рассмотрении</span><span>129 млн ₽</span></div>
-      </article>
-    `;
+        <article class="card col-6">
+          <h3>ТЭП</h3>
+          ${this.renderSimpleTable(tepRows, ["indicator", "unit", "amount"])}
+          <button class="primary" id="addTepBtn">+ Добавить строку ТЭП</button>
+        </article>
+
+        <article class="card col-6">
+          <h3>Смета</h3>
+          ${this.renderSimpleTable(estimateRows, ["work_name", "total_cost"])}
+          <button class="primary" id="addEstimateBtn">+ Добавить строку сметы</button>
+        </article>
+
+        <article class="card col-6">
+          <h3>График проектирования</h3>
+          ${this.renderSimpleTable(designRows, ["name", "executor", "progress"])}
+          <button class="primary" id="addDesignBtn">+ Добавить строку графика ПД</button>
+        </article>
+
+        <article class="card col-12">
+          <h3>График СМР</h3>
+          ${this.renderSimpleTable(smrRows, ["task_name", "contractor", "progress"])}
+          <button class="primary" id="addSmrBtn">+ Добавить строку СМР</button>
+        </article>
+      `;
+
+      this.bindAddButtons();
+    } catch (e) {
+      area.innerHTML = `<article class="card col-12"><h3>Ошибка</h3><p>${e.message}</p></article>`;
+    }
+  }
+
+  renderTasksTable(tasks) {
+    if (!tasks?.length) return "<p>Нет задач.</p>";
+    return `<table class="table"><thead><tr><th>Название</th><th>Старт</th><th>Финиш</th><th>%</th></tr></thead><tbody>
+      ${tasks
+        .map(
+          (t) => `<tr><td>${t.name || ""}</td><td>${t.start_date || ""}</td><td>${t.end_date || ""}</td><td>${Math.round(t.progress || 0)}</td></tr>`
+        )
+        .join("")}
+    </tbody></table>`;
+  }
+
+  renderSimpleTable(rows, keys) {
+    if (!rows?.length) return "<p>Нет данных.</p>";
+    const header = keys.map((k) => `<th>${k}</th>`).join("");
+    const body = rows
+      .map((row) => `<tr>${keys.map((k) => `<td>${(row.data && row.data[k]) || ""}</td>`).join("")}</tr>`)
+      .join("");
+    return `<table class="table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  bindAddButtons() {
+    const project = this.selectedProject;
+    if (!project) return;
+    this.bindPromptTemplateButton("addTepBtn", "tep", ["indicator", "unit", "amount"]);
+    this.bindPromptTemplateButton("addEstimateBtn", "summary_estimate", ["work_name", "total_cost"]);
+    this.bindPromptTemplateButton("addDesignBtn", "design_schedule", ["name", "executor", "progress"]);
+    this.bindPromptTemplateButton("addSmrBtn", "smr_schedule", ["task_name", "contractor", "progress"]);
+
+    const addTaskBtn = document.getElementById("addTaskBtn");
+    if (addTaskBtn) {
+      addTaskBtn.addEventListener("click", async () => {
+        const name = prompt("Название задачи:");
+        if (!name) return;
+        const start = prompt("Дата начала (YYYY-MM-DD):", "");
+        const end = prompt("Дата окончания (YYYY-MM-DD):", "");
+        try {
+          await this.api("/tasks", {
+            method: "POST",
+            body: JSON.stringify({ object_id: project.id, name, start_date: start, end_date: end, progress: 0 }),
+          });
+          this.notify("Задача добавлена");
+          this.renderContent();
+        } catch (e) {
+          this.notify(`Ошибка добавления задачи: ${e.message}`);
+        }
+      });
+    }
+  }
+
+  bindPromptTemplateButton(buttonId, code, fields) {
+    const btn = document.getElementById(buttonId);
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const data = {};
+      for (const field of fields) {
+        const value = prompt(`Введите ${field}:`, "");
+        if (value === null) return;
+        data[field] = value;
+      }
+      try {
+        await this.api(`/objects/${this.selectedProject.id}/templates/${code}/rows`, {
+          method: "POST",
+          body: JSON.stringify({ data }),
+        });
+        this.notify("Строка добавлена");
+        this.renderContent();
+      } catch (e) {
+        this.notify(`Ошибка добавления строки: ${e.message}`);
+      }
+    });
   }
 
   renderAuthModel() {
     return `
       <article class="card col-12">
-        <h3>Основа авторизации и структуры БД</h3>
-        <table class="table">
-          <thead><tr><th>Таблица</th><th>Назначение</th><th>Ключевые поля</th></tr></thead>
-          <tbody>
-            <tr><td>users</td><td>Пользователи</td><td>id, full_name, email, status</td></tr>
-            <tr><td>roles</td><td>Роли</td><td>id, code(viewer/editor/admin), name</td></tr>
-            <tr><td>permissions</td><td>Права</td><td>resource, action(view/edit/admin)</td></tr>
-            <tr><td>user_roles</td><td>Назначение ролей</td><td>user_id, role_id, project_id</td></tr>
-            <tr><td>projects</td><td>Проекты</td><td>name, description, customer_org_id</td></tr>
-            <tr><td>menu_items</td><td>Дерево меню</td><td>parent_id, title, item_type, sort_order</td></tr>
-            <tr><td>dashboards/widgets</td><td>Конфиг дашбордов</td><td>scope, config_json</td></tr>
-            <tr><td>schedule_items</td><td>Графики П/Р/СМР/ввод</td><td>baseline/current, progress</td></tr>
-            <tr><td>meeting_protocols</td><td>Протоколы</td><td>section, due_date, status</td></tr>
-            <tr><td>documents</td><td>Документы</td><td>doc_type, stage, file_url, version</td></tr>
-          </tbody>
-        </table>
+        <h3>Авторизация и роли</h3>
+        <p class="metric">Базовые таблицы пользователей и ролей уже созданы на backend. Этот блок — справочный.</p>
       </article>`;
   }
 
-  openModal() { document.getElementById('projectModal').classList.add('open'); }
-  closeModal() { document.getElementById('projectModal').classList.remove('open'); }
+  openModal() {
+    document.getElementById("projectModal").classList.add("open");
+  }
 
-  saveProject() {
-    const name = document.getElementById('projectName').value.trim();
-    const description = document.getElementById('projectDescription').value.trim();
-    if (!name) return alert('Введите наименование проекта');
-    this.projects.push({ id: `p${Date.now()}`, name, description });
-    this.renderMenu();
-    this.closeModal();
-    document.getElementById('projectName').value = '';
-    document.getElementById('projectDescription').value = '';
+  closeModal() {
+    document.getElementById("projectModal").classList.remove("open");
+  }
+
+  async saveProject() {
+    const name = document.getElementById("projectName").value.trim();
+    const description = document.getElementById("projectDescription").value.trim();
+    if (!name) return this.notify("Введите наименование проекта");
+
+    try {
+      await this.api("/objects", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          address: description,
+          status: "planning",
+        }),
+      });
+      this.closeModal();
+      document.getElementById("projectName").value = "";
+      document.getElementById("projectDescription").value = "";
+      await this.loadProjects();
+      this.renderMenu();
+      this.renderContent();
+      this.notify("Проект добавлен");
+    } catch (e) {
+      this.notify(`Ошибка добавления проекта: ${e.message}`);
+    }
+  }
+
+  notify(message) {
+    alert(message);
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => new ConstructionManagerUI());
+window.addEventListener("DOMContentLoaded", () => new ConstructionManagerUI());

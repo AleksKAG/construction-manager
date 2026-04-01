@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func GetTemplate(repo *repository.ProjectRepository) gin.HandlerFunc {
+func GetTemplate(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		code := c.Param("code")
 		template, columns, err := repo.GetTemplateByCode(c.Request.Context(), code)
@@ -21,7 +21,7 @@ func GetTemplate(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func ListTemplateRows(repo *repository.ProjectRepository) gin.HandlerFunc {
+func ListTemplateRows(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
 		code := c.Param("code")
@@ -34,7 +34,7 @@ func ListTemplateRows(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func CreateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
+func CreateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
 		code := c.Param("code")
@@ -74,7 +74,7 @@ func CreateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func UpdateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
+func UpdateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("rowId")
 		var input struct {
@@ -99,7 +99,7 @@ func UpdateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func DeleteTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
+func DeleteTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("rowId")
 		if err := repo.DeleteTemplateRow(c.Request.Context(), id); err != nil {

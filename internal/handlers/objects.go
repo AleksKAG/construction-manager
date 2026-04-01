@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func ListObjects(repo *repository.ProjectRepository) gin.HandlerFunc {
+func ListObjects(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projects, err := repo.List(c.Request.Context())
 		if err != nil {
@@ -20,9 +20,9 @@ func ListObjects(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func CreateObject(repo *repository.ProjectRepository) gin.HandlerFunc {
+func CreateObject(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var p models.ProjectObject // ← ✅ Правильно: models.ProjectObject
+		var p models.ProjectObject
 		if err := c.ShouldBindJSON(&p); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -35,7 +35,7 @@ func CreateObject(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func GetObject(repo *repository.ProjectRepository) gin.HandlerFunc {
+func GetObject(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 		project, err := repo.FindByID(c.Request.Context(), id)
@@ -47,22 +47,22 @@ func GetObject(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func UpdateObject(repo *repository.ProjectRepository) gin.HandlerFunc {
+func UpdateObject(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		
+
 		var input models.ProjectObject
 		if err := c.ShouldBindJSON(&input); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		existing, err := repo.FindByID(c.Request.Context(), id)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "object not found"})
 			return
 		}
-		
+
 		// Обновляем поля
 		if input.Name != "" {
 			existing.Name = input.Name
@@ -85,32 +85,32 @@ func UpdateObject(repo *repository.ProjectRepository) gin.HandlerFunc {
 		if input.CostMap != nil {
 			existing.CostMap = input.CostMap
 		}
-		
+
 		if err := repo.Update(c.Request.Context(), existing); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		c.JSON(http.StatusOK, existing)
 	}
 }
 
-func DeleteObject(repo *repository.ProjectRepository) gin.HandlerFunc {
+func DeleteObject(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		
+
 		if err := repo.Delete(c.Request.Context(), id); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		c.JSON(http.StatusOK, gin.H{"message": "object deleted successfully"})
 	}
 }
 
 // === Gantt Task Handlers ===
 
-func ListTasks(repo *repository.ProjectRepository) gin.HandlerFunc {
+func ListTasks(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		objectID := c.Param("id")
 		if objectID == "" {
@@ -120,7 +120,7 @@ func ListTasks(repo *repository.ProjectRepository) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "object_id is required"})
 			return
 		}
-		
+
 		tasks, err := repo.GetTasksForObject(c.Request.Context(), objectID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -130,19 +130,19 @@ func ListTasks(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func CreateTask(repo *repository.ProjectRepository) gin.HandlerFunc {
+func CreateTask(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var task models.GanttTask
 		if err := c.ShouldBindJSON(&task); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		if task.ObjectID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "object_id is required"})
 			return
 		}
-		
+
 		if err := repo.CreateTask(c.Request.Context(), &task); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -151,7 +151,7 @@ func CreateTask(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func GetTask(repo *repository.ProjectRepository) gin.HandlerFunc {
+func GetTask(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 		task, err := repo.GetTaskByID(c.Request.Context(), id)
@@ -163,22 +163,22 @@ func GetTask(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func UpdateTask(repo *repository.ProjectRepository) gin.HandlerFunc {
+func UpdateTask(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		
+
 		var input models.GanttTask
 		if err := c.ShouldBindJSON(&input); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		existing, err := repo.GetTaskByID(c.Request.Context(), id)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 			return
 		}
-		
+
 		// Обновляем поля
 		if input.Name != "" {
 			existing.Name = input.Name
@@ -198,25 +198,25 @@ func UpdateTask(repo *repository.ProjectRepository) gin.HandlerFunc {
 		if input.Status != "" {
 			existing.Status = input.Status
 		}
-		
+
 		if err := repo.UpdateTask(c.Request.Context(), existing); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		c.JSON(http.StatusOK, existing)
 	}
 }
 
-func DeleteTask(repo *repository.ProjectRepository) gin.HandlerFunc {
+func DeleteTask(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		
+
 		if err := repo.DeleteTask(c.Request.Context(), id); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		c.JSON(http.StatusOK, gin.H{"message": "task deleted successfully"})
 	}
 }
