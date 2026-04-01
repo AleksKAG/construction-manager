@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AleksKAG/construction-manager/internal/handlers"
+	"github.com/AleksKAG/construction-manager/internal/middleware"
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
 	"github.com/AleksKAG/construction-manager/internal/services"
@@ -48,7 +49,20 @@ func main() {
 	}
 	logger.Info("SQLite connected")
 
-	if err := db.AutoMigrate(&models.ProjectObject{}, &models.GanttTask{}); err != nil {
+	if err := db.AutoMigrate(
+		&models.ProjectObject{},
+		&models.GanttTask{},
+		&models.User{},
+		&models.Role{},
+		&models.Permission{},
+		&models.UserRole{},
+		&models.MenuItem{},
+		&models.Dashboard{},
+		&models.DashboardWidget{},
+		&models.TemplateDefinition{},
+		&models.TemplateColumn{},
+		&models.ProjectTemplateRow{},
+	); err != nil {
 		logger.Fatal("Migration failed: ", err)
 	}
 	logger.Info("Migrations done")
@@ -57,6 +71,9 @@ func main() {
 	repo := repository.NewProjectRepository(db)
 	if err := services.LoadSampleData(repo, logger); err != nil {
 		logger.Warn("Failed to load sample data: ", err)
+	}
+	if err := services.LoadStandardTemplates(repo, logger); err != nil {
+		logger.Warn("Failed to load standard templates: ", err)
 	}
 
 	// === Router ===
@@ -93,14 +110,26 @@ func main() {
 		})
 
 		api.GET("/menu", handlers.MenuHandler)
-		
+		api.POST("/auth/token", handlers.IssueToken())
+
+		templates := api.Group("/")
+		templates.Use(middleware.JWTAuthMiddleware())
+		{
+			templates.GET("/templates/:code", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetTemplate(repo))
+			templates.GET("/objects/:id/templates/:code/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplateRows(repo))
+			templates.POST("/objects/:id/templates/:code/rows", middleware.RequireRoles("editor", "admin"), handlers.CreateTemplateRow(repo))
+			templates.PUT("/template-rows/:rowId", middleware.RequireRoles("editor", "admin"), handlers.UpdateTemplateRow(repo))
+			templates.DELETE("/template-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteTemplateRow(repo))
+			templates.GET("/objects/:id/templates/:code/export.csv", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ExportTemplateRowsXLSX(repo))
+		}
+
 		// Objects endpoints
 		api.GET("/objects", handlers.ListObjects(repo))
 		api.POST("/objects", handlers.CreateObject(repo))
 		api.GET("/objects/:id", handlers.GetObject(repo))
 		api.PUT("/objects/:id", handlers.UpdateObject(repo))
 		api.DELETE("/objects/:id", handlers.DeleteObject(repo))
-		
+
 		// Gantt Tasks endpoints
 		api.GET("/objects/:id/tasks", handlers.ListTasks(repo))
 		api.POST("/tasks", handlers.CreateTask(repo))
@@ -112,32 +141,32 @@ func main() {
 	// Запуск
 	port := getEnv("PORT", "8080")
 	logger.Infof("Server starting on :%s", port)
-	
+
 	// Graceful shutdown
 	server := &http.Server{
 		Addr:    ":" + port,
 		Handler: r.Handler(),
 	}
-	
+
 	go func() {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal(err)
 		}
 	}()
-	
+
 	// Ожидание сигнала завершения
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	
+
 	logger.Info("Shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Fatal("Server forced to shutdown: ", err)
 	}
-	
+
 	logger.Info("Server exiting")
 }
 

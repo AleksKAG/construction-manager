@@ -30,8 +30,8 @@ func LoadSampleData(repo *repository.ProjectRepository, logger *logrus.Logger) e
 			DurationDays: 420,
 			Status:       "planning",
 			CharMap: map[string]string{
-				"этажность":     "25",
-				"площадь":       "12000 м²",
+				"этажность":      "25",
+				"площадь":        "12000 м²",
 				"тип_фундамента": "свайный",
 			},
 			CostMap: map[string]float64{
@@ -64,8 +64,8 @@ func LoadSampleData(repo *repository.ProjectRepository, logger *logrus.Logger) e
 			DurationDays: 365,
 			Status:       "planning",
 			CharMap: map[string]string{
-				"площадь":       "25000 м²",
-				"высота_потолков": "12 м",
+				"площадь":             "25000 м²",
+				"высота_потолков":     "12 м",
 				"температурный_режим": "+5°C",
 			},
 			CostMap: map[string]float64{
@@ -125,5 +125,87 @@ func LoadSampleData(repo *repository.ProjectRepository, logger *logrus.Logger) e
 	}
 
 	logger.Info("Sample data loaded successfully")
+	return nil
+}
+
+func LoadStandardTemplates(repo *repository.ProjectRepository, logger *logrus.Logger) error {
+	ctx := context.Background()
+
+	var count int64
+	if err := repo.DB.Model(&models.TemplateDefinition{}).Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to count templates: %w", err)
+	}
+	if count > 0 {
+		logger.Infof("Standard templates already exist (%d), skipping", count)
+		return nil
+	}
+
+	templates := []models.TemplateDefinition{
+		{Code: "input_design_data", Name: "Исходные данные для проектирования", Description: "Шаблон ИДП"},
+		{Code: "design_schedule", Name: "График разработки проектной документации", Description: "Шаблон графика ПД"},
+		{Code: "tep", Name: "Технико-экономические показатели", Description: "Шаблон ТЭП"},
+		{Code: "summary_estimate", Name: "Сводный расчет", Description: "Сводный сметный расчет"},
+		{Code: "smr_schedule", Name: "График строительно-монтажных работ", Description: "Шаблон СМР"},
+	}
+	for _, tpl := range templates {
+		t := tpl
+		if err := repo.DB.WithContext(ctx).Create(&t).Error; err != nil {
+			return fmt.Errorf("failed to create template %s: %w", t.Code, err)
+		}
+	}
+
+	columns := []models.TemplateColumn{
+		{TemplateCode: "input_design_data", FieldKey: "num", Title: "№", DataType: "text", SortOrder: 1},
+		{TemplateCode: "input_design_data", FieldKey: "name", Title: "Наименование", DataType: "text", Required: true, SortOrder: 2},
+		{TemplateCode: "input_design_data", FieldKey: "issue_date", Title: "Дата выдачи", DataType: "date", SortOrder: 3},
+		{TemplateCode: "input_design_data", FieldKey: "valid_until", Title: "Срок действия", DataType: "date", SortOrder: 4},
+		{TemplateCode: "input_design_data", FieldKey: "note", Title: "Примечание", DataType: "text", SortOrder: 5},
+
+		{TemplateCode: "design_schedule", FieldKey: "volume_no", Title: "№ тома", DataType: "text", Required: true, SortOrder: 1},
+		{TemplateCode: "design_schedule", FieldKey: "code", Title: "Обозначение", DataType: "text", Required: true, SortOrder: 2},
+		{TemplateCode: "design_schedule", FieldKey: "name", Title: "Наименование", DataType: "text", Required: true, SortOrder: 3},
+		{TemplateCode: "design_schedule", FieldKey: "executor", Title: "Исполнитель", DataType: "text", SortOrder: 4},
+		{TemplateCode: "design_schedule", FieldKey: "baseline_start", Title: "Дата начала базовая", DataType: "date", SortOrder: 5},
+		{TemplateCode: "design_schedule", FieldKey: "baseline_end", Title: "Дата выдачи базовая", DataType: "date", SortOrder: 6},
+		{TemplateCode: "design_schedule", FieldKey: "baseline_days", Title: "Дней разработки база", DataType: "number", SortOrder: 7},
+		{TemplateCode: "design_schedule", FieldKey: "fact_start", Title: "Дата начала факт", DataType: "date", SortOrder: 8},
+		{TemplateCode: "design_schedule", FieldKey: "fact_end", Title: "Дата выдачи факт", DataType: "date", SortOrder: 9},
+		{TemplateCode: "design_schedule", FieldKey: "fact_days", Title: "Дней разработки факт", DataType: "number", SortOrder: 10},
+		{TemplateCode: "design_schedule", FieldKey: "progress", Title: "% завершения", DataType: "number", SortOrder: 11},
+
+		{TemplateCode: "tep", FieldKey: "num", Title: "№", DataType: "text", SortOrder: 1},
+		{TemplateCode: "tep", FieldKey: "indicator", Title: "Показатель", DataType: "text", Required: true, SortOrder: 2},
+		{TemplateCode: "tep", FieldKey: "unit", Title: "Единица измерения", DataType: "text", SortOrder: 3},
+		{TemplateCode: "tep", FieldKey: "amount", Title: "Кол-во", DataType: "number", SortOrder: 4},
+
+		{TemplateCode: "summary_estimate", FieldKey: "num", Title: "№ п/п", DataType: "text", SortOrder: 1},
+		{TemplateCode: "summary_estimate", FieldKey: "basis", Title: "Обоснование", DataType: "text", SortOrder: 2},
+		{TemplateCode: "summary_estimate", FieldKey: "work_name", Title: "Наименование работ и затрат", DataType: "text", Required: true, SortOrder: 3},
+		{TemplateCode: "summary_estimate", FieldKey: "build_cost", Title: "Строительных работ, тыс. руб.", DataType: "number", SortOrder: 4},
+		{TemplateCode: "summary_estimate", FieldKey: "install_cost", Title: "Монтажных работ, тыс. руб.", DataType: "number", SortOrder: 5},
+		{TemplateCode: "summary_estimate", FieldKey: "equip_cost", Title: "Оборудования, тыс. руб.", DataType: "number", SortOrder: 6},
+		{TemplateCode: "summary_estimate", FieldKey: "other_cost", Title: "Прочих затрат, тыс. руб.", DataType: "number", SortOrder: 7},
+		{TemplateCode: "summary_estimate", FieldKey: "total_cost", Title: "Всего, тыс. руб.", DataType: "number", SortOrder: 8},
+
+		{TemplateCode: "smr_schedule", FieldKey: "num", Title: "№", DataType: "text", SortOrder: 1},
+		{TemplateCode: "smr_schedule", FieldKey: "task_name", Title: "Название задачи", DataType: "text", Required: true, SortOrder: 2},
+		{TemplateCode: "smr_schedule", FieldKey: "contractor", Title: "Контрагент", DataType: "text", SortOrder: 3},
+		{TemplateCode: "smr_schedule", FieldKey: "contract_start", Title: "Базовое начало по договору", DataType: "date", SortOrder: 4},
+		{TemplateCode: "smr_schedule", FieldKey: "contract_end", Title: "Базовое окончание по договору", DataType: "date", SortOrder: 5},
+		{TemplateCode: "smr_schedule", FieldKey: "progress", Title: "% завершения", DataType: "number", SortOrder: 6},
+		{TemplateCode: "smr_schedule", FieldKey: "duration", Title: "Длительность", DataType: "number", SortOrder: 7},
+		{TemplateCode: "smr_schedule", FieldKey: "fact_start", Title: "Начало", DataType: "date", SortOrder: 8},
+		{TemplateCode: "smr_schedule", FieldKey: "fact_end", Title: "Окончание факт", DataType: "date", SortOrder: 9},
+		{TemplateCode: "smr_schedule", FieldKey: "finish_deviation", Title: "Отклонение окончания", DataType: "number", SortOrder: 10},
+	}
+
+	for _, col := range columns {
+		c := col
+		if err := repo.DB.WithContext(ctx).Create(&c).Error; err != nil {
+			return fmt.Errorf("failed to create template column %s/%s: %w", c.TemplateCode, c.FieldKey, err)
+		}
+	}
+
+	logger.Info("Standard templates loaded")
 	return nil
 }
