@@ -53,3 +53,4 @@ htmlcov/
 *.temp
 .DS_Store
 ```
+!.env.example

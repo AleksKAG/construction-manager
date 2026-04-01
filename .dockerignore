@@ -1,0 +1,9 @@
+.git
+.gitignore
+README.md
+construction-manager
+*.db
+*.sqlite
+*.log
+.env
+/tmp

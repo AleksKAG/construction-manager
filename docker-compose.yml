@@ -1,0 +1,19 @@
+services:
+  construction-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: construction-manager
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - PORT=8080
+      - DB_PATH=/data/construction_ai.db
+    volumes:
+      - cm_data:/data
+    restart: unless-stopped
+
+volumes:
+  cm_data:
