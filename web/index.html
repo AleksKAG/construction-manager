@@ -18,19 +18,15 @@
             </div>
         </div>
 
-        <div class="section-title">Разделы</div>
+        <div class="section-title">Основное</div>
         <nav class="menu">
             <button class="menu-item active" data-view="home">Главная</button>
-            <button class="menu-item" data-view="projects">Проекты</button>
-            <button class="menu-item" data-view="design">Проектирование</button>
-            <button class="menu-item" data-view="designSchedule">График проектирования</button>
-            <button class="menu-item" data-view="tep">ТЭП</button>
             <button class="menu-item" data-view="tasks">Мои задачи</button>
             <button class="menu-item" data-view="account">Аккаунт</button>
             <button class="menu-item" data-view="auth">Авторизация и роли</button>
         </nav>
 
-        <div class="section-title">Дерево проектов</div>
+        <div class="section-title">Проекты</div>
         <div id="projectTree" class="tree"></div>
 
         <button class="menu-item secondary" id="menuEditor">Редактировать меню (для аккаунта)</button>
@@ -39,26 +35,23 @@
     <main class="content">
         <header class="header">
             <button id="toggleSidebar" class="ghost">☰</button>
-            <div>
-                <h1 id="pageTitle">Главная</h1>
-                <div id="pageSubtitle" class="metric">Онлайн-данные из API / SQLite</div>
-            </div>
-            <button id="secondaryBtn" class="ghost" style="display:none;">Действие</button>
-            <button id="primaryBtn" class="primary">+ Добавить проект</button>
+            <h1 id="pageTitle">Главная</h1>
+            <button id="addBtn" class="primary">+ Добавить проект</button>
         </header>
 
         <section id="contentArea" class="grid"></section>
     </main>
 </div>
 
-<div class="modal" id="entityModal">
+<div class="modal" id="projectModal">
     <div class="overlay" data-close="true"></div>
     <div class="dialog">
-        <h3 id="modalTitle">Добавить</h3>
-        <div id="modalBody"></div>
+        <h3>Добавить проект</h3>
+        <label>Наименование<input id="projectName" type="text" placeholder="Например: Наименование 3"></label>
+        <label>Описание<textarea id="projectDescription" rows="3" placeholder="Краткое описание проекта"></textarea></label>
         <div class="actions">
             <button class="ghost" data-close="true">Закрыть</button>
-            <button class="primary" id="saveEntity">Сохранить</button>
+            <button class="primary" id="saveProject">Сохранить</button>
         </div>
     </div>
 </div>

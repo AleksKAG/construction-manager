@@ -110,13 +110,6 @@ func main() {
 
 		api.GET("/menu", handlers.MenuHandler)
 
-		// Templates endpoints
-		api.GET("/templates/:code", handlers.GetTemplate(repo))
-		api.GET("/objects/:id/templates/:code/rows", handlers.ListTemplateRows(repo))
-		api.POST("/objects/:id/templates/:code/rows", handlers.CreateTemplateRow(repo))
-		api.PUT("/template-rows/:rowId", handlers.UpdateTemplateRow(repo))
-		api.DELETE("/template-rows/:rowId", handlers.DeleteTemplateRow(repo))
-
 		// Objects endpoints
 		api.GET("/objects", handlers.ListObjects(repo))
 		api.POST("/objects", handlers.CreateObject(repo))
