@@ -112,7 +112,10 @@ func DeleteObject(repo *repository.ProjectRepository) gin.HandlerFunc {
 
 func ListTasks(repo *repository.ProjectRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		objectID := c.Param("object_id")
+		objectID := c.Param("id")
+		if objectID == "" {
+			objectID = c.Param("object_id")
+		}
 		if objectID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "object_id is required"})
 			return

@@ -102,7 +102,7 @@ func main() {
 		api.DELETE("/objects/:id", handlers.DeleteObject(repo))
 		
 		// Gantt Tasks endpoints
-		api.GET("/objects/:object_id/tasks", handlers.ListTasks(repo))
+		api.GET("/objects/:id/tasks", handlers.ListTasks(repo))
 		api.POST("/tasks", handlers.CreateTask(repo))
 		api.GET("/tasks/:id", handlers.GetTask(repo))
 		api.PUT("/tasks/:id", handlers.UpdateTask(repo))
