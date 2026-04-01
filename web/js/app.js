@@ -20,6 +20,7 @@ class ConstructionApp {
     async init() {
         this.bindEvents();
         await this.loadObjects();
+        await this.loadSchedule();
         this.loadPage('dashboard');
     }
 
@@ -31,6 +32,26 @@ class ConstructionApp {
             }
         } catch (error) {
             console.error('Failed to load objects:', error);
+        }
+    }
+
+    async loadSchedule() {
+        const firstObject = this.data.objects[0];
+        if (!firstObject?.id) {
+            this.data.schedule = [];
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/objects/${firstObject.id}/tasks`);
+            if (response.ok) {
+                this.data.schedule = await response.json();
+            } else {
+                this.data.schedule = [];
+            }
+        } catch (error) {
+            console.error('Failed to load schedule:', error);
+            this.data.schedule = [];
         }
     }
 
@@ -653,6 +674,46 @@ class ConstructionApp {
     }
 
     renderSchedule() {
+        if (this.data.schedule.length > 0) {
+            const rows = this.data.schedule.map(task => `
+                <tr>
+                    <td>${this.escapeHtml(task.name || 'Без названия')}</td>
+                    <td>${this.escapeHtml(task.task_type || '—')}</td>
+                    <td>${this.escapeHtml(task.start_date || '—')}</td>
+                    <td>${this.escapeHtml(task.end_date || '—')}</td>
+                    <td>${this.escapeHtml(task.contractor || '—')}</td>
+                    <td><span class="badge badge-${this.getStatusClass(task.status)}">${this.escapeHtml(task.status || 'planning')}</span></td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="app.editTask('${task.id}')">✏️</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            return `
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">График работ</h2>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Работа</th>
+                                    <th>Тип</th>
+                                    <th>Начало</th>
+                                    <th>Окончание</th>
+                                    <th>Подрядчик</th>
+                                    <th>Статус</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
         return `
             <div class="card">
                 <div class="card-header">
@@ -784,6 +845,10 @@ class ConstructionApp {
                 modalTitle.textContent = 'Добавить организацию';
                 formHtml = this.getOrganizationsForm();
                 break;
+            case 'schedule':
+                modalTitle.textContent = 'Добавить задачу';
+                formHtml = this.getTaskForm();
+                break;
             default:
                 modalTitle.textContent = 'Добавление';
                 formHtml = '<p>Форма добавления для этой страницы будет доступна позже.</p>';
@@ -807,15 +872,15 @@ class ConstructionApp {
             <form id="addObjectForm">
                 <div class="form-group">
                     <label class="form-label" for="objName">Название *</label>
-                    <input type="text" id="objName" class="form-input" required placeholder="Например: ЖК 'Северный'">
+                    <input type="text" id="objName" name="name" class="form-input" required placeholder="Например: ЖК 'Северный'">
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="objAddress">Адрес</label>
-                    <input type="text" id="objAddress" class="form-input" placeholder="Город, улица, дом">
+                    <input type="text" id="objAddress" name="address" class="form-input" placeholder="Город, улица, дом">
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="objStatus">Статус *</label>
-                    <select id="objStatus" class="form-select" required>
+                    <select id="objStatus" name="status" class="form-select" required>
                         <option value="">Выберите статус</option>
                         <option value="planning">Планирование</option>
                         <option value="active">Активный</option>
@@ -825,11 +890,11 @@ class ConstructionApp {
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="objBudget">Бюджет (₽)</label>
-                    <input type="number" id="objBudget" class="form-input" placeholder="0" min="0" step="1">
+                    <input type="number" id="objBudget" name="budget" class="form-input" placeholder="0" min="0" step="1">
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="objDuration">Длительность (дней)</label>
-                    <input type="number" id="objDuration" class="form-input" placeholder="0" min="0">
+                    <input type="number" id="objDuration" name="duration_days" class="form-input" placeholder="0" min="0">
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="app.closeModal()">Отмена</button>
@@ -844,11 +909,11 @@ class ConstructionApp {
             <form id="addOrganizationForm">
                 <div class="form-group">
                     <label class="form-label" for="orgName">Название *</label>
-                    <input type="text" id="orgName" class="form-input" required placeholder="Например: ООО 'Застройщик'">
+                    <input type="text" id="orgName" name="name" class="form-input" required placeholder="Например: ООО 'Застройщик'">
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="orgType">Тип *</label>
-                    <select id="orgType" class="form-select" required>
+                    <select id="orgType" name="type" class="form-select" required>
                         <option value="">Выберите тип</option>
                         <option value="заказчик">Заказчик</option>
                         <option value="генподрядчик">Генподрядчик</option>
@@ -859,15 +924,46 @@ class ConstructionApp {
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="orgContact">Контактное лицо</label>
-                    <input type="text" id="orgContact" class="form-input" placeholder="ФИО">
+                    <input type="text" id="orgContact" name="contact" class="form-input" placeholder="ФИО">
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="orgPhone">Телефон</label>
-                    <input type="tel" id="orgPhone" class="form-input" placeholder="+7 (___) ___-__-__">
+                    <input type="tel" id="orgPhone" name="phone" class="form-input" placeholder="+7 (___) ___-__-__">
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="orgEmail">Email</label>
-                    <input type="email" id="orgEmail" class="form-input" placeholder="email@example.com">
+                    <input type="email" id="orgEmail" name="email" class="form-input" placeholder="email@example.com">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="app.closeModal()">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        `;
+    }
+
+    getTaskForm() {
+        const defaultObjectID = this.data.objects[0]?.id || '';
+        return `
+            <form id="addTaskForm">
+                <div class="form-group">
+                    <label class="form-label" for="taskName">Работа *</label>
+                    <input type="text" id="taskName" name="name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="taskObjectId">Объект *</label>
+                    <select id="taskObjectId" name="object_id" class="form-select" required>
+                        ${this.data.objects.map(obj => `<option value="${obj.id}" ${obj.id === defaultObjectID ? 'selected' : ''}>${this.escapeHtml(obj.name || 'Без названия')}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="taskStatus">Статус</label>
+                    <select id="taskStatus" name="status" class="form-select">
+                        <option value="planning">Планирование</option>
+                        <option value="active">В работе</option>
+                        <option value="completed">Завершено</option>
+                        <option value="on_hold">Приостановлено</option>
+                    </select>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="app.closeModal()">Отмена</button>
@@ -887,8 +983,17 @@ class ConstructionApp {
         
         console.log('Form submitted:', data);
         
-        // Отправляем данные на бэкенд
-        this.createObject(data);
+        if (this.currentPage === 'objects') {
+            this.createObject(data);
+            return;
+        }
+        if (this.currentPage === 'organizations') {
+            this.createOrganization(data);
+            return;
+        }
+        if (this.currentPage === 'schedule') {
+            this.createTask(data);
+        }
     }
 
     async createObject(data) {
@@ -914,6 +1019,43 @@ class ConstructionApp {
             console.error('Error creating object:', error);
             alert('Ошибка при создании объекта: ' + error.message);
         }
+    }
+
+    createOrganization(data) {
+        this.data.organizations.push({
+            id: crypto.randomUUID(),
+            ...data
+        });
+        alert('Организация успешно добавлена!');
+        this.closeModal();
+        this.renderContent(this.currentPage);
+    }
+
+    async createTask(data) {
+        try {
+            const response = await fetch(`${API_BASE}/tasks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                alert('Задача успешно создана!');
+                this.closeModal();
+                await this.loadSchedule();
+                this.renderContent(this.currentPage);
+            } else {
+                const error = await response.json();
+                alert('Ошибка при создании задачи: ' + (error.error || 'Неизвестная ошибка'));
+            }
+        } catch (error) {
+            console.error('Error creating task:', error);
+            alert('Ошибка при создании задачи: ' + error.message);
+        }
+    }
+
+    editTask() {
+        alert('Редактирование задач будет добавлено в следующей версии.');
     }
 
     closeModal() {
