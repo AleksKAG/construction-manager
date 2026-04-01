@@ -1,1071 +1,344 @@
-// Construction AI - Frontend Application
+class ConstructionManagerUI {
+  constructor() {
+    this.currentView = 'home';
+    this.objects = [];
+    this.tasksByObject = {};
+    this.selectedObjectId = null;
+    this.modalMode = null;
+    this.currentTemplateCode = null;
 
-const API_BASE = '/api/v1';
+    this.projectMenuTemplate = [
+      { title: 'Проектирование', children: ['График Проектирования', 'Документация: ИРД, Изыскания, Стадия П, Экспертиза, Стадия Р'] },
+      { title: 'Сметная документация', children: ['Согласованная в экспертизе', 'Корректировка смет: СВОР, КАЦ, Сметы изм'] },
+      { title: 'СМР', children: ['График СМР', 'Документация СМР', 'Авторский/Технический надзор'] }
+    ];
 
-class ConstructionApp {
-    constructor() {
-        this.currentPage = 'dashboard';
-        this.data = {
-            objects: [],
-            organizations: [],
-            specialists: [],
-            documents: [],
-            approvals: [],
-            schedule: [],
-            risks: []
-        };
-        this.init();
+    this.bind();
+    this.bootstrap();
+  }
+
+  async bootstrap() {
+    await this.loadObjects();
+    this.renderProjectTree();
+    this.renderContent();
+  }
+
+  bind() {
+    document.querySelectorAll('.menu-item[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.menu-item[data-view]').forEach(i => i.classList.remove('active'));
+        btn.classList.add('active');
+        this.currentView = btn.dataset.view;
+        document.getElementById('pageTitle').textContent = btn.textContent;
+        this.renderContent();
+      });
+    });
+
+    document.getElementById('toggleSidebar').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+    document.getElementById('primaryBtn').addEventListener('click', () => this.handlePrimaryAction());
+    document.getElementById('secondaryBtn').addEventListener('click', () => this.handleSecondaryAction());
+    document.getElementById('menuEditor').addEventListener('click', () => alert('Следующий этап: настройка меню по роли пользователя.'));
+    document.querySelectorAll('[data-close="true"]').forEach(el => el.addEventListener('click', () => this.closeModal()));
+    document.getElementById('saveEntity').addEventListener('click', () => this.handleSaveModal());
+  }
+
+  async api(path, method = 'GET', body = null) {
+    const options = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) options.body = JSON.stringify(body);
+    const res = await fetch(`/api/v1${path}`, options);
+    if (!res.ok) {
+      let message = `Ошибка ${res.status}`;
+      try { const payload = await res.json(); message = payload.error || message; } catch (_) {}
+      throw new Error(message);
     }
+    if (res.status === 204) return null;
+    return res.json();
+  }
 
-    async init() {
-        this.bindEvents();
-        await this.loadObjects();
-        await this.loadSchedule();
-        this.loadPage('dashboard');
+  async loadObjects() {
+    try {
+      this.objects = await this.api('/objects');
+      if (!this.selectedObjectId && this.objects.length) this.selectedObjectId = this.objects[0].id;
+    } catch (error) { this.showError(`Не удалось загрузить объекты: ${error.message}`); }
+  }
+
+  async loadTasksForObject(objectId) {
+    if (!objectId) return [];
+    try {
+      const tasks = await this.api(`/objects/${objectId}/tasks`);
+      this.tasksByObject[objectId] = tasks;
+      return tasks;
+    } catch (error) {
+      this.showError(`Не удалось загрузить график: ${error.message}`);
+      return [];
     }
+  }
 
-    async loadObjects() {
-        try {
-            const response = await fetch(`${API_BASE}/objects`);
-            if (response.ok) {
-                this.data.objects = await response.json();
-            }
-        } catch (error) {
-            console.error('Failed to load objects:', error);
-        }
+  async loadTemplate(code) {
+    return this.api(`/templates/${code}`);
+  }
+
+  async loadTemplateRows(projectId, code) {
+    return this.api(`/objects/${projectId}/templates/${code}/rows`);
+  }
+
+  renderProjectTree() {
+    const tree = document.getElementById('projectTree');
+    const rows = [];
+    this.objects.forEach(project => {
+      const activeClass = this.selectedObjectId === project.id ? ' style="background:#22385f"' : '';
+      rows.push(`<div class="tree-row" data-select-project="${project.id}"${activeClass}>${project.name}</div>`);
+      this.projectMenuTemplate.forEach(section => {
+        rows.push(`<div class="tree-row level-1">/ ${section.title}</div>`);
+        section.children.forEach(item => rows.push(`<div class="tree-row level-2">// ${item}</div>`));
+      });
+    });
+    tree.innerHTML = rows.join('');
+    tree.querySelectorAll('[data-select-project]').forEach(node => node.addEventListener('click', () => {
+      this.selectedObjectId = node.dataset.selectProject;
+      this.renderProjectTree();
+      this.renderContent();
+    }));
+  }
+
+  configureHeader() {
+    const primaryBtn = document.getElementById('primaryBtn');
+    const secondaryBtn = document.getElementById('secondaryBtn');
+    const subtitle = document.getElementById('pageSubtitle');
+    secondaryBtn.style.display = 'none';
+
+    if (this.currentView === 'projects') {
+      primaryBtn.textContent = '+ Добавить проект';
+      secondaryBtn.style.display = 'inline-block';
+      secondaryBtn.textContent = 'Обновить список';
+      subtitle.textContent = 'CRUD по объектам';
+    } else if (this.currentView === 'designSchedule') {
+      primaryBtn.textContent = '+ Добавить этап графика';
+      secondaryBtn.style.display = 'inline-block';
+      secondaryBtn.textContent = 'Шаблон графика ПД';
+      subtitle.textContent = 'Шаблон + живые задачи';
+    } else if (this.currentView === 'tep') {
+      primaryBtn.textContent = '+ Добавить строку ТЭП';
+      secondaryBtn.style.display = 'inline-block';
+      secondaryBtn.textContent = 'Шаблон ТЭП';
+      subtitle.textContent = 'Таблица по стандартным колонкам';
+    } else {
+      primaryBtn.textContent = '+ Добавить проект';
+      subtitle.textContent = 'Онлайн-данные из API / SQLite';
     }
+  }
 
-    async loadSchedule() {
-        const firstObject = this.data.objects[0];
-        if (!firstObject?.id) {
-            this.data.schedule = [];
-            return;
-        }
+  async renderContent() {
+    this.configureHeader();
+    if (this.currentView === 'projects') return this.renderProjects();
+    if (this.currentView === 'designSchedule') return this.renderDesignSchedule();
+    if (this.currentView === 'tep') return this.renderTemplateTable('tep', 'Технико-экономические показатели');
+    if (this.currentView === 'design') return this.renderDesignOverview();
+    if (this.currentView === 'auth') return this.renderAuthModel();
+    if (this.currentView === 'tasks') return this.renderSimple('Мои задачи — далее добавим персональный трекинг по пользователю.');
+    if (this.currentView === 'account') return this.renderSimple('Аккаунт — далее добавим профиль и аудит действий.');
+    return this.renderHome();
+  }
 
-        try {
-            const response = await fetch(`${API_BASE}/objects/${firstObject.id}/tasks`);
-            if (response.ok) {
-                this.data.schedule = await response.json();
-            } else {
-                this.data.schedule = [];
-            }
-        } catch (error) {
-            console.error('Failed to load schedule:', error);
-            this.data.schedule = [];
-        }
+  renderSimple(text) {
+    document.getElementById('contentArea').innerHTML = `<article class="card col-12">${text}</article>`;
+  }
+
+  renderHome() {
+    const totalBudget = this.objects.reduce((sum, item) => sum + (item.budget || 0), 0);
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-4"><h3>Проекты</h3><div class="metric">${this.objects.length}</div></article>
+      <article class="card col-4"><h3>Суммарный бюджет</h3><div class="metric">${this.formatMoney(totalBudget)}</div></article>
+      <article class="card col-4"><h3>Выбранный проект</h3><div class="metric">${this.currentObject()?.name || 'Не выбран'}</div></article>
+      <article class="card col-12 notice">Добавлены стандартные шаблоны БД: ИДП, график ПД, ТЭП, сводный расчет и график СМР. При создании записи форма строится по обязательным колонкам шаблона.</article>`;
+  }
+
+  async renderProjects() {
+    const area = document.getElementById('contentArea');
+    const rows = this.objects.map(obj => `<tr>
+      <td>${obj.name}</td><td>${obj.address || '—'}</td><td>${obj.status || '—'}</td><td>${obj.duration_days || 0}</td><td>${this.formatMoney(obj.budget || 0)}</td>
+      <td><div class="row-actions"><button class="mini" data-edit-object="${obj.id}">Ред.</button><button class="mini danger" data-delete-object="${obj.id}">Удал.</button></div></td></tr>`).join('');
+    area.innerHTML = `<article class="card col-12"><h3>Объекты</h3><table class="table"><thead><tr><th>Наименование</th><th>Адрес</th><th>Статус</th><th>Дней</th><th>Бюджет</th><th>Действия</th></tr></thead><tbody>${rows}</tbody></table></article>`;
+    area.querySelectorAll('[data-edit-object]').forEach(b => b.addEventListener('click', () => this.openObjectModal(b.dataset.editObject)));
+    area.querySelectorAll('[data-delete-object]').forEach(b => b.addEventListener('click', () => this.deleteObject(b.dataset.deleteObject)));
+  }
+
+  async renderDesignOverview() {
+    const current = this.currentObject();
+    if (!current) return this.renderSimple('Выберите проект.');
+    const tasks = await this.loadTasksForObject(current.id);
+    const progress = tasks.length ? Math.round(tasks.reduce((sum, t) => sum + (t.progress || 0), 0) / tasks.length) : 0;
+    document.getElementById('contentArea').innerHTML = `<article class="card col-8"><h3>${current.name}</h3><div class="metric">Адрес: ${current.address || '—'}</div><div class="kpi"><span>Прогресс проектирования</span><span>${progress}%</span></div><div class="progress"><span style="width:${progress}%"></span></div></article><article class="card col-4"><h3>Характеристики</h3>${this.renderMapAsKPI(current.characteristics)}</article>`;
+  }
+
+  async renderDesignSchedule() {
+    const current = this.currentObject();
+    if (!current) return this.renderSimple('Выберите проект для графика проектирования.');
+    const tasks = await this.loadTasksForObject(current.id);
+    const rows = tasks.map(task => `<tr><td>${task.name}</td><td>${task.start_date || '—'}</td><td>${task.end_date || '—'}</td><td>${task.duration || 0}</td><td>${task.progress || 0}%</td><td>${task.status || '—'}</td><td><div class="row-actions"><button class="mini" data-edit-task="${task.id}">Ред.</button><button class="mini danger" data-delete-task="${task.id}">Удал.</button></div></td></tr>`).join('');
+    document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>График проектирования — ${current.name}</h3><table class="table"><thead><tr><th>Этап</th><th>Начало</th><th>Окончание</th><th>Дней</th><th>%</th><th>Статус</th><th>Действия</th></tr></thead><tbody>${rows || '<tr><td colspan="7">Пусто</td></tr>'}</tbody></table></article>`;
+    document.querySelectorAll('[data-edit-task]').forEach(b => b.addEventListener('click', () => this.openTaskModal(b.dataset.editTask)));
+    document.querySelectorAll('[data-delete-task]').forEach(b => b.addEventListener('click', () => this.deleteTask(b.dataset.deleteTask)));
+  }
+
+  async renderTemplateTable(code, title) {
+    const current = this.currentObject();
+    if (!current) return this.renderSimple('Выберите проект.');
+
+    try {
+      const [tplPayload, rows] = await Promise.all([this.loadTemplate(code), this.loadTemplateRows(current.id, code)]);
+      const columns = tplPayload.columns || [];
+      const head = columns.map(c => `<th>${c.title}</th>`).join('');
+      const body = rows.map(row => {
+        const cols = columns.map(c => `<td>${(row.data || {})[c.field_key] || '—'}</td>`).join('');
+        return `<tr>${cols}<td><div class="row-actions"><button class="mini" data-edit-template-row="${row.id}" data-template-code="${code}">Ред.</button><button class="mini danger" data-delete-template-row="${row.id}" data-template-code="${code}">Удал.</button></div></td></tr>`;
+      }).join('');
+
+      this.currentTemplateCode = code;
+      document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>${title} — ${current.name}</h3><table class="table"><thead><tr>${head}<th>Действия</th></tr></thead><tbody>${body || `<tr><td colspan="${columns.length + 1}">Нет строк</td></tr>`}</tbody></table></article>`;
+
+      document.querySelectorAll('[data-edit-template-row]').forEach(b => b.addEventListener('click', () => this.openTemplateRowModal(b.dataset.templateCode, b.dataset.editTemplateRow)));
+      document.querySelectorAll('[data-delete-template-row]').forEach(b => b.addEventListener('click', () => this.deleteTemplateRow(b.dataset.templateCode, b.dataset.deleteTemplateRow)));
+    } catch (e) {
+      this.showError(`Ошибка шаблона: ${e.message}`);
     }
+  }
 
-    bindEvents() {
-        // Navigation items
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', (e) => {
-                e.preventDefault();
-                const page = item.dataset.page;
-                this.loadPage(page);
-            });
-        });
+  renderAuthModel() {
+    document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>RBAC + шаблоны</h3><table class="table"><thead><tr><th>Компонент</th><th>Статус</th></tr></thead><tbody><tr><td>RBAC модели</td><td>Созданы</td></tr><tr><td>Стандартные шаблоны колонок</td><td>Созданы и доступны по API</td></tr><tr><td>Project template rows</td><td>CRUD через API</td></tr></tbody></table></article>`;
+  }
 
-        // Sidebar toggle
-        const sidebarToggle = document.getElementById('sidebarToggle');
-        if (sidebarToggle) {
-            sidebarToggle.addEventListener('click', () => {
-                document.getElementById('sidebar').classList.toggle('collapsed');
-                document.querySelector('.main-content').classList.toggle('expanded');
-            });
-        }
+  handlePrimaryAction() {
+    if (this.currentView === 'designSchedule') return this.openTaskModal();
+    if (this.currentView === 'tep') return this.openTemplateRowModal('tep');
+    return this.openObjectModal();
+  }
 
-        // Mobile menu
-        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-        if (mobileMenuBtn) {
-            mobileMenuBtn.addEventListener('click', () => {
-                document.getElementById('sidebar').classList.toggle('active');
-            });
-        }
+  async handleSecondaryAction() {
+    if (this.currentView === 'projects') return this.refreshProjects();
+    if (this.currentView === 'designSchedule') return this.openTemplateInfo('design_schedule');
+    if (this.currentView === 'tep') return this.openTemplateInfo('tep');
+  }
 
-        // Add action button
-        const addActionBtn = document.getElementById('addActionBtn');
-        if (addActionBtn) {
-            addActionBtn.addEventListener('click', () => {
-                this.showAddModal();
-            });
-        }
+  async refreshProjects() {
+    await this.loadObjects();
+    this.renderProjectTree();
+    this.renderContent();
+  }
 
-        // Modal close
-        const modalClose = document.getElementById('modalClose');
-        const modalOverlay = document.querySelector('.modal-overlay');
-        
-        if (modalClose) {
-            modalClose.addEventListener('click', () => {
-                this.closeModal();
-            });
-        }
-        
-        if (modalOverlay) {
-            modalOverlay.addEventListener('click', () => {
-                this.closeModal();
-            });
-        }
+  currentObject() {
+    return this.objects.find(item => item.id === this.selectedObjectId);
+  }
 
-        // Close modal on Escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                this.closeModal();
-            }
-        });
+  async openTemplateInfo(code) {
+    try {
+      const tpl = await this.loadTemplate(code);
+      alert(`${tpl.template.name}\n\nКолонки:\n${tpl.columns.map(c => `- ${c.title}${c.required ? ' *' : ''}`).join('\n')}`);
+    } catch (e) {
+      this.showError(e.message);
     }
+  }
 
-    loadPage(page) {
-        this.currentPage = page;
-        
-        // Update navigation
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.classList.remove('active');
-            if (item.dataset.page === page) {
-                item.classList.add('active');
-            }
-        });
+  openObjectModal(objectId = null) {
+    this.modalMode = objectId ? 'editObject' : 'createObject';
+    const entity = objectId ? this.objects.find(item => item.id === objectId) : null;
+    document.getElementById('modalTitle').textContent = objectId ? 'Редактировать проект' : 'Добавить проект';
+    document.getElementById('modalBody').innerHTML = `<div class="form-grid"><input id="obj-name" placeholder="Наименование" value="${entity?.name || ''}"><input id="obj-address" placeholder="Адрес" value="${entity?.address || ''}"><input id="obj-budget" type="number" placeholder="Бюджет" value="${entity?.budget || 0}"><input id="obj-duration" type="number" placeholder="Длительность (дней)" value="${entity?.duration_days || 0}"><select id="obj-status">${['planning', 'active', 'completed'].map(status => `<option value="${status}" ${entity?.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></div>`;
+    document.getElementById('entityModal').dataset.entityId = objectId || '';
+    this.openModal();
+  }
 
-        // Update page title
-        const titles = {
-            dashboard: 'Дашборд',
-            objects: 'Объекты строительства',
-            organizations: 'Организации',
-            specialists: 'Специалисты',
-            documents: 'Документы',
-            approvals: 'Согласования',
-            schedule: 'График работ',
-            risks: 'Риски'
-        };
-        document.getElementById('pageTitle').textContent = titles[page] || 'Страница';
+  async deleteObject(id) {
+    if (!confirm('Удалить объект?')) return;
+    await this.api(`/objects/${id}`, 'DELETE');
+    await this.refreshProjects();
+  }
 
-        // Load content
-        this.renderContent(page);
+  openTaskModal(taskId = null) {
+    if (!this.selectedObjectId) return this.showError('Сначала выберите проект');
+    const task = taskId ? (this.tasksByObject[this.selectedObjectId] || []).find(t => t.id === taskId) : null;
+    this.modalMode = taskId ? 'editTask' : 'createTask';
+    document.getElementById('modalTitle').textContent = taskId ? 'Редактировать этап графика' : 'Добавить этап графика';
+    document.getElementById('modalBody').innerHTML = `<div class="form-grid"><input id="task-name" placeholder="Наименование" value="${task?.name || ''}"><input id="task-start" type="date" value="${task?.start_date || ''}"><input id="task-end" type="date" value="${task?.end_date || ''}"><input id="task-duration" type="number" placeholder="Длительность" value="${task?.duration || 0}"><input id="task-progress" type="number" min="0" max="100" placeholder="Процент" value="${task?.progress || 0}"><select id="task-status">${['не начато', 'в работе', 'завершено'].map(status => `<option value="${status}" ${task?.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></div>`;
+    document.getElementById('entityModal').dataset.entityId = taskId || '';
+    this.openModal();
+  }
+
+  async deleteTask(id) {
+    if (!confirm('Удалить этап графика?')) return;
+    await this.api(`/tasks/${id}`, 'DELETE');
+    await this.renderDesignSchedule();
+  }
+
+  async openTemplateRowModal(code, rowId = null) {
+    if (!this.selectedObjectId) return this.showError('Выберите проект');
+    this.modalMode = rowId ? 'editTemplateRow' : 'createTemplateRow';
+    this.currentTemplateCode = code;
+
+    const [tplPayload, rows] = await Promise.all([this.loadTemplate(code), this.loadTemplateRows(this.selectedObjectId, code)]);
+    const columns = tplPayload.columns || [];
+    const targetRow = rowId ? rows.find(r => r.id === rowId) : null;
+
+    document.getElementById('modalTitle').textContent = `${rowId ? 'Редактировать' : 'Добавить'} строку (${tplPayload.template.name})`;
+    document.getElementById('modalBody').innerHTML = `<div class="form-grid">${columns.map(c => `<label>${c.title}${c.required ? ' *' : ''}<input data-template-field="${c.field_key}" type="${c.data_type === 'number' ? 'number' : c.data_type === 'date' ? 'date' : 'text'}" value="${(targetRow?.data || {})[c.field_key] || ''}"></label>`).join('')}</div>`;
+    document.getElementById('entityModal').dataset.entityId = rowId || '';
+    document.getElementById('entityModal').dataset.templateCode = code;
+    this.openModal();
+  }
+
+  async deleteTemplateRow(code, rowId) {
+    if (!confirm('Удалить строку?')) return;
+    await this.api(`/template-rows/${rowId}`, 'DELETE');
+    await this.renderTemplateTable(code, code === 'tep' ? 'Технико-экономические показатели' : code);
+  }
+
+  async handleSaveModal() {
+    try {
+      if (this.modalMode === 'createObject' || this.modalMode === 'editObject') {
+        const payload = { name: document.getElementById('obj-name').value.trim(), address: document.getElementById('obj-address').value.trim(), budget: Number(document.getElementById('obj-budget').value || 0), duration_days: Number(document.getElementById('obj-duration').value || 0), status: document.getElementById('obj-status').value };
+        if (!payload.name) return this.showError('Заполните наименование проекта');
+        const id = document.getElementById('entityModal').dataset.entityId;
+        if (id) await this.api(`/objects/${id}`, 'PUT', payload); else await this.api('/objects', 'POST', payload);
+        await this.refreshProjects();
+      }
+
+      if (this.modalMode === 'createTask' || this.modalMode === 'editTask') {
+        const payload = { object_id: this.selectedObjectId, name: document.getElementById('task-name').value.trim(), start_date: document.getElementById('task-start').value, end_date: document.getElementById('task-end').value, duration: Number(document.getElementById('task-duration').value || 0), progress: Number(document.getElementById('task-progress').value || 0), status: document.getElementById('task-status').value };
+        if (!payload.name) return this.showError('Заполните наименование этапа');
+        const id = document.getElementById('entityModal').dataset.entityId;
+        if (id) await this.api(`/tasks/${id}`, 'PUT', payload); else await this.api('/tasks', 'POST', payload);
+        await this.renderDesignSchedule();
+      }
+
+      if (this.modalMode === 'createTemplateRow' || this.modalMode === 'editTemplateRow') {
+        const data = {};
+        document.querySelectorAll('[data-template-field]').forEach(input => { data[input.dataset.templateField] = input.value; });
+        const rowId = document.getElementById('entityModal').dataset.entityId;
+        const code = document.getElementById('entityModal').dataset.templateCode;
+        if (rowId) await this.api(`/template-rows/${rowId}`, 'PUT', { data });
+        else await this.api(`/objects/${this.selectedObjectId}/templates/${code}/rows`, 'POST', { data });
+        await this.renderTemplateTable(code, code === 'tep' ? 'Технико-экономические показатели' : code);
+      }
+
+      this.closeModal();
+    } catch (error) {
+      this.showError(`Ошибка сохранения: ${error.message}`);
     }
+  }
 
-    renderContent(page) {
-        const contentArea = document.getElementById('contentArea');
-        let html = '';
+  renderMapAsKPI(mapData = {}) {
+    const entries = Object.entries(mapData || {});
+    if (!entries.length) return '<div class="metric">Пока нет данных</div>';
+    return entries.map(([k, v]) => `<div class="kpi"><span>${k}</span><span>${v}</span></div>`).join('');
+  }
 
-        switch(page) {
-            case 'dashboard':
-                html = this.renderDashboard();
-                break;
-            case 'objects':
-                html = this.renderObjects();
-                break;
-            case 'organizations':
-                html = this.renderOrganizations();
-                break;
-            case 'specialists':
-                html = this.renderSpecialists();
-                break;
-            case 'documents':
-                html = this.renderDocuments();
-                break;
-            case 'approvals':
-                html = this.renderApprovals();
-                break;
-            case 'schedule':
-                html = this.renderSchedule();
-                break;
-            case 'risks':
-                html = this.renderRisks();
-                break;
-            default:
-                html = '<div class="card"><p>Страница не найдена</p></div>';
-        }
+  openModal() { document.getElementById('entityModal').classList.add('open'); }
+  closeModal() { document.getElementById('entityModal').classList.remove('open'); }
+  showError(message) { alert(message); }
 
-        contentArea.innerHTML = html;
-        contentArea.classList.add('fade-in');
-        setTimeout(() => contentArea.classList.remove('fade-in'), 300);
-    }
-
-    renderDashboard() {
-        return `
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon blue">🏢</div>
-                    <div class="stat-content">
-                        <div class="stat-value">${this.data.objects.length || 5}</div>
-                        <div class="stat-label">Объектов</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon green">🏛️</div>
-                    <div class="stat-content">
-                        <div class="stat-value">${this.data.organizations.length || 12}</div>
-                        <div class="stat-label">Организаций</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon yellow">👥</div>
-                    <div class="stat-content">
-                        <div class="stat-value">${this.data.specialists.length || 24}</div>
-                        <div class="stat-label">Специалистов</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon red">⚠️</div>
-                    <div class="stat-content">
-                        <div class="stat-value">${this.data.risks.length || 3}</div>
-                        <div class="stat-label">Активных рисков</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Последние объекты</h2>
-                    <button class="btn btn-secondary btn-sm" onclick="app.loadPage('objects')">Все объекты</button>
-                </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Название</th>
-                                <th>Тип</th>
-                                <th>Статус</th>
-                                <th>Заказчик</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>ЖК "Северный"</td>
-                                <td>новое строительство</td>
-                                <td><span class="badge badge-success">строительство</span></td>
-                                <td>ООО "Застройщик"</td>
-                            </tr>
-                            <tr>
-                                <td>ТЦ "Плаза"</td>
-                                <td>реконструкция</td>
-                                <td><span class="badge badge-warning">проектирование</span></td>
-                                <td>АО "Инвест"</td>
-                            </tr>
-                            <tr>
-                                <td>Школа №45</td>
-                                <td>капитальный ремонт</td>
-                                <td><span class="badge badge-info">сдан</span></td>
-                                <td>Управление образования</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Статус согласований</h2>
-                </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Документ</th>
-                                <th>Тип согласования</th>
-                                <th>Статус</th>
-                                <th>Дата</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Проектная документация АР</td>
-                                <td>Мосгосстройнадзор</td>
-                                <td><span class="badge badge-warning">ожидает</span></td>
-                                <td>15.03.2026</td>
-                            </tr>
-                            <tr>
-                                <td>Раздел КМ</td>
-                                <td>Внутреннее</td>
-                                <td><span class="badge badge-success">одобрено</span></td>
-                                <td>10.03.2026</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
-    renderObjects() {
-        const objects = this.data.objects.length > 0 ? this.data.objects : [];
-        
-        let rows = '';
-        if (objects.length === 0) {
-            rows = '<tr><td colspan="7" style="text-align:center;">Нет данных</td></tr>';
-        } else {
-            rows = objects.map(obj => `
-                <tr>
-                    <td>${this.escapeHtml(obj.name || 'Без названия')}</td>
-                    <td>${this.escapeHtml(obj.address || '')}</td>
-                    <td><span class="badge badge-${this.getStatusClass(obj.status)}">${this.escapeHtml(obj.status || 'planning')}</span></td>
-                    <td>${obj.budget ? this.formatCurrency(obj.budget) : '-'}</td>
-                    <td>${obj.duration_days || '-'}</td>
-                    <td>
-                        <button class="btn btn-secondary btn-sm" onclick="app.editObject('${obj.id}')">✏️</button>
-                        <button class="btn btn-secondary btn-sm" onclick="app.deleteObject('${obj.id}')">🗑️</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-        
-        return `
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Список объектов</h2>
-                </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Название</th>
-                                <th>Адрес</th>
-                                <th>Статус</th>
-                                <th>Бюджет</th>
-                                <th>Длительность (дней)</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rows}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
-    formatCurrency(value) {
-        if (!value) return '-';
-        return new Intl.NumberFormat('ru-RU', { 
-            style: 'currency', 
-            currency: 'RUB',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
-        }).format(value);
-    }
-
-    getStatusClass(status) {
-        const statusMap = {
-            'planning': 'warning',
-            'active': 'success',
-            'completed': 'info',
-            'on_hold': 'secondary'
-        };
-        return statusMap[status] || 'secondary';
-    }
-
-    escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    async editObject(id) {
-        const obj = this.data.objects.find(o => o.id === id);
-        if (!obj) return;
-
-        const modal = document.getElementById('addModal');
-        document.getElementById('modalTitle').textContent = 'Редактировать объект';
-        document.getElementById('modalBody').innerHTML = `
-            <form id="editObjectForm">
-                <input type="hidden" id="editObjId" value="${obj.id}">
-                <div class="form-group">
-                    <label class="form-label" for="editObjName">Название *</label>
-                    <input type="text" id="editObjName" class="form-input" value="${this.escapeHtml(obj.name)}" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="editObjAddress">Адрес</label>
-                    <input type="text" id="editObjAddress" class="form-input" value="${this.escapeHtml(obj.address || '')}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="editObjStatus">Статус *</label>
-                    <select id="editObjStatus" class="form-select" required>
-                        <option value="planning" ${obj.status === 'planning' ? 'selected' : ''}>Планирование</option>
-                        <option value="active" ${obj.status === 'active' ? 'selected' : ''}>Активный</option>
-                        <option value="completed" ${obj.status === 'completed' ? 'selected' : ''}>Завершен</option>
-                        <option value="on_hold" ${obj.status === 'on_hold' ? 'selected' : ''}>Приостановлен</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="editObjBudget">Бюджет</label>
-                    <input type="number" id="editObjBudget" class="form-input" value="${obj.budget || ''}" step="0.01">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="editObjDuration">Длительность (дней)</label>
-                    <input type="number" id="editObjDuration" class="form-input" value="${obj.duration_days || ''}">
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="app.closeModal()">Отмена</button>
-                    <button type="submit" class="btn btn-primary">Сохранить</button>
-                </div>
-            </form>
-        `;
-        modal.classList.add('active');
-
-        document.getElementById('editObjectForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.saveObjectEdit(id);
-        });
-    }
-
-    async saveObjectEdit(id) {
-        const data = {
-            name: document.getElementById('editObjName').value,
-            address: document.getElementById('editObjAddress').value,
-            status: document.getElementById('editObjStatus').value,
-            budget: parseFloat(document.getElementById('editObjBudget').value) || 0,
-            duration_days: parseInt(document.getElementById('editObjDuration').value) || 0
-        };
-
-        try {
-            const response = await fetch(`${API_BASE}/objects/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-
-            if (response.ok) {
-                await this.loadObjects();
-                this.renderContent(this.currentPage);
-                this.closeModal();
-                alert('Объект успешно обновлен!');
-            } else {
-                alert('Ошибка при обновлении объекта');
-            }
-        } catch (error) {
-            console.error('Error updating object:', error);
-            alert('Ошибка при обновлении объекта');
-        }
-    }
-
-    async deleteObject(id) {
-        if (!confirm('Вы уверены, что хотите удалить этот объект?')) return;
-
-        try {
-            const response = await fetch(`${API_BASE}/objects/${id}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                await this.loadObjects();
-                this.renderContent(this.currentPage);
-                alert('Объект успешно удален!');
-            } else {
-                alert('Ошибка при удалении объекта');
-            }
-        } catch (error) {
-            console.error('Error deleting object:', error);
-            alert('Ошибка при удалении объекта');
-        }
-    }
-
-    renderOrganizations() {
-        return `
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Организации</h2>
-                </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Название</th>
-                                <th>Тип</th>
-                                <th>Контактное лицо</th>
-                                <th>Телефон</th>
-                                <th>Email</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>ООО "Застройщик"</td>
-                                <td><span class="badge badge-info">заказчик</span></td>
-                                <td>Иванов И.И.</td>
-                                <td>+7 (495) 123-45-67</td>
-                                <td>info@zastroyschik.ru</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>АО "СтройМонтаж"</td>
-                                <td><span class="badge badge-success">генподрядчик</span></td>
-                                <td>Петров П.П.</td>
-                                <td>+7 (495) 234-56-78</td>
-                                <td>info@stroymontazh.ru</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>ЗАО "ПроектИнститут"</td>
-                                <td><span class="badge badge-warning">проектировщик</span></td>
-                                <td>Сидоров С.С.</td>
-                                <td>+7 (495) 345-67-89</td>
-                                <td>info@projectinst.ru</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
-    renderSpecialists() {
-        return `
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Специалисты</h2>
-                </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>ФИО</th>
-                                <th>Роль</th>
-                                <th>Организация</th>
-                                <th>Телефон</th>
-                                <th>Email</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Иванов Иван Иванович</td>
-                                <td>Главный инженер</td>
-                                <td>ООО "Застройщик"</td>
-                                <td>+7 (999) 111-22-33</td>
-                                <td>ivanov@zastroyschik.ru</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>Петров Петр Петрович</td>
-                                <td>Архитектор</td>
-                                <td>ЗАО "ПроектИнститут"</td>
-                                <td>+7 (999) 222-33-44</td>
-                                <td>petrov@projectinst.ru</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>Сидоров Сергей Сергеевич</td>
-                                <td>Прораб</td>
-                                <td>АО "СтройМонтаж"</td>
-                                <td>+7 (999) 333-44-55</td>
-                                <td>sidorov@stroymontazh.ru</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                    <button class="btn btn-secondary btn-sm">🗑️</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
-    renderDocuments() {
-        return `
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Документы</h2>
-                </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Название</th>
-                                <th>Код</th>
-                                <th>Версия</th>
-                                <th>Статус</th>
-                                <th>Загружен</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Архитектурные решения</td>
-                                <td>АР</td>
-                                <td>2</td>
-                                <td><span class="badge badge-warning">на согласовании</span></td>
-                                <td>15.03.2026</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">📥</button>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>Конструктивные решения</td>
-                                <td>КР</td>
-                                <td>1</td>
-                                <td><span class="badge badge-success">согласован</span></td>
-                                <td>10.03.2026</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">📥</button>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
-    renderApprovals() {
-        return `
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Согласования</h2>
-                </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Документ</th>
-                                <th>Тип</th>
-                                <th>Согласующий</th>
-                                <th>Статус</th>
-                                <th>Комментарий</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Проектная документация АР</td>
-                                <td>Мосгосстройнадзор</td>
-                                <td>Госэкспертиза</td>
-                                <td><span class="badge badge-warning">ожидает</span></td>
-                                <td>-</td>
-                                <td>
-                                    <button class="btn btn-primary btn-sm">✓</button>
-                                    <button class="btn btn-secondary btn-sm">✗</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>Раздел КМ</td>
-                                <td>Внутреннее</td>
-                                <td>Главный инженер</td>
-                                <td><span class="badge badge-success">одобрено</span></td>
-                                <td>Замечаний нет</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm" disabled>✓</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
-    renderSchedule() {
-        if (this.data.schedule.length > 0) {
-            const rows = this.data.schedule.map(task => `
-                <tr>
-                    <td>${this.escapeHtml(task.name || 'Без названия')}</td>
-                    <td>${this.escapeHtml(task.task_type || '—')}</td>
-                    <td>${this.escapeHtml(task.start_date || '—')}</td>
-                    <td>${this.escapeHtml(task.end_date || '—')}</td>
-                    <td>${this.escapeHtml(task.contractor || '—')}</td>
-                    <td><span class="badge badge-${this.getStatusClass(task.status)}">${this.escapeHtml(task.status || 'planning')}</span></td>
-                    <td>
-                        <button class="btn btn-secondary btn-sm" onclick="app.editTask('${task.id}')">✏️</button>
-                    </td>
-                </tr>
-            `).join('');
-
-            return `
-                <div class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">График работ</h2>
-                    </div>
-                    <div class="table-container">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Работа</th>
-                                    <th>Тип</th>
-                                    <th>Начало</th>
-                                    <th>Окончание</th>
-                                    <th>Подрядчик</th>
-                                    <th>Статус</th>
-                                    <th>Действия</th>
-                                </tr>
-                            </thead>
-                            <tbody>${rows}</tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
-        }
-
-        return `
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">График работ</h2>
-                </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Работа</th>
-                                <th>Тип</th>
-                                <th>Начало</th>
-                                <th>Окончание</th>
-                                <th>Подрядчик</th>
-                                <th>Статус</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Подготовительные работы</td>
-                                <td>общестроительные</td>
-                                <td>01.01.2025</td>
-                                <td>31.01.2025</td>
-                                <td>АО "СтройМонтаж"</td>
-                                <td><span class="badge badge-success">завершено</span></td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>Нулевой цикл</td>
-                                <td>общестроительные</td>
-                                <td>01.02.2025</td>
-                                <td>28.02.2025</td>
-                                <td>АО "СтройМонтаж"</td>
-                                <td><span class="badge badge-warning">в работе</span></td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>Монтаж конструкций</td>
-                                <td>общестроительные</td>
-                                <td>01.03.2025</td>
-                                <td>30.06.2025</td>
-                                <td>АО "СтройМонтаж"</td>
-                                <td><span class="badge badge-gray">не начато</span></td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
-    renderRisks() {
-        return `
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Реестр рисков</h2>
-                </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Описание</th>
-                                <th>Тип</th>
-                                <th>Вероятность</th>
-                                <th>Влияние</th>
-                                <th>План мероприятий</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Задержка поставки материалов</td>
-                                <td><span class="badge badge-warning">поставки</span></td>
-                                <td>0.7</td>
-                                <td><span class="badge badge-danger">высокий</span></td>
-                                <td>Поиск альтернативных поставщиков</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>Неблагоприятные погодные условия</td>
-                                <td><span class="badge badge-info">погода</span></td>
-                                <td>0.4</td>
-                                <td><span class="badge badge-warning">средний</span></td>
-                                <td>Корректировка графика работ</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>Задержка согласования документации</td>
-                                <td><span class="badge badge-success">согласования</span></td>
-                                <td>0.5</td>
-                                <td><span class="badge badge-warning">средний</span></td>
-                                <td>Ранняя подача документов</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm">✏️</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
-    showAddModal() {
-        const modal = document.getElementById('addModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalBody = document.getElementById('modalBody');
-        
-        let formHtml = '';
-        
-        switch(this.currentPage) {
-            case 'objects':
-                modalTitle.textContent = 'Добавить объект';
-                formHtml = this.getObjectsForm();
-                break;
-            case 'organizations':
-                modalTitle.textContent = 'Добавить организацию';
-                formHtml = this.getOrganizationsForm();
-                break;
-            case 'schedule':
-                modalTitle.textContent = 'Добавить задачу';
-                formHtml = this.getTaskForm();
-                break;
-            default:
-                modalTitle.textContent = 'Добавление';
-                formHtml = '<p>Форма добавления для этой страницы будет доступна позже.</p>';
-        }
-        
-        modalBody.innerHTML = formHtml;
-        modal.classList.add('active');
-        
-        // Bind form submit
-        const form = modalBody.querySelector('form');
-        if (form) {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.handleFormSubmit(form);
-            });
-        }
-    }
-
-    getObjectsForm() {
-        return `
-            <form id="addObjectForm">
-                <div class="form-group">
-                    <label class="form-label" for="objName">Название *</label>
-                    <input type="text" id="objName" name="name" class="form-input" required placeholder="Например: ЖК 'Северный'">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="objAddress">Адрес</label>
-                    <input type="text" id="objAddress" name="address" class="form-input" placeholder="Город, улица, дом">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="objStatus">Статус *</label>
-                    <select id="objStatus" name="status" class="form-select" required>
-                        <option value="">Выберите статус</option>
-                        <option value="planning">Планирование</option>
-                        <option value="active">Активный</option>
-                        <option value="completed">Завершен</option>
-                        <option value="on_hold">Приостановлен</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="objBudget">Бюджет (₽)</label>
-                    <input type="number" id="objBudget" name="budget" class="form-input" placeholder="0" min="0" step="1">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="objDuration">Длительность (дней)</label>
-                    <input type="number" id="objDuration" name="duration_days" class="form-input" placeholder="0" min="0">
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="app.closeModal()">Отмена</button>
-                    <button type="submit" class="btn btn-primary">Сохранить</button>
-                </div>
-            </form>
-        `;
-    }
-
-    getOrganizationsForm() {
-        return `
-            <form id="addOrganizationForm">
-                <div class="form-group">
-                    <label class="form-label" for="orgName">Название *</label>
-                    <input type="text" id="orgName" name="name" class="form-input" required placeholder="Например: ООО 'Застройщик'">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="orgType">Тип *</label>
-                    <select id="orgType" name="type" class="form-select" required>
-                        <option value="">Выберите тип</option>
-                        <option value="заказчик">Заказчик</option>
-                        <option value="генподрядчик">Генподрядчик</option>
-                        <option value="проектировщик">Проектировщик</option>
-                        <option value="экспертиза">Экспертиза</option>
-                        <option value="поставщик">Поставщик</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="orgContact">Контактное лицо</label>
-                    <input type="text" id="orgContact" name="contact" class="form-input" placeholder="ФИО">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="orgPhone">Телефон</label>
-                    <input type="tel" id="orgPhone" name="phone" class="form-input" placeholder="+7 (___) ___-__-__">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="orgEmail">Email</label>
-                    <input type="email" id="orgEmail" name="email" class="form-input" placeholder="email@example.com">
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="app.closeModal()">Отмена</button>
-                    <button type="submit" class="btn btn-primary">Сохранить</button>
-                </div>
-            </form>
-        `;
-    }
-
-    getTaskForm() {
-        const defaultObjectID = this.data.objects[0]?.id || '';
-        return `
-            <form id="addTaskForm">
-                <div class="form-group">
-                    <label class="form-label" for="taskName">Работа *</label>
-                    <input type="text" id="taskName" name="name" class="form-input" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="taskObjectId">Объект *</label>
-                    <select id="taskObjectId" name="object_id" class="form-select" required>
-                        ${this.data.objects.map(obj => `<option value="${obj.id}" ${obj.id === defaultObjectID ? 'selected' : ''}>${this.escapeHtml(obj.name || 'Без названия')}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="taskStatus">Статус</label>
-                    <select id="taskStatus" name="status" class="form-select">
-                        <option value="planning">Планирование</option>
-                        <option value="active">В работе</option>
-                        <option value="completed">Завершено</option>
-                        <option value="on_hold">Приостановлено</option>
-                    </select>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="app.closeModal()">Отмена</button>
-                    <button type="submit" class="btn btn-primary">Сохранить</button>
-                </div>
-            </form>
-        `;
-    }
-
-    handleFormSubmit(form) {
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-        
-        // Преобразуем числовые поля
-        if (data.budget) data.budget = parseFloat(data.budget);
-        if (data.duration_days) data.duration_days = parseInt(data.duration_days);
-        
-        console.log('Form submitted:', data);
-        
-        if (this.currentPage === 'objects') {
-            this.createObject(data);
-            return;
-        }
-        if (this.currentPage === 'organizations') {
-            this.createOrganization(data);
-            return;
-        }
-        if (this.currentPage === 'schedule') {
-            this.createTask(data);
-        }
-    }
-
-    async createObject(data) {
-        try {
-            const response = await fetch(`${API_BASE}/objects`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                console.log('Object created:', result);
-                alert('Объект успешно создан!');
-                this.closeModal();
-                await this.loadObjects();
-                this.renderContent(this.currentPage);
-            } else {
-                const error = await response.json();
-                alert('Ошибка при создании объекта: ' + (error.error || 'Неизвестная ошибка'));
-            }
-        } catch (error) {
-            console.error('Error creating object:', error);
-            alert('Ошибка при создании объекта: ' + error.message);
-        }
-    }
-
-    createOrganization(data) {
-        this.data.organizations.push({
-            id: crypto.randomUUID(),
-            ...data
-        });
-        alert('Организация успешно добавлена!');
-        this.closeModal();
-        this.renderContent(this.currentPage);
-    }
-
-    async createTask(data) {
-        try {
-            const response = await fetch(`${API_BASE}/tasks`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-
-            if (response.ok) {
-                alert('Задача успешно создана!');
-                this.closeModal();
-                await this.loadSchedule();
-                this.renderContent(this.currentPage);
-            } else {
-                const error = await response.json();
-                alert('Ошибка при создании задачи: ' + (error.error || 'Неизвестная ошибка'));
-            }
-        } catch (error) {
-            console.error('Error creating task:', error);
-            alert('Ошибка при создании задачи: ' + error.message);
-        }
-    }
-
-    editTask() {
-        alert('Редактирование задач будет добавлено в следующей версии.');
-    }
-
-    closeModal() {
-        const modal = document.getElementById('addModal');
-        modal.classList.remove('active');
-    }
+  formatMoney(value) {
+    return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value || 0);
+  }
 }
 
-// Initialize app when DOM is loaded
-let app;
-document.addEventListener('DOMContentLoaded', () => {
-    app = new ConstructionApp();
-});
+window.addEventListener('DOMContentLoaded', () => new ConstructionManagerUI());

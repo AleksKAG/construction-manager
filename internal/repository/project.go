@@ -74,3 +74,42 @@ func (r *ProjectRepository) GetTaskByID(ctx context.Context, id string) (*models
 	}
 	return &task, err
 }
+
+func (r *ProjectRepository) GetTemplateByCode(ctx context.Context, code string) (*models.TemplateDefinition, []models.TemplateColumn, error) {
+	var tpl models.TemplateDefinition
+	if err := r.DB.WithContext(ctx).First(&tpl, "code = ?", code).Error; err != nil {
+		return nil, nil, err
+	}
+	var cols []models.TemplateColumn
+	if err := r.DB.WithContext(ctx).Where("template_code = ?", code).Order("sort_order asc").Find(&cols).Error; err != nil {
+		return nil, nil, err
+	}
+	return &tpl, cols, nil
+}
+
+func (r *ProjectRepository) ListTemplateRows(ctx context.Context, projectID, code string) ([]models.ProjectTemplateRow, error) {
+	var rows []models.ProjectTemplateRow
+	err := r.DB.WithContext(ctx).Where("project_id = ? AND template_code = ?", projectID, code).Order("row_number asc").Find(&rows).Error
+	return rows, err
+}
+
+func (r *ProjectRepository) CreateTemplateRow(ctx context.Context, row *models.ProjectTemplateRow) error {
+	return r.DB.WithContext(ctx).Create(row).Error
+}
+
+func (r *ProjectRepository) GetTemplateRowByID(ctx context.Context, id string) (*models.ProjectTemplateRow, error) {
+	var row models.ProjectTemplateRow
+	err := r.DB.WithContext(ctx).First(&row, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errors.New("row not found")
+	}
+	return &row, err
+}
+
+func (r *ProjectRepository) UpdateTemplateRow(ctx context.Context, row *models.ProjectTemplateRow) error {
+	return r.DB.WithContext(ctx).Save(row).Error
+}
+
+func (r *ProjectRepository) DeleteTemplateRow(ctx context.Context, id string) error {
+	return r.DB.WithContext(ctx).Delete(&models.ProjectTemplateRow{}, "id = ?", id).Error
+}
