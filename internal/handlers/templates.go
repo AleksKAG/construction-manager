@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"net/http"
+	"strconv"
 
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
@@ -60,6 +62,7 @@ func ListTemplateRows(repo *repository.ProjectRepository) gin.HandlerFunc {
 				"total":     len(filtered),
 			},
 		})
+		c.JSON(http.StatusOK, rows)
 	}
 }
 
@@ -92,6 +95,14 @@ func CreateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
 		}
 
 		row := &models.ProjectTemplateRow{ProjectID: projectID, TemplateCode: code, RowNumber: len(currentRows) + 1, ValuesMap: input.Data, CreatedByUser: "system"}
+		row := &models.ProjectTemplateRow{
+			ProjectID:     projectID,
+			TemplateCode:  code,
+			RowNumber:     len(currentRows) + 1,
+			ValuesMap:     input.Data,
+			CreatedByUser: "system",
+		}
+
 		if rn := c.Query("row_number"); rn != "" {
 			if parsed, err := strconv.Atoi(rn); err == nil && parsed > 0 {
 				row.RowNumber = parsed
