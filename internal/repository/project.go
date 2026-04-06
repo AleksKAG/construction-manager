@@ -85,6 +85,7 @@ func (r *SQLiteRepository) GetTaskByID(ctx context.Context, id string) (*models.
 	return &task, err
 }
 
+func (r *ProjectRepository) GetTemplateByCode(ctx context.Context, code string) (*models.TemplateDefinition, []models.TemplateColumn, error) {
 func (r *SQLiteRepository) GetTemplateByCode(ctx context.Context, code string) (*models.TemplateDefinition, []models.TemplateColumn, error) {
 	var tpl models.TemplateDefinition
 	if err := r.DB.WithContext(ctx).First(&tpl, "code = ?", code).Error; err != nil {
@@ -97,12 +98,18 @@ func (r *SQLiteRepository) GetTemplateByCode(ctx context.Context, code string) (
 	return &tpl, cols, nil
 }
 
+func (r *ProjectRepository) ListTemplateRows(ctx context.Context, projectID, code string) ([]models.ProjectTemplateRow, error) {
 func (r *SQLiteRepository) ListTemplateRows(ctx context.Context, projectID, code string) ([]models.ProjectTemplateRow, error) {
 	var rows []models.ProjectTemplateRow
 	err := r.DB.WithContext(ctx).Where("project_id = ? AND template_code = ?", projectID, code).Order("row_number asc").Find(&rows).Error
 	return rows, err
 }
 
+func (r *ProjectRepository) CreateTemplateRow(ctx context.Context, row *models.ProjectTemplateRow) error {
+	return r.DB.WithContext(ctx).Create(row).Error
+}
+
+func (r *ProjectRepository) GetTemplateRowByID(ctx context.Context, id string) (*models.ProjectTemplateRow, error) {
 func (r *SQLiteRepository) CreateTemplateRow(ctx context.Context, row *models.ProjectTemplateRow) error {
 	return r.DB.WithContext(ctx).Create(row).Error
 }
@@ -116,6 +123,19 @@ func (r *SQLiteRepository) GetTemplateRowByID(ctx context.Context, id string) (*
 	return &row, err
 }
 
+func (r *ProjectRepository) UpdateTemplateRow(ctx context.Context, row *models.ProjectTemplateRow) error {
+	return r.DB.WithContext(ctx).Save(row).Error
+}
+
+func (r *ProjectRepository) DeleteTemplateRow(ctx context.Context, id string) error {
+	return r.DB.WithContext(ctx).Delete(&models.ProjectTemplateRow{}, "id = ?", id).Error
+}
+
+func (r *ProjectRepository) ListTemplateDefinitions(ctx context.Context) ([]models.TemplateDefinition, error) {
+	var templates []models.TemplateDefinition
+	err := r.DB.WithContext(ctx).Order("name asc").Find(&templates).Error
+	return templates, err
+}
 func (r *SQLiteRepository) UpdateTemplateRow(ctx context.Context, row *models.ProjectTemplateRow) error {
 	return r.DB.WithContext(ctx).Save(row).Error
 }

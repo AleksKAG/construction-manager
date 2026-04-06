@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AleksKAG/construction-manager/internal/handlers"
+	"github.com/AleksKAG/construction-manager/internal/middleware"
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
 	"github.com/AleksKAG/construction-manager/internal/services"
@@ -109,6 +110,19 @@ func main() {
 		})
 
 		api.GET("/menu", handlers.MenuHandler)
+		api.POST("/auth/token", handlers.IssueToken())
+
+		templates := api.Group("/")
+		templates.Use(middleware.JWTAuthMiddleware())
+		{
+			templates.GET("/templates", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplates(repo))
+			templates.GET("/templates/:code", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetTemplate(repo))
+			templates.GET("/objects/:id/templates/:code/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplateRows(repo))
+			templates.POST("/objects/:id/templates/:code/rows", middleware.RequireRoles("editor", "admin"), handlers.CreateTemplateRow(repo))
+			templates.PUT("/template-rows/:rowId", middleware.RequireRoles("editor", "admin"), handlers.UpdateTemplateRow(repo))
+			templates.DELETE("/template-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteTemplateRow(repo))
+			templates.GET("/objects/:id/templates/:code/export.csv", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ExportTemplateRowsXLSX(repo))
+		}
 
 		// Objects endpoints
 		api.GET("/objects", handlers.ListObjects(repo))

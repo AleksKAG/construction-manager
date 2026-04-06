@@ -18,6 +18,13 @@
             </div>
         </div>
 
+        <div class="section-title">Разделы</div>
+        <nav class="menu">
+            <button class="menu-item active" data-view="home">Главная</button>
+            <button class="menu-item" data-view="projects">Проекты</button>
+            <button class="menu-item" data-view="design">Проектирование</button>
+            <button class="menu-item" data-view="designSchedule">График проектирования</button>
+            <button class="menu-item" data-view="tep">ТЭП</button>
         <div class="section-title">Основное</div>
         <nav class="menu">
             <button class="menu-item active" data-view="home">Главная</button>
@@ -26,6 +33,7 @@
             <button class="menu-item" data-view="auth">Авторизация и роли</button>
         </nav>
 
+        <div class="section-title">Дерево проектов</div>
         <div class="section-title">Проекты</div>
         <div id="projectTree" class="tree"></div>
 
@@ -35,6 +43,12 @@
     <main class="content">
         <header class="header">
             <button id="toggleSidebar" class="ghost">☰</button>
+            <div>
+                <h1 id="pageTitle">Главная</h1>
+                <div id="pageSubtitle" class="metric">Онлайн-данные из API / SQLite</div>
+            </div>
+            <button id="secondaryBtn" class="ghost" style="display:none;">Действие</button>
+            <button id="primaryBtn" class="primary">+ Добавить проект</button>
             <h1 id="pageTitle">Главная</h1>
             <button id="addBtn" class="primary">+ Добавить проект</button>
         </header>
@@ -43,6 +57,14 @@
     </main>
 </div>
 
+<div class="modal" id="entityModal">
+    <div class="overlay" data-close="true"></div>
+    <div class="dialog">
+        <h3 id="modalTitle">Добавить</h3>
+        <div id="modalBody"></div>
+        <div class="actions">
+            <button class="ghost" data-close="true">Закрыть</button>
+            <button class="primary" id="saveEntity">Сохранить</button>
 <div class="modal" id="projectModal">
     <div class="overlay" data-close="true"></div>
     <div class="dialog">
@@ -56,6 +78,7 @@
     </div>
 </div>
 
+<script type="module" src="/static/js/app.js"></script>
 <script src="/static/js/app.js"></script>
 </body>
 </html>

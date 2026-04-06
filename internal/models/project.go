@@ -192,6 +192,35 @@ func (dw *DashboardWidget) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// TemplateDefinition describes standard tabular templates (ТЭП, графики, ИДП и т.д.)
+type TemplateDefinition struct {
+	ID          string `gorm:"primaryKey;type:text" json:"id"`
+	Code        string `gorm:"type:text;uniqueIndex;not null" json:"code"`
+	Name        string `gorm:"type:text;not null" json:"name"`
+	Description string `gorm:"type:text" json:"description,omitempty"`
+}
+
+func (t *TemplateDefinition) BeforeCreate(tx *gorm.DB) error {
+	if t.ID == "" {
+		t.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// TemplateColumn defines required columns for template rows.
+type TemplateColumn struct {
+	ID           string `gorm:"primaryKey;type:text" json:"id"`
+	TemplateCode string `gorm:"type:text;index;not null" json:"template_code"`
+	FieldKey     string `gorm:"type:text;not null" json:"field_key"`
+	Title        string `gorm:"type:text;not null" json:"title"`
+	DataType     string `gorm:"type:text;default:'text'" json:"data_type"`
+	Required     bool   `gorm:"type:boolean;default:false" json:"required"`
+	SortOrder    int    `gorm:"type:integer;default:0" json:"sort_order"`
+}
+
+func (c *TemplateColumn) BeforeCreate(tx *gorm.DB) error {
+	if c.ID == "" {
+		c.ID = uuid.New().String()
 // TemplateDefinition — описание шаблона табличной формы.
 type TemplateDefinition struct {
 	Code        string    `gorm:"primaryKey;type:text" json:"code"`
@@ -221,6 +250,7 @@ func (tc *TemplateColumn) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// ProjectTemplateRow stores user-entered rows by project and template.
 // ProjectTemplateRow — строка заполненного шаблона в контексте проекта.
 type ProjectTemplateRow struct {
 	ID            string            `gorm:"primaryKey;type:text" json:"id"`
@@ -234,6 +264,9 @@ type ProjectTemplateRow struct {
 	UpdatedAt     time.Time         `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
 }
 
+func (r *ProjectTemplateRow) BeforeCreate(tx *gorm.DB) error {
+	if r.ID == "" {
+		r.ID = uuid.New().String()
 func (ptr *ProjectTemplateRow) BeforeCreate(tx *gorm.DB) error {
 	if ptr.ID == "" {
 		ptr.ID = uuid.New().String()
@@ -241,6 +274,25 @@ func (ptr *ProjectTemplateRow) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+func (r *ProjectTemplateRow) BeforeSave(tx *gorm.DB) error {
+	if r.ValuesMap == nil {
+		r.ValuesMap = map[string]string{}
+	}
+	data, err := json.Marshal(r.ValuesMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal row data: %w", err)
+	}
+	r.ValuesJSON = string(data)
+	return nil
+}
+
+func (r *ProjectTemplateRow) AfterFind(tx *gorm.DB) error {
+	if r.ValuesJSON == "" {
+		r.ValuesMap = map[string]string{}
+		return nil
+	}
+	if err := json.Unmarshal([]byte(r.ValuesJSON), &r.ValuesMap); err != nil {
+		return fmt.Errorf("failed to unmarshal row data: %w", err)
 func (ptr *ProjectTemplateRow) BeforeSave(tx *gorm.DB) error {
 	if ptr.ValuesMap == nil {
 		ptr.ValuesJSON = "{}"

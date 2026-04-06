@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
@@ -16,7 +17,31 @@ func ListObjects(repo repository.Repository) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, projects)
+
+		search := strings.ToLower(strings.TrimSpace(c.Query("search")))
+		filtered := make([]models.ProjectObject, 0, len(projects))
+		for _, p := range projects {
+			if search == "" || strings.Contains(strings.ToLower(p.Name), search) || strings.Contains(strings.ToLower(p.Address), search) {
+				filtered = append(filtered, p)
+			}
+		}
+
+		page := objMax(1, objParseInt(c.Query("page"), 1))
+		pageSize := objMin(200, objMax(1, objParseInt(c.Query("page_size"), 20)))
+		start := (page - 1) * pageSize
+		if start > len(filtered) {
+			start = len(filtered)
+		}
+		end := objMin(len(filtered), start+pageSize)
+
+		c.JSON(http.StatusOK, gin.H{
+			"data": filtered[start:end],
+			"pagination": gin.H{
+				"page":      page,
+				"page_size": pageSize,
+				"total":     len(filtered),
+			},
+		})
 	}
 }
 
@@ -228,4 +253,29 @@ func parseID(c *gin.Context, paramName string) (string, error) {
 		return "", strconv.ErrSyntax
 	}
 	return id, nil
+}
+
+func objMin(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func objMax(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func objParseInt(s string, fallback int) int {
+	if s == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return fallback
+	}
+	return v
 }
