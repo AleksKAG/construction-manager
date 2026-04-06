@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"net/http"
-	"strconv"
 
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
@@ -37,7 +35,6 @@ func ListTemplates(repo *repository.ProjectRepository) gin.HandlerFunc {
 	}
 }
 
-func GetTemplate(repo *repository.ProjectRepository) gin.HandlerFunc {
 func GetTemplate(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		code := c.Param("code")
@@ -49,11 +46,6 @@ func GetTemplate(repo repository.Repository) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"template": template, "columns": columns})
 	}
 }
-
-func ListTemplateRows(repo *repository.ProjectRepository) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		projectID := c.Param("id")
-		code := c.Param("code")
 
 func ListTemplateRows(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -92,11 +84,6 @@ func ListTemplateRows(repo repository.Repository) gin.HandlerFunc {
 	}
 }
 
-func CreateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
-		c.JSON(http.StatusOK, rows)
-	}
-}
-
 func CreateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
@@ -125,7 +112,6 @@ func CreateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		row := &models.ProjectTemplateRow{ProjectID: projectID, TemplateCode: code, RowNumber: len(currentRows) + 1, ValuesMap: input.Data, CreatedByUser: "system"}
 		row := &models.ProjectTemplateRow{
 			ProjectID:     projectID,
 			TemplateCode:  code,
@@ -148,7 +134,6 @@ func CreateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	}
 }
 
-func UpdateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
 func UpdateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("rowId")
@@ -185,7 +170,6 @@ func UpdateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	}
 }
 
-func DeleteTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
 func DeleteTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("rowId")
@@ -197,7 +181,7 @@ func DeleteTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	}
 }
 
-func ExportTemplateRowsXLSX(repo *repository.ProjectRepository) gin.HandlerFunc {
+func ExportTemplateRowsXLSX(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
 		code := c.Param("code")
