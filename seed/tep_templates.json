@@ -1,0 +1,77 @@
+{
+  "tep_templates": [
+    {
+      "code": "building_main",
+      "name": "Здание онкологического центра",
+      "category": "main_object",
+      "indicators": [
+        {
+          "key": "total_area",
+          "label": "Общая площадь здания",
+          "unit": "м²",
+          "required": true,
+          "calculation": "sum",
+          "sub_indicators": [
+            {"key": "area_above_ground", "label": "надземная часть", "unit": "м²", "required": true},
+            {"key": "area_underground", "label": "подземная часть", "unit": "м²", "required": true}
+          ]
+        },
+        {
+          "key": "building_volume",
+          "label": "Строительный объем",
+          "unit": "м³",
+          "required": true,
+          "calculation": "sum",
+          "sub_indicators": [
+            {"key": "volume_above_ground", "label": "надземная часть", "unit": "м³", "required": true},
+            {"key": "volume_underground", "label": "подземная часть", "unit": "м³", "required": true}
+          ]
+        },
+        {
+          "key": "building_height",
+          "label": "Высота здания",
+          "unit": "м",
+          "required": true,
+          "calculation": "max"
+        },
+        {
+          "key": "floors_count",
+          "label": "Количество этажей",
+          "unit": "этаж",
+          "required": true,
+          "calculation": "max",
+          "has_underground": true
+        },
+        {
+          "key": "footprint_area",
+          "label": "Площадь застройки",
+          "unit": "м²",
+          "required": true,
+          "calculation": "sum"
+        }
+      ]
+    },
+    {
+      "code": "pensionat",
+      "name": "Здание пансионата",
+      "category": "auxiliary",
+      "indicators": [
+        {"key": "total_area", "label": "Общая площадь здания", "unit": "м²", "required": true},
+        {"key": "building_volume", "label": "Строительный объем", "unit": "м³", "required": true},
+        {"key": "building_height", "label": "Высота здания", "unit": "м", "required": true},
+        {"key": "floors_count", "label": "Количество этажей", "unit": "этаж", "required": true},
+        {"key": "footprint_area", "label": "Площадь застройки", "unit": "м²", "required": true},
+        {"key": "room_capacity", "label": "Номерной фонд", "unit": "шт.", "required": false}
+      ]
+    },
+    {
+      "code": "site",
+      "name": "Участок",
+      "category": "land",
+      "indicators": [
+        {"key": "site_area_gpz", "label": "Площадь участка по ГПЗУ", "unit": "м²", "required": true},
+        {"key": "footprint_total", "label": "Площадь застройки (все здания)", "unit": "м²", "required": true}
+      ]
+    }
+  ]
+}
