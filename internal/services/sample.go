@@ -128,11 +128,6 @@ func LoadSampleData(repo repository.Repository, logger *logrus.Logger) error {
 	return nil
 }
 
-func LoadStandardTemplates(repo *repository.ProjectRepository, logger *logrus.Logger) error {
-	ctx := context.Background()
-
-	var count int64
-	if err := repo.DB.Model(&models.TemplateDefinition{}).Count(&count).Error; err != nil {
 func LoadStandardTemplates(repo repository.Repository, logger *logrus.Logger) error {
 	ctx := context.Background()
 
@@ -154,7 +149,6 @@ func LoadStandardTemplates(repo repository.Repository, logger *logrus.Logger) er
 	}
 	for _, tpl := range templates {
 		t := tpl
-		if err := repo.DB.WithContext(ctx).Create(&t).Error; err != nil {
 		if err := repo.RawDB().WithContext(ctx).Create(&t).Error; err != nil {
 			return fmt.Errorf("failed to create template %s: %w", t.Code, err)
 		}
@@ -207,7 +201,6 @@ func LoadStandardTemplates(repo repository.Repository, logger *logrus.Logger) er
 
 	for _, col := range columns {
 		c := col
-		if err := repo.DB.WithContext(ctx).Create(&c).Error; err != nil {
 		if err := repo.RawDB().WithContext(ctx).Create(&c).Error; err != nil {
 			return fmt.Errorf("failed to create template column %s/%s: %w", c.TemplateCode, c.FieldKey, err)
 		}
