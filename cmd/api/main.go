@@ -68,7 +68,7 @@ func main() {
 	logger.Info("Migrations done")
 
 	// Репозиторий + sample data
-	repo := repository.NewProjectRepository(db)
+	repo := repository.NewSQLiteRepository(db)
 	if err := services.LoadSampleData(repo, logger); err != nil {
 		logger.Warn("Failed to load sample data: ", err)
 	}
@@ -137,6 +137,13 @@ func main() {
 		api.GET("/tasks/:id", handlers.GetTask(repo))
 		api.PUT("/tasks/:id", handlers.UpdateTask(repo))
 		api.DELETE("/tasks/:id", handlers.DeleteTask(repo))
+
+		// Template endpoints
+		api.GET("/templates/:code", handlers.GetTemplate(repo))
+		api.GET("/objects/:id/templates/:code/rows", handlers.ListTemplateRows(repo))
+		api.POST("/objects/:id/templates/:code/rows", handlers.CreateTemplateRow(repo))
+		api.PUT("/objects/:id/templates/:code/rows/:rowId", handlers.UpdateTemplateRow(repo))
+		api.DELETE("/objects/:id/templates/:code/rows/:rowId", handlers.DeleteTemplateRow(repo))
 	}
 
 	// Запуск

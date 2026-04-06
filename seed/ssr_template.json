@@ -1,0 +1,156 @@
+{
+  "template_code": "ssr_base_2000_oncology",
+  "template_name": "Сводный сметный расчет (базисный уровень цен 01.01.2000)",
+  "base_price_date": "2000-01-01",
+  "currency": "RUB_thousand",
+  "columns": [
+    "row_no",
+    "justification",
+    "name",
+    "construction_cost",
+    "installation_cost",
+    "equipment_cost",
+    "other_cost",
+    "total_cost"
+  ],
+  "chapters": [
+    {
+      "chapter_number": "1",
+      "chapter_name": "Подготовка территории строительства, реконструкции, капитального ремонта",
+      "items": [
+        {"row_no": 1, "justification": "01-01", "name": "Подготовительные работы", "construction_cost": 54189.04, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 54189.04},
+        {"row_no": 2, "justification": "01-02-01", "name": "Устройство водопонизительных и гидронаблюдательных скважин", "construction_cost": 1830.64, "installation_cost": 4470.48, "equipment_cost": 25.99, "other_cost": 0, "total_cost": 6327.11},
+        {"row_no": 3, "justification": "01-03-01", "name": "Восстановление леса", "construction_cost": 170.53, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 170.53}
+      ],
+      "totals": {"construction_cost": 56190.21, "installation_cost": 4470.48, "equipment_cost": 25.99, "other_cost": 0, "total_cost": 60686.68}
+    },
+    {
+      "chapter_number": "2",
+      "chapter_name": "Основные объекты строительства, реконструкции, капитального ремонта",
+      "items": [
+        {"row_no": 4, "justification": "02-01", "name": "Здание онкологического центра", "construction_cost": 356010.48, "installation_cost": 73322.34, "equipment_cost": 1923523.79, "other_cost": 8.53, "total_cost": 2352865.14},
+        {"row_no": 5, "justification": "", "name": "в т.ч. Оборудование (не облагаемое НДС)", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 1502414.41, "other_cost": 0, "total_cost": 1502414.41},
+        {"row_no": 6, "justification": "02-02", "name": "Пансионат", "construction_cost": 16094.19, "installation_cost": 3775.59, "equipment_cost": 21126.33, "other_cost": 0, "total_cost": 40996.11}
+      ],
+      "totals": {"construction_cost": 372104.67, "installation_cost": 77097.93, "equipment_cost": 1944650.12, "other_cost": 8.53, "total_cost": 2393861.25}
+    },
+    {
+      "chapter_number": "3",
+      "chapter_name": "Объекты подсобного и обслуживающего назначения",
+      "items": [
+        {"row_no": 7, "justification": "03-01", "name": "КПП № 1", "construction_cost": 657.19, "installation_cost": 30.17, "equipment_cost": 618.44, "other_cost": 0, "total_cost": 1305.80},
+        {"row_no": 8, "justification": "03-02", "name": "КПП № 2", "construction_cost": 40.97, "installation_cost": 6.90, "equipment_cost": 0, "other_cost": 0, "total_cost": 47.87},
+        {"row_no": 9, "justification": "03-03-01", "name": "Площадка ТБО и площадка под вентоборудование", "construction_cost": 195.54, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 195.54}
+      ],
+      "totals": {"construction_cost": 893.70, "installation_cost": 37.07, "equipment_cost": 618.44, "other_cost": 0, "total_cost": 1549.21}
+    },
+    {
+      "chapter_number": "4",
+      "chapter_name": "Объекты энергетического хозяйства",
+      "items": [
+        {"row_no": 10, "justification": "04-01-01", "name": "Наружные сети электроснабжения (0,4 кВ)", "construction_cost": 502.54, "installation_cost": 8336.54, "equipment_cost": 5647.45, "other_cost": 0, "total_cost": 14486.53},
+        {"row_no": 11, "justification": "04-02", "name": "Дизель-генераторная установка (ДГУ)", "construction_cost": 16.56, "installation_cost": 108.37, "equipment_cost": 2451.70, "other_cost": 0, "total_cost": 2576.63}
+      ],
+      "totals": {"construction_cost": 519.10, "installation_cost": 8444.91, "equipment_cost": 8099.15, "other_cost": 0, "total_cost": 17063.16}
+    },
+    {
+      "chapter_number": "5",
+      "chapter_name": "Объекты транспортного хозяйства и связи",
+      "items": [
+        {"row_no": 12, "justification": "05-01-01", "name": "Наружные сети связи", "construction_cost": 78.60, "installation_cost": 197.72, "equipment_cost": 565.04, "other_cost": 0, "total_cost": 841.36},
+        {"row_no": 13, "justification": "05-02", "name": "Дороги", "construction_cost": 16588.73, "installation_cost": 0, "equipment_cost": 80.16, "other_cost": 0, "total_cost": 16668.89},
+        {"row_no": 14, "justification": "05-03-01", "name": "Гараж", "construction_cost": 53.04, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 53.04}
+      ],
+      "totals": {"construction_cost": 16720.37, "installation_cost": 197.72, "equipment_cost": 645.20, "other_cost": 0, "total_cost": 17563.29}
+    },
+    {
+      "chapter_number": "6",
+      "chapter_name": "Наружные сети и сооружения водоснабжения, водоотведения, теплоснабжения и газоснабжения",
+      "items": [
+        {"row_no": 15, "justification": "06-01-01", "name": "Наружные сети водоснабжения", "construction_cost": 2903.52, "installation_cost": 0, "equipment_cost": 14.00, "other_cost": 0, "total_cost": 2917.52},
+        {"row_no": 16, "justification": "06-02", "name": "Наружные сети водоотведения", "construction_cost": 4913.99, "installation_cost": 7.45, "equipment_cost": 1376.29, "other_cost": 0, "total_cost": 6297.73},
+        {"row_no": 17, "justification": "06-03", "name": "Кислородно-газификационная станция (КГС)", "construction_cost": 244.65, "installation_cost": 167.71, "equipment_cost": 4262.00, "other_cost": 0, "total_cost": 4674.36},
+        {"row_no": 18, "justification": "06-04", "name": "Котельная (блочно-модульная)", "construction_cost": 216.15, "installation_cost": 18.97, "equipment_cost": 27799.36, "other_cost": 0, "total_cost": 28034.48},
+        {"row_no": 19, "justification": "06-05-01", "name": "Наружные сети газоснабжения", "construction_cost": 32.51, "installation_cost": 0.21, "equipment_cost": 0, "other_cost": 0, "total_cost": 32.72},
+        {"row_no": 20, "justification": "06-06-01", "name": "Система специальной канализации ЖРО", "construction_cost": 172.74, "installation_cost": 886.15, "equipment_cost": 14212.02, "other_cost": 30.41, "total_cost": 15301.32},
+        {"row_no": 21, "justification": "06-07", "name": "Наружные сети теплоснабжения", "construction_cost": 2475.40, "installation_cost": 15.68, "equipment_cost": 0.41, "other_cost": 0, "total_cost": 2491.49},
+        {"row_no": 22, "justification": "06-08-01", "name": "Наружные сети холодоснабжения", "construction_cost": 2043.87, "installation_cost": 22.30, "equipment_cost": 0.45, "other_cost": 0, "total_cost": 2066.62},
+        {"row_no": 23, "justification": "06-09-01", "name": "Наружные сети кислородоснабжения", "construction_cost": 43.05, "installation_cost": 169.17, "equipment_cost": 0.12, "other_cost": 0, "total_cost": 212.34},
+        {"row_no": 24, "justification": "06-10-01", "name": "Ж/б каналы под сети тепло- и холодоснабжения", "construction_cost": 1744.53, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 1744.53},
+        {"row_no": 25, "justification": "06-11", "name": "Система очистки ливневых сточных вод (ЛОС)", "construction_cost": 110.39, "installation_cost": 3.45, "equipment_cost": 3223.51, "other_cost": 0, "total_cost": 3337.35}
+      ],
+      "totals": {"construction_cost": 14900.80, "installation_cost": 1291.09, "equipment_cost": 50888.16, "other_cost": 30.41, "total_cost": 67110.46}
+    },
+    {
+      "chapter_number": "7",
+      "chapter_name": "Благоустройство и озеленение территории",
+      "items": [
+        {"row_no": 26, "justification": "07-01-01", "name": "Благоустройство и озеленение территории", "construction_cost": 1830.67, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 1830.67},
+        {"row_no": 27, "justification": "07-02-01", "name": "Устройство отмостки, оснований под площадки", "construction_cost": 2036.13, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 2036.13},
+        {"row_no": 28, "justification": "07-03-01", "name": "Ограждение территории", "construction_cost": 1223.37, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 1223.37},
+        {"row_no": 29, "justification": "07-04-01", "name": "Малые архитектурные формы (МАФ)", "construction_cost": 1423.20, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 1423.20},
+        {"row_no": 30, "justification": "07-05-01", "name": "Система поверхностного водоотвода", "construction_cost": 410.52, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 410.52},
+        {"row_no": 31, "justification": "07-06-01", "name": "Устройство дорожной одежды на примыканиях", "construction_cost": 173.24, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 173.24},
+        {"row_no": 32, "justification": "07-07-01", "name": "Устройство водопропускных труб", "construction_cost": 181.33, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0, "total_cost": 181.33},
+        {"row_no": 33, "justification": "07-08-01", "name": "Наружные сети электроосвещения", "construction_cost": 1366.66, "installation_cost": 889.83, "equipment_cost": 24.09, "other_cost": 0, "total_cost": 2280.58}
+      ],
+      "totals": {"construction_cost": 8645.12, "installation_cost": 889.83, "equipment_cost": 24.09, "other_cost": 0, "total_cost": 9559.04}
+    },
+    {
+      "chapter_number": "8",
+      "chapter_name": "Временные здания и сооружения",
+      "items": [
+        {"row_no": 34, "justification": "Приказ Минстроя России № 332/пр, прил.1, разд.3, п. 51", "name": "Временные здания и сооружения (1,8%)", "construction_cost": 8459.53, "installation_cost": 1663.72, "equipment_cost": 0, "other_cost": 0, "total_cost": 10123.25}
+      ],
+      "totals": {"construction_cost": 8459.53, "installation_cost": 1663.72, "equipment_cost": 0, "other_cost": 0, "total_cost": 10123.25}
+    },
+    {
+      "chapter_number": "9",
+      "chapter_name": "Прочие работы и затраты",
+      "items": [
+        {"row_no": 35, "justification": "09-01", "name": "Пусконаладочные работы", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 6621.37, "total_cost": 6621.37},
+        {"row_no": 36, "justification": "Приказ от 25.05.2021 № 325/пр табл.2", "name": "Снегоборьба для IV зоны - до 0,3%", "construction_cost": 1435.30, "installation_cost": 282.28, "equipment_cost": 0, "other_cost": 0, "total_cost": 1717.58},
+        {"row_no": 37, "justification": "Приказ от 25.05.2021 № 325/пр прил.1 п.85", "name": "Производство работ в зимнее время - 2,2%", "construction_cost": 10525.54, "installation_cost": 2070.04, "equipment_cost": 0, "other_cost": 0, "total_cost": 12595.58},
+        {"row_no": 38, "justification": "09-02-01", "name": "Плата за размещение грунта на полигоне", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 43777.54, "total_cost": 43777.54},
+        {"row_no": 39, "justification": "Приказ №421/пр + письмо №312/1-ПЕР-ОНК-ТЗ", "name": "Банковская гарантия обеспечения исполнения договора", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 35612.53561, "total_cost": 35612.53561},
+        {"row_no": 40, "justification": "Приказ №421/пр прил.9 + письмо №268/1-ПЕР-ОНК-ТЗ", "name": "Страхование объекта строительства", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 247.7445394, "total_cost": 247.7445394},
+        {"row_no": 41, "justification": "Расчёт ООС табл.4.3", "name": "Плата за выбросы загрязняющих веществ", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 0.270655271, "total_cost": 0.270655271},
+        {"row_no": 42, "justification": "Расчёт ООС табл.4.3", "name": "Плата за размещение отходов", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 24.36467236, "total_cost": 24.36467236},
+        {"row_no": 43, "justification": "Расчёт ООС табл.4.3", "name": "Плата за мониторинг окружающей среды", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 4.855650522, "total_cost": 4.855650522}
+      ],
+      "totals": {"construction_cost": 11960.84, "installation_cost": 2352.32, "equipment_cost": 0, "other_cost": 86288.68113, "total_cost": 100601.8411}
+    },
+    {
+      "chapter_number": "10",
+      "chapter_name": "Содержание службы заказчика. Строительный контроль",
+      "items": [
+        {"row_no": 44, "justification": "Постановление Правительства РФ №468", "name": "Строительный контроль", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 23465.75, "total_cost": 23465.75},
+        {"row_no": 45, "justification": "Приказ Минстроя России №421/пр п.138", "name": "Затраты на содержание технического заказчика", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 8186.39, "total_cost": 8186.39}
+      ],
+      "totals": {"construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 31652.14, "total_cost": 31652.14}
+    },
+    {
+      "chapter_number": "12",
+      "chapter_name": "Публичный технологический и ценовой аудит, ПИР и экспертиза",
+      "items": [
+        {"row_no": 46, "justification": "12-01-01", "name": "Статическое испытание свай", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 47.02, "total_cost": 47.02},
+        {"row_no": 47, "justification": "Сводная смета ПИР", "name": "Изыскательские работы", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 4424.67, "total_cost": 4424.67},
+        {"row_no": 48, "justification": "Сводная смета ПИР", "name": "Проектные работы \"П\"", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 19862.16, "total_cost": 19862.16},
+        {"row_no": 49, "justification": "Сводная смета ПИР", "name": "Проектные работы \"РД\"", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 29176.85, "total_cost": 29176.85},
+        {"row_no": 50, "justification": "Постановление Правительства №145 от 05.03.2007", "name": "Экспертиза проектной документации", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 880.36, "total_cost": 880.36},
+        {"row_no": 51, "justification": "Приказ Минстроя России №421/пр п.173", "name": "Авторский надзор 0,2% по итогам глав 1-9", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 5356.24, "total_cost": 5356.24}
+      ],
+      "totals": {"construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 59747.30, "total_cost": 59747.30}
+    }
+  ],
+  "summary_rows": [
+    {"name": "Итого по Главам 1-7", "construction_cost": 469973.97, "installation_cost": 92429.03, "equipment_cost": 2004951.15, "other_cost": 38.94, "total_cost": 2567393.09},
+    {"name": "Итого по Главам 1-8", "construction_cost": 478433.50, "installation_cost": 94092.75, "equipment_cost": 2004951.15, "other_cost": 38.94, "total_cost": 2577516.34},
+    {"name": "Итого по Главам 1-9", "construction_cost": 490394.34, "installation_cost": 96445.07, "equipment_cost": 2004951.15, "other_cost": 86327.62113, "total_cost": 2678118.181},
+    {"name": "Итого по Главам 1-12", "construction_cost": 490394.34, "installation_cost": 96445.07, "equipment_cost": 2004951.15, "other_cost": 177727.0611, "total_cost": 2769517.621},
+    {"row_no": 52, "name": "Непредвиденные затраты (2%)", "construction_cost": 9807.89, "installation_cost": 1928.90, "equipment_cost": 40099.02, "other_cost": 3554.54, "total_cost": 55390.35},
+    {"name": "Итого с учетом непредвиденных затрат", "construction_cost": 500202.23, "installation_cost": 98373.97, "equipment_cost": 2045050.17, "other_cost": 181281.6011, "total_cost": 2824907.971},
+    {"name": "Итого по сводному сметному расчету (база 2000)", "construction_cost": 500202.23, "installation_cost": 98373.97, "equipment_cost": 2045050.17, "other_cost": 181281.6011, "total_cost": 2824907.971},
+    {"name": "Справочно: ПИР без непредвиденных затрат", "construction_cost": 0, "installation_cost": 0, "equipment_cost": 0, "other_cost": 53463.68, "total_cost": 53463.68}
+  ]
+}

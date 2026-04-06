@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"net/http"
+	"strconv"
 
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
@@ -36,6 +38,7 @@ func ListTemplates(repo *repository.ProjectRepository) gin.HandlerFunc {
 }
 
 func GetTemplate(repo *repository.ProjectRepository) gin.HandlerFunc {
+func GetTemplate(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		code := c.Param("code")
 		template, columns, err := repo.GetTemplateByCode(c.Request.Context(), code)
@@ -52,6 +55,10 @@ func ListTemplateRows(repo *repository.ProjectRepository) gin.HandlerFunc {
 		projectID := c.Param("id")
 		code := c.Param("code")
 
+func ListTemplateRows(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		code := c.Param("code")
 		rows, err := repo.ListTemplateRows(c.Request.Context(), projectID, code)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -86,6 +93,11 @@ func ListTemplateRows(repo *repository.ProjectRepository) gin.HandlerFunc {
 }
 
 func CreateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
+		c.JSON(http.StatusOK, rows)
+	}
+}
+
+func CreateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
 		code := c.Param("code")
@@ -114,6 +126,14 @@ func CreateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
 		}
 
 		row := &models.ProjectTemplateRow{ProjectID: projectID, TemplateCode: code, RowNumber: len(currentRows) + 1, ValuesMap: input.Data, CreatedByUser: "system"}
+		row := &models.ProjectTemplateRow{
+			ProjectID:     projectID,
+			TemplateCode:  code,
+			RowNumber:     len(currentRows) + 1,
+			ValuesMap:     input.Data,
+			CreatedByUser: "system",
+		}
+
 		if rn := c.Query("row_number"); rn != "" {
 			if parsed, err := strconv.Atoi(rn); err == nil && parsed > 0 {
 				row.RowNumber = parsed
@@ -129,6 +149,7 @@ func CreateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
 }
 
 func UpdateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
+func UpdateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("rowId")
 		var input struct {
@@ -165,6 +186,7 @@ func UpdateTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
 }
 
 func DeleteTemplateRow(repo *repository.ProjectRepository) gin.HandlerFunc {
+func DeleteTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("rowId")
 		if err := repo.DeleteTemplateRow(c.Request.Context(), id); err != nil {

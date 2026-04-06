@@ -1,0 +1,40 @@
+{
+  "ird_documents": [
+    {
+      "doc_type": "GPZU",
+      "doc_number": "GPZU-59-2026-001",
+      "issue_date": "2026-01-15",
+      "expiry_date": "2029-01-15",
+      "status": "active",
+      "issuer": "Администрация г. Пермь",
+      "notes": "ГПЗУ для участка под онкологический центр"
+    },
+    {
+      "doc_type": "TZ",
+      "doc_number": "TZ-ONC-2026-01",
+      "issue_date": "2026-01-20",
+      "expiry_date": null,
+      "status": "active",
+      "issuer": "Заказчик",
+      "notes": "Техническое задание на проектирование"
+    },
+    {
+      "doc_type": "MTZ",
+      "doc_number": "MTZ-ONC-2026-07",
+      "issue_date": "2026-02-02",
+      "expiry_date": null,
+      "status": "active",
+      "issuer": "Проектный офис",
+      "notes": "МТЗ по разделам АР/КР/ИОС"
+    },
+    {
+      "doc_type": "TU",
+      "doc_number": "TU-ENERGO-2026-11",
+      "issue_date": "2026-02-10",
+      "expiry_date": "2028-02-10",
+      "status": "active",
+      "issuer": "Ресурсоснабжающая организация",
+      "notes": "ТУ на подключение к сетям"
+    }
+  ]
+}
