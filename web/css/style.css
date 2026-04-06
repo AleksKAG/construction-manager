@@ -24,6 +24,9 @@ body { font-family: Inter, sans-serif; background: var(--bg); color: var(--text)
 .tree { display: grid; gap: 4px; }
 .tree-row { padding: 8px 12px; border-radius: 8px; cursor: pointer; }
 .tree-row:hover { background: #172847; }
+.tree-row { width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer; border: 0; background: transparent; color: inherit; text-align: left; }
+.tree-row:hover { background: #172847; }
+.tree-row.active { background: #1f3560; }
 .tree-row.level-1 { padding-left: 26px; font-size: 14px; color: #c8d4ea; }
 .tree-row.level-2 { padding-left: 40px; font-size: 13px; color: #aebfde; }
 .content { padding: 20px 24px; }

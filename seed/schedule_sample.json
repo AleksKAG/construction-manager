@@ -1,0 +1,67 @@
+{
+  "tasks": [
+    {
+      "wbs_code": "1",
+      "name": "Подготовительный этап",
+      "task_type": "construction",
+      "planned_start": "2026-04-01",
+      "planned_end": "2026-05-15",
+      "progress_pct": 65,
+      "children": [
+        {
+          "wbs_code": "1.1",
+          "name": "Ограждение площадки",
+          "task_type": "construction",
+          "planned_start": "2026-04-01",
+          "planned_end": "2026-04-10",
+          "actual_start": "2026-04-01",
+          "actual_end": "2026-04-09",
+          "progress_pct": 100
+        },
+        {
+          "wbs_code": "1.2",
+          "name": "Временное электроснабжение",
+          "task_type": "construction",
+          "planned_start": "2026-04-05",
+          "planned_end": "2026-04-20",
+          "actual_start": "2026-04-06",
+          "progress_pct": 75
+        }
+      ]
+    },
+    {
+      "wbs_code": "2",
+      "name": "Проектирование стадии Р",
+      "task_type": "design",
+      "planned_start": "2026-04-10",
+      "planned_end": "2026-08-15",
+      "progress_pct": 40,
+      "children": [
+        {
+          "wbs_code": "2.1",
+          "name": "АР/КР",
+          "task_type": "design",
+          "planned_start": "2026-04-10",
+          "planned_end": "2026-06-30",
+          "progress_pct": 50
+        },
+        {
+          "wbs_code": "2.2",
+          "name": "ИОС",
+          "task_type": "design",
+          "planned_start": "2026-04-20",
+          "planned_end": "2026-07-20",
+          "progress_pct": 35
+        },
+        {
+          "wbs_code": "2.3",
+          "name": "Сметная документация",
+          "task_type": "design",
+          "planned_start": "2026-06-01",
+          "planned_end": "2026-08-15",
+          "progress_pct": 20
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "template_code": "smr_schedule",
+  "template_name": "График СДР/СМР",
+  "columns": [
+    "num",
+    "task_name",
+    "contractor",
+    "contract_start",
+    "contract_end",
+    "progress",
+    "duration",
+    "fact_start",
+    "fact_end",
+    "finish_deviation"
+  ],
+  "rows": [
+    {"num": "1", "task_name": "Объект Онкоцентр", "contractor": "", "contract_start": "2023-06-01", "contract_end": "2026-08-01", "progress": "24", "duration": "1277.08", "fact_start": "2023-06-01", "fact_end": "2026-11-29", "finish_deviation": "120.08"},
+    {"num": "1.1", "task_name": "Строительство Онкоцентра г. Пермь", "contractor": "", "contract_start": "2023-06-01", "contract_end": "2026-01-27", "progress": "24", "duration": "1092.08", "fact_start": "2023-06-01", "fact_end": "2026-05-28", "finish_deviation": "120.08"},
+    {"num": "1.1.1", "task_name": "Основные работы", "contractor": "", "contract_start": "2023-08-14", "contract_end": "2026-01-27", "progress": "22", "duration": "1018.08", "fact_start": "2023-08-14", "fact_end": "2026-05-28", "finish_deviation": "120.08"},
+    {"num": "1.1.2.2", "task_name": "Блок № 1. Центральный блок", "contractor": "", "contract_start": "2024-01-31", "contract_end": "2026-01-27", "progress": "21", "duration": "821.88", "fact_start": "2024-01-31", "fact_end": "2026-05-01", "finish_deviation": "93.88"},
+    {"num": "1.1.2.2.8", "task_name": "Устройство фасадов, витражи, окна", "contractor": "", "contract_start": "2025-02-15", "contract_end": "2025-11-07", "progress": "0", "duration": "308.88", "fact_start": "2025-03-04", "fact_end": "2026-01-06", "finish_deviation": "59.88"},
+    {"num": "1.1.2.2.10", "task_name": "Отделочные работы", "contractor": "", "contract_start": "2025-02-15", "contract_end": "2026-01-27", "progress": "1", "duration": "381.88", "fact_start": "2025-04-15", "fact_end": "2026-05-01", "finish_deviation": "93.88"},
+    {"num": "1.1.2.2.11", "task_name": "Монтаж внутренних сетей", "contractor": "", "contract_start": "2025-02-15", "contract_end": "2026-01-27", "progress": "0", "duration": "470.88", "fact_start": "2025-01-16", "fact_end": "2026-05-01", "finish_deviation": "93.88"},
+    {"num": "1.1.2.3", "task_name": "Блок № 2. Блок ядерной медицины", "contractor": "", "contract_start": "2023-08-14", "contract_end": "2026-01-21", "progress": "17", "duration": "1018.08", "fact_start": "2023-08-14", "fact_end": "2026-05-28", "finish_deviation": "126.08"},
+    {"num": "1.1.2.4", "task_name": "Блок № 3. Палатный блок", "contractor": "", "contract_start": "2024-01-31", "contract_end": "2025-12-21", "progress": "34", "duration": "785.29", "fact_start": "2024-01-31", "fact_end": "2026-03-26", "finish_deviation": "94.31"},
+    {"num": "1.1.2.5", "task_name": "Пансионат", "contractor": "", "contract_start": "2023-09-13", "contract_end": "2025-10-17", "progress": "28", "duration": "858", "fact_start": "2023-09-13", "fact_end": "2026-01-17", "finish_deviation": "92"},
+    {"num": "1.1.2.6", "task_name": "Возведение инженерно-технических сооружений", "contractor": "", "contract_start": "2024-06-03", "contract_end": "2025-07-05", "progress": "51", "duration": "517.88", "fact_start": "2024-06-01", "fact_end": "2025-10-31", "finish_deviation": "117.88"},
+    {"num": "1.1.2.8", "task_name": "ВРУ", "contractor": "", "contract_start": "2025-01-31", "contract_end": "2025-05-02", "progress": "0", "duration": "100.88", "fact_start": "2025-06-04", "fact_end": "2025-09-13", "finish_deviation": "134"},
+    {"num": "1.1.2.9", "task_name": "Наружные сети", "contractor": "", "contract_start": "2024-09-12", "contract_end": "2025-08-20", "progress": "14", "duration": "497.2", "fact_start": "2024-09-01", "fact_end": "2026-01-11", "finish_deviation": "143.2"},
+    {"num": "1.1.2.9.1.4", "task_name": "Наружные сети теплоснабжения", "contractor": "Вектор Строй", "contract_start": "2025-02-10", "contract_end": "2025-05-21", "progress": "3", "duration": "297.2", "fact_start": "2025-01-22", "fact_end": "2025-11-15", "finish_deviation": "177.33"},
+    {"num": "1.1.2.9.2.3", "task_name": "Наружные сети водоотведения. Канализация хозбытовая. НВК2", "contractor": "Вертикаль", "contract_start": "2025-01-21", "contract_end": "2025-06-10", "progress": "18", "duration": "220.59", "fact_start": "2025-02-01", "fact_end": "2025-09-09", "finish_deviation": "91.22"},
+    {"num": "1.1.2.9.2.4", "task_name": "Наружные сети водоотведения. Канализация дождевая. НВК3", "contractor": "Вертикаль", "contract_start": "2024-11-11", "contract_end": "2025-06-07", "progress": "34", "duration": "417.88", "fact_start": "2024-11-08", "fact_end": "2025-12-30", "finish_deviation": "205.88"},
+    {"num": "1.1.2.9.2.5", "task_name": "Наружные сети водоснабжения. Поливочный водопровод. НВК1", "contractor": "Вертикаль", "contract_start": "2024-11-12", "contract_end": "2025-05-14", "progress": "9", "duration": "388.88", "fact_start": "2024-11-12", "fact_end": "2025-12-05", "finish_deviation": "204.88"},
+    {"num": "1.1.2.10", "task_name": "Благоустройство территории", "contractor": "", "contract_start": "2025-02-28", "contract_end": "2025-09-25", "progress": "0", "duration": "136", "fact_start": "2025-06-04", "fact_end": "2025-10-18", "finish_deviation": "22.88"}
+  ]
+}
