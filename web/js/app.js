@@ -10,6 +10,7 @@ class ConstructionManagerUI {
       { code: "summary_estimate", title: "Смета" },
       { code: "smr_schedule", title: "График СМР" },
     ];
+    this.sdrTemplateRows = this.getSdrTemplateRows();
     this.bind();
     this.init();
   }
@@ -148,8 +149,24 @@ class ConstructionManagerUI {
 
         <article class="card col-12">
           <h3>График СМР</h3>
-          ${this.renderSimpleTable(smrRows, ["task_name", "contractor", "progress"])}
-          <button class="primary" id="addSmrBtn">+ Добавить строку СМР</button>
+          ${this.renderSimpleTable(smrRows, [
+            "num",
+            "task_name",
+            "contractor",
+            "contract_start",
+            "contract_end",
+            "progress",
+            "duration",
+            "fact_start",
+            "fact_end",
+            "finish_deviation",
+          ])}
+          <div style="display:flex; gap:8px; flex-wrap: wrap;">
+            <button class="primary" id="addSmrBtn">+ Добавить строку СМР</button>
+            <button class="ghost" id="loadSdrTemplateBtn">Загрузить шаблон СДР</button>
+            <button class="ghost" id="exportSmrBtn">Экспорт JSON</button>
+            <button class="ghost" id="clearSmrBtn">Очистить СМР</button>
+          </div>
         </article>
       `;
 
@@ -172,9 +189,9 @@ class ConstructionManagerUI {
 
   renderSimpleTable(rows, keys) {
     if (!rows?.length) return "<p>Нет данных.</p>";
-    const header = keys.map((k) => `<th>${k}</th>`).join("");
+    const header = keys.map((k) => `<th>${this.escapeHtml(k)}</th>`).join("");
     const body = rows
-      .map((row) => `<tr>${keys.map((k) => `<td>${(row.data && row.data[k]) || ""}</td>`).join("")}</tr>`)
+      .map((row) => `<tr>${keys.map((k) => `<td>${this.escapeHtml((row.data && row.data[k]) || "")}</td>`).join("")}</tr>`)
       .join("");
     return `<table class="table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
   }
@@ -185,7 +202,63 @@ class ConstructionManagerUI {
     this.bindPromptTemplateButton("addTepBtn", "tep", ["indicator", "unit", "amount"]);
     this.bindPromptTemplateButton("addEstimateBtn", "summary_estimate", ["work_name", "total_cost"]);
     this.bindPromptTemplateButton("addDesignBtn", "design_schedule", ["name", "executor", "progress"]);
-    this.bindPromptTemplateButton("addSmrBtn", "smr_schedule", ["task_name", "contractor", "progress"]);
+    this.bindPromptTemplateButton("addSmrBtn", "smr_schedule", [
+      "num",
+      "task_name",
+      "contractor",
+      "contract_start",
+      "contract_end",
+      "progress",
+      "duration",
+      "fact_start",
+      "fact_end",
+      "finish_deviation",
+    ]);
+
+    const loadSdrTemplateBtn = document.getElementById("loadSdrTemplateBtn");
+    if (loadSdrTemplateBtn) {
+      loadSdrTemplateBtn.addEventListener("click", async () => {
+        try {
+          await this.loadSdrTemplate();
+          this.notify(`Шаблон СДР загружен (${this.sdrTemplateRows.length} строк)`);
+          this.renderContent();
+        } catch (e) {
+          this.notify(`Ошибка загрузки шаблона СДР: ${e.message}`);
+        }
+      });
+    }
+
+    const exportSmrBtn = document.getElementById("exportSmrBtn");
+    if (exportSmrBtn) {
+      exportSmrBtn.addEventListener("click", async () => {
+        try {
+          const rows = await this.api(`/objects/${this.selectedProject.id}/templates/smr_schedule/rows`);
+          const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `smr_schedule_${this.selectedProject.id}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          this.notify(`Ошибка экспорта СМР: ${e.message}`);
+        }
+      });
+    }
+
+    const clearSmrBtn = document.getElementById("clearSmrBtn");
+    if (clearSmrBtn) {
+      clearSmrBtn.addEventListener("click", async () => {
+        if (!confirm("Удалить все строки шаблона СМР в текущем проекте?")) return;
+        try {
+          await this.clearSmrRows();
+          this.notify("Шаблон СМР очищен");
+          this.renderContent();
+        } catch (e) {
+          this.notify(`Ошибка очистки СМР: ${e.message}`);
+        }
+      });
+    }
 
     const addTaskBtn = document.getElementById("addTaskBtn");
     if (addTaskBtn) {
@@ -275,6 +348,55 @@ class ConstructionManagerUI {
 
   notify(message) {
     alert(message);
+  }
+
+  escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  async clearSmrRows() {
+    const rows = await this.api(`/objects/${this.selectedProject.id}/templates/smr_schedule/rows`);
+    for (const row of rows) {
+      await this.api(`/objects/${this.selectedProject.id}/templates/smr_schedule/rows/${row.id}`, { method: "DELETE" });
+    }
+  }
+
+  async loadSdrTemplate() {
+    await this.clearSmrRows();
+    for (const data of this.sdrTemplateRows) {
+      await this.api(`/objects/${this.selectedProject.id}/templates/smr_schedule/rows`, {
+        method: "POST",
+        body: JSON.stringify({ data }),
+      });
+    }
+  }
+
+  getSdrTemplateRows() {
+    return [
+      { num: "1", task_name: "Объект Онкоцентр", contractor: "", contract_start: "2023-06-01", contract_end: "2026-08-01", progress: "24", duration: "1277.08", fact_start: "2023-06-01", fact_end: "2026-11-29", finish_deviation: "120.08" },
+      { num: "1.1", task_name: "Строительство Онкоцентра г. Пермь", contractor: "", contract_start: "2023-06-01", contract_end: "2026-01-27", progress: "24", duration: "1092.08", fact_start: "2023-06-01", fact_end: "2026-05-28", finish_deviation: "120.08" },
+      { num: "1.1.1", task_name: "Основные работы", contractor: "", contract_start: "2023-08-14", contract_end: "2026-01-27", progress: "22", duration: "1018.08", fact_start: "2023-08-14", fact_end: "2026-05-28", finish_deviation: "120.08" },
+      { num: "1.1.2.2", task_name: "Блок № 1. Центральный блок", contractor: "", contract_start: "2024-01-31", contract_end: "2026-01-27", progress: "21", duration: "821.88", fact_start: "2024-01-31", fact_end: "2026-05-01", finish_deviation: "93.88" },
+      { num: "1.1.2.2.8", task_name: "Устройство фасадов, витражи, окна", contractor: "", contract_start: "2025-02-15", contract_end: "2025-11-07", progress: "0", duration: "308.88", fact_start: "2025-03-04", fact_end: "2026-01-06", finish_deviation: "59.88" },
+      { num: "1.1.2.2.10", task_name: "Отделочные работы", contractor: "", contract_start: "2025-02-15", contract_end: "2026-01-27", progress: "1", duration: "381.88", fact_start: "2025-04-15", fact_end: "2026-05-01", finish_deviation: "93.88" },
+      { num: "1.1.2.2.11", task_name: "Монтаж внутренних сетей", contractor: "", contract_start: "2025-02-15", contract_end: "2026-01-27", progress: "0", duration: "470.88", fact_start: "2025-01-16", fact_end: "2026-05-01", finish_deviation: "93.88" },
+      { num: "1.1.2.3", task_name: "Блок № 2. Блок ядерной медицины", contractor: "", contract_start: "2023-08-14", contract_end: "2026-01-21", progress: "17", duration: "1018.08", fact_start: "2023-08-14", fact_end: "2026-05-28", finish_deviation: "126.08" },
+      { num: "1.1.2.4", task_name: "Блок № 3. Палатный блок", contractor: "", contract_start: "2024-01-31", contract_end: "2025-12-21", progress: "34", duration: "785.29", fact_start: "2024-01-31", fact_end: "2026-03-26", finish_deviation: "94.31" },
+      { num: "1.1.2.5", task_name: "Пансионат", contractor: "", contract_start: "2023-09-13", contract_end: "2025-10-17", progress: "28", duration: "858", fact_start: "2023-09-13", fact_end: "2026-01-17", finish_deviation: "92" },
+      { num: "1.1.2.6", task_name: "Возведение инженерно-технических сооружений", contractor: "", contract_start: "2024-06-03", contract_end: "2025-07-05", progress: "51", duration: "517.88", fact_start: "2024-06-01", fact_end: "2025-10-31", finish_deviation: "117.88" },
+      { num: "1.1.2.8", task_name: "ВРУ", contractor: "", contract_start: "2025-01-31", contract_end: "2025-05-02", progress: "0", duration: "100.88", fact_start: "2025-06-04", fact_end: "2025-09-13", finish_deviation: "134" },
+      { num: "1.1.2.9", task_name: "Наружные сети", contractor: "", contract_start: "2024-09-12", contract_end: "2025-08-20", progress: "14", duration: "497.2", fact_start: "2024-09-01", fact_end: "2026-01-11", finish_deviation: "143.2" },
+      { num: "1.1.2.9.1.4", task_name: "Наружные сети теплоснабжения", contractor: "Вектор Строй", contract_start: "2025-02-10", contract_end: "2025-05-21", progress: "3", duration: "297.2", fact_start: "2025-01-22", fact_end: "2025-11-15", finish_deviation: "177.33" },
+      { num: "1.1.2.9.2.3", task_name: "Наружные сети водоотведения. Канализация хозбытовая. НВК2", contractor: "Вертикаль", contract_start: "2025-01-21", contract_end: "2025-06-10", progress: "18", duration: "220.59", fact_start: "2025-02-01", fact_end: "2025-09-09", finish_deviation: "91.22" },
+      { num: "1.1.2.9.2.4", task_name: "Наружные сети водоотведения. Канализация дождевая. НВК3", contractor: "Вертикаль", contract_start: "2024-11-11", contract_end: "2025-06-07", progress: "34", duration: "417.88", fact_start: "2024-11-08", fact_end: "2025-12-30", finish_deviation: "205.88" },
+      { num: "1.1.2.9.2.5", task_name: "Наружные сети водоснабжения. Поливочный водопровод. НВК1", contractor: "Вертикаль", contract_start: "2024-11-12", contract_end: "2025-05-14", progress: "9", duration: "388.88", fact_start: "2024-11-12", fact_end: "2025-12-05", finish_deviation: "204.88" },
+      { num: "1.1.2.10", task_name: "Благоустройство территории", contractor: "", contract_start: "2025-02-28", contract_end: "2025-09-25", progress: "0", duration: "136", fact_start: "2025-06-04", fact_end: "2025-10-18", finish_deviation: "22.88" },
+    ];
   }
 }
 
