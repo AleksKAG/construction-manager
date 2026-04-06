@@ -123,36 +123,7 @@ class ConstructionManagerUI {
 
   renderHome() {
     const p = this.currentProject();
-    document.getElementById('contentArea').innerHTML = `
-      <article class="card col-4">
-        <span class="tag">Проекты</span>
-        <h3>${this.objects.length}</h3>
-        <div class="metric">Всего объектов в системе</div>
-      </article>
-      <article class="card col-4">
-        <span class="tag">Активный проект</span>
-        <h3>${p?.name || 'Не выбран'}</h3>
-        <div class="metric">${p?.address || 'Выберите проект в дереве слева'}</div>
-      </article>
-      <article class="card col-4">
-        <span class="tag">Статус</span>
-        <h3>${p?.status || '—'}</h3>
-        <div class="metric">Текущий этап реализации</div>
-      </article>
-      <article class="card col-12">
-        <h3>Быстрые действия</h3>
-        <div class="row-actions">
-          <button class="mini" id="quickAddProject">+ Добавить проект</button>
-          <button class="mini" id="quickGoProjects">Открыть проекты</button>
-          <button class="mini" id="quickGoDesign">График проектирования</button>
-          <button class="mini" id="quickGoTep">ТЭП</button>
-        </div>
-      </article>`;
-
-    document.getElementById('quickAddProject').onclick = () => this.openProjectForm();
-    document.getElementById('quickGoProjects').onclick = () => this.switchView('projects', 'Проекты');
-    document.getElementById('quickGoDesign').onclick = () => this.switchView('designSchedule', 'График проектирования');
-    document.getElementById('quickGoTep').onclick = () => this.switchView('tep', 'ТЭП');
+    document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>Наглядный режим</h3><div class="metric">Выбран проект: ${p?.name || 'не выбран'}</div></article>`;
   }
 
   renderProjects() {
@@ -276,7 +247,7 @@ class ConstructionManagerUI {
   }
 
   async handlePrimaryAction() {
-    if (this.currentView === 'home' || this.currentView === 'projects') {
+    if (this.currentView === 'projects') {
       return this.openProjectForm();
     }
     if (this.currentView === 'tep') {
@@ -350,23 +321,6 @@ class ConstructionManagerUI {
 
   closeModal() {
     document.getElementById('entityModal').classList.remove('open');
-  }
-
-  switchView(view, title) {
-    this.currentView = view;
-    document.getElementById('pageTitle').textContent = title;
-    document.querySelectorAll('.menu-item[data-view]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.view === view);
-    });
-    this.renderContent();
-  }
-
-  renderAuthModel() {
-    document.getElementById('contentArea').innerHTML = `
-      <article class="card col-12">
-        <h3>Авторизация и роли</h3>
-        <p class="metric">Раздел подключен. Права чтения/редактирования шаблонов применяются на API-уровне.</p>
-      </article>`;
   }
 }
 
