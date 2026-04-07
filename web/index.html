@@ -9,6 +9,7 @@
 </head>
 <body>
 <div class="layout">
+    <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
         <div class="brand">
             <div class="brand-mark">CM</div>
@@ -18,21 +19,25 @@
             </div>
         </div>
 
+        <div class="section-title">Основное</div>
         <nav class="menu">
-            <button class="menu-item active" data-view="dashboard">Главная</button>
+            <button class="menu-item active" data-view="dashboard">Главная (Дашборд)</button>
             <button class="menu-item" data-view="tasks">Мои задачи</button>
+            <button class="menu-item" data-view="auth">Авторизация и роли</button>
         </nav>
 
         <div class="section-title">Проекты</div>
-        <div id="projectTree" class="project-tree"></div>
+        <div id="projectTree" class="tree"></div>
 
-        <button class="menu-item secondary" id="addProjectBtn">+ Добавить проект</button>
+        <button class="menu-item secondary" id="menuEditor">Редактировать меню</button>
     </aside>
 
+    <!-- Main Content -->
     <main class="content">
         <header class="header">
             <button id="toggleSidebar" class="ghost">☰</button>
             <h1 id="pageTitle">Главная</h1>
+            <button id="addProjectBtn" class="primary">+ Добавить проект</button>
         </header>
 
         <section id="contentArea" class="grid"></section>
@@ -43,12 +48,16 @@
 <div class="modal" id="projectModal">
     <div class="overlay" data-close="true"></div>
     <div class="dialog">
-        <h3>Новый проект</h3>
-        <input id="projectName" type="text" placeholder="Название проекта" />
-        <textarea id="projectDescription" placeholder="Описание / адрес"></textarea>
+        <h3>Добавить новый проект</h3>
+        <label>Наименование проекта<br>
+            <input id="projectName" type="text" placeholder="Например: Жилой комплекс Солнечный">
+        </label>
+        <label>Адрес / Описание<br>
+            <textarea id="projectDescription" rows="3" placeholder="Краткое описание"></textarea>
+        </label>
         <div class="actions">
-            <button data-close="true">Отмена</button>
-            <button id="saveProjectBtn">Сохранить</button>
+            <button class="ghost" data-close="true">Отмена</button>
+            <button class="primary" id="saveProjectBtn">Сохранить проект</button>
         </div>
     </div>
 </div>
