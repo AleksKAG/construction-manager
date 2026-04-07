@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -33,13 +32,14 @@ func main() {
 	logger.SetFormatter(&logrus.TextFormatter{})
 	logger.SetLevel(logrus.InfoLevel)
 
-	// === SQLite подключение ===
-	dbPath := getEnv("DB_PATH", "./construction_manager.db")
+	// === SQLite подключение — база в корне проекта ===
+	dbPath := getEnv("DB_PATH", "./construction.db")
 
-	// Создаём директорию если нет
-	_ = os.MkdirAll(filepath.Dir(dbPath), 0755)
+	// Создаём папку data, если хочешь хранить в подпапке (рекомендую)
+	_ = os.MkdirAll("./data", 0755)
+	// dbPath = "./data/construction.db"   // раскомментируй, если хочешь в папке data
 
-	logger.Info("Connecting to SQLite: ", dbPath)
+	logger.Infof("Connecting to SQLite: %s", dbPath)
 
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Warn),
@@ -135,6 +135,8 @@ func main() {
 		api.PUT("/objects/:id", handlers.UpdateObject(repo))
 		api.DELETE("/objects/:id", handlers.DeleteObject(repo))
 
+		api.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
+		api.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
 		// Gantt Tasks endpoints
 		api.GET("/objects/:id/tasks", handlers.ListTasks(repo))
 		api.POST("/tasks", handlers.CreateTask(repo))

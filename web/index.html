@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Construction Manager — Портфель проектов</title>
+    <title>Construction Manager</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <div class="layout">
@@ -18,41 +18,37 @@
             </div>
         </div>
 
-        <div class="section-title">Разделы</div>
         <nav class="menu">
-            <button class="menu-item active" data-view="home">Главная</button>
-            <button class="menu-item" data-view="projects">Проекты</button>
-            <button class="menu-item" data-view="designSchedule">График проектирования</button>
-            <button class="menu-item" data-view="tep">ТЭП</button>
+            <button class="menu-item active" data-view="dashboard">Главная</button>
+            <button class="menu-item" data-view="tasks">Мои задачи</button>
         </nav>
 
         <div class="section-title">Проекты</div>
-        <div id="projectTree" class="tree"></div>
+        <div id="projectTree" class="project-tree"></div>
+
+        <button class="menu-item secondary" id="addProjectBtn">+ Добавить проект</button>
     </aside>
 
     <main class="content">
         <header class="header">
             <button id="toggleSidebar" class="ghost">☰</button>
-            <div>
-                <h1 id="pageTitle">Главная</h1>
-                <div id="pageSubtitle" class="metric">Данные загружаются из SQLite</div>
-            </div>
-            <button id="secondaryBtn" class="ghost" style="display:none;">Действие</button>
-            <button id="primaryBtn" class="primary">Действие</button>
+            <h1 id="pageTitle">Главная</h1>
         </header>
 
         <section id="contentArea" class="grid"></section>
     </main>
 </div>
 
-<div class="modal" id="entityModal">
+<!-- Modal -->
+<div class="modal" id="projectModal">
     <div class="overlay" data-close="true"></div>
     <div class="dialog">
-        <h3 id="modalTitle">Добавить</h3>
-        <div id="modalBody"></div>
+        <h3>Новый проект</h3>
+        <input id="projectName" type="text" placeholder="Название проекта" />
+        <textarea id="projectDescription" placeholder="Описание / адрес"></textarea>
         <div class="actions">
-            <button class="ghost" data-close="true">Закрыть</button>
-            <button class="primary" id="saveEntity">Сохранить</button>
+            <button data-close="true">Отмена</button>
+            <button id="saveProjectBtn">Сохранить</button>
         </div>
     </div>
 </div>
