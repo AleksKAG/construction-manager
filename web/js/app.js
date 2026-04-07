@@ -40,9 +40,6 @@ class ConstructionManagerUI {
         document.querySelectorAll('.menu-item[data-view]').forEach((i) => i.classList.remove('active'));
         btn.classList.add('active');
         this.currentView = btn.dataset.view;
-        if (this.currentView === 'tep') this.currentTemplateOwner = 'tep';
-        if (this.currentView === 'designSchedule') this.currentTemplateOwner = 'design_schedule';
-        if (this.currentView === 'estimate') this.currentTemplateOwner = 'summary_estimate';
         document.getElementById('pageTitle').textContent = btn.textContent;
         this.renderContent();
       });
@@ -79,74 +76,17 @@ class ConstructionManagerUI {
 
   renderProjectTree() {
     const tree = document.getElementById('projectTree');
-    const projectRows = this.projectsMenuOpen
-      ? this.objects
-          .map((p) => {
-            const active = String(p.id) === String(this.selectedObjectId);
-            const expanded = this.expandedProjects.has(String(p.id));
-            return `
-            <div class="tree-row ${active ? 'active' : ''}" data-project="${p.id}">
-              ${expanded ? '▼' : '▶'} ${p.name}
-            </div>
-            ${expanded ? this.renderProjectSubmenu(p.id) : ''}`;
-          })
-          .join('')
-      : '';
-
-    tree.innerHTML = `
-      <div class="tree-row" data-toggle-projects="true">${this.projectsMenuOpen ? '▼' : '▶'} Проекты</div>
-      ${projectRows}
-      <div class="tree-row level-1" data-add-project="true">+ Добавить проект</div>`;
-
-    tree.querySelector('[data-toggle-projects]')?.addEventListener('click', () => {
-      this.projectsMenuOpen = !this.projectsMenuOpen;
-      this.renderProjectTree();
-    });
+    tree.innerHTML = this.objects
+      .map((p) => `<div class="tree-row ${String(p.id) === String(this.selectedObjectId) ? 'active' : ''}" data-project="${p.id}">${p.name}</div>`)
+      .join('');
 
     tree.querySelectorAll('[data-project]').forEach((row) => {
       row.addEventListener('click', () => {
-        const pid = row.dataset.project;
-        this.selectedObjectId = pid;
-        if (this.expandedProjects.has(pid)) this.expandedProjects.delete(pid);
-        else this.expandedProjects.add(pid);
+        this.selectedObjectId = row.dataset.project;
         this.renderProjectTree();
         this.renderContent();
       });
     });
-
-    tree.querySelector('[data-add-project]')?.addEventListener('click', () => this.openProjectForm());
-    tree.querySelectorAll('[data-view-link]').forEach((item) => {
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.switchView(item.dataset.viewLink, item.dataset.viewTitle);
-      });
-    });
-  }
-
-  renderProjectSubmenu(projectId) {
-    return `
-      <div class="tree-row level-1" data-view-link="designSchedule" data-view-title="График проектирования" data-project-link="${projectId}">График проектирования</div>
-      <div class="tree-row level-1" data-view-link="tep" data-view-title="ТЭП" data-project-link="${projectId}">ТЭП</div>
-      <div class="tree-row level-1" data-view-link="estimate" data-view-title="Смета" data-project-link="${projectId}">Сметная документация</div>
-      <div class="tree-row level-1">Документация (проектирование)</div>
-      <div class="tree-row level-2">ИРД</div>
-      <div class="tree-row level-2">Изыскания</div>
-      <div class="tree-row level-2">Стадия П</div>
-      <div class="tree-row level-2">Экспертиза</div>
-      <div class="tree-row level-2">Стадия Р</div>
-      <div class="tree-row level-1">СМР</div>
-      <div class="tree-row level-2">График СМР</div>
-      <div class="tree-row level-2">Документация СМР</div>
-      <div class="tree-row level-2">Авторский надзор</div>
-      <div class="tree-row level-2">Технический надзор</div>
-      <div class="tree-row level-2">График поставки оборудования</div>
-      <div class="tree-row level-1">Ввод в эксплуатацию</div>
-      <div class="tree-row level-2">График</div>
-      <div class="tree-row level-2">Документация</div>
-      <div class="tree-row level-1">Протоколы совещаний</div>
-      <div class="tree-row level-2">Протоколы внутренние</div>
-      <div class="tree-row level-2">Протоколы проектирование</div>
-      <div class="tree-row level-2">Протоколы СМР</div>`;
   }
 
   configureHeader() {
@@ -191,38 +131,7 @@ class ConstructionManagerUI {
 
   renderHome() {
     const p = this.currentProject();
-    document.getElementById('contentArea').innerHTML = `
-      <article class="card col-4">
-        <span class="tag">Проекты</span>
-        <h3>${this.objects.length}</h3>
-        <div class="metric">Всего объектов в системе</div>
-      </article>
-      <article class="card col-4">
-        <span class="tag">Активный проект</span>
-        <h3>${p?.name || 'Не выбран'}</h3>
-        <div class="metric">${p?.address || 'Выберите проект в дереве слева'}</div>
-      </article>
-      <article class="card col-4">
-        <span class="tag">Статус</span>
-        <h3>${p?.status || '—'}</h3>
-        <div class="metric">Текущий этап реализации</div>
-      </article>
-      <article class="card col-12">
-        <h3>Быстрые действия</h3>
-        <div class="row-actions">
-          <button class="mini" id="quickAddProject">+ Добавить проект</button>
-          <button class="mini" id="quickGoProjects">Открыть проекты</button>
-          <button class="mini" id="quickGoDesign">График проектирования</button>
-          <button class="mini" id="quickGoTep">ТЭП</button>
-          <button class="mini" id="quickGoEstimate">Смета</button>
-        </div>
-      </article>`;
-
-    document.getElementById('quickAddProject').onclick = () => this.openProjectForm();
-    document.getElementById('quickGoProjects').onclick = () => this.switchView('projects', 'Проекты');
-    document.getElementById('quickGoDesign').onclick = () => this.switchView('designSchedule', 'График проектирования');
-    document.getElementById('quickGoTep').onclick = () => this.switchView('tep', 'ТЭП');
-    document.getElementById('quickGoEstimate').onclick = () => this.switchView('estimate', 'Смета');
+    document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>Наглядный режим</h3><div class="metric">Выбран проект: ${p?.name || 'не выбран'}</div></article>`;
   }
 
   renderProjects() {
@@ -280,16 +189,6 @@ class ConstructionManagerUI {
       this.renderTemplateScreen(defaultCode, title);
     };
     document.getElementById('pickTemplateBtn').onclick = () => this.openTemplatePicker(defaultCode);
-    if (defaultCode === 'design_schedule') {
-      document.getElementById('fillStagePBtn').onclick = async () => {
-        await this.fillDesignTemplate('P');
-        this.renderTemplateScreen(defaultCode, title);
-      };
-      document.getElementById('fillStageRBtn').onclick = async () => {
-        await this.fillDesignTemplate('R');
-        this.renderTemplateScreen(defaultCode, title);
-      };
-    }
     document.getElementById('prevPage').onclick = () => {
       this.templatePage = Math.max(1, this.templatePage - 1);
       this.renderTemplateScreen(defaultCode, title);
@@ -363,7 +262,7 @@ class ConstructionManagerUI {
   }
 
   async handlePrimaryAction() {
-    if (this.currentView === 'home' || this.currentView === 'projects') {
+    if (this.currentView === 'projects') {
       return this.openProjectForm();
     }
     if (this.currentView === 'tep') {
@@ -428,7 +327,7 @@ class ConstructionManagerUI {
       data[input.dataset.field] = input.value;
     });
 
-    const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : this.currentView === 'estimate' ? 'summary_estimate' : 'design_schedule');
+    const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : 'design_schedule');
     if (modal.dataset.rowId) await updateTemplateRow(modal.dataset.rowId, data);
     else await createTemplateRow(this.selectedObjectId, code, data);
 
@@ -442,45 +341,6 @@ class ConstructionManagerUI {
 
   closeModal() {
     document.getElementById('entityModal').classList.remove('open');
-  }
-
-  switchView(view, title) {
-    this.currentView = view;
-    if (view === 'tep') this.currentTemplateOwner = 'tep';
-    if (view === 'designSchedule') this.currentTemplateOwner = 'design_schedule';
-    if (view === 'estimate') this.currentTemplateOwner = 'summary_estimate';
-    document.getElementById('pageTitle').textContent = title;
-    document.querySelectorAll('.menu-item[data-view]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.view === view);
-    });
-    this.renderContent();
-  }
-
-  async fillDesignTemplate(stage) {
-    const project = this.currentProject();
-    if (!project) return;
-    const rows = stage === 'P'
-      ? [
-          { volume_no: '1', code: 'ПЗ', name: 'Пояснительная записка', executor: 'ГИП', progress: '0' },
-          { volume_no: '2', code: 'АР', name: 'Архитектурные решения', executor: 'Архитектор', progress: '0' },
-          { volume_no: '3', code: 'КР', name: 'Конструктивные решения', executor: 'Конструктор', progress: '0' },
-        ]
-      : [
-          { volume_no: '1', code: 'АР.Р', name: 'Рабочая документация АР', executor: 'Архитектор', progress: '0' },
-          { volume_no: '2', code: 'КЖ.Р', name: 'Рабочая документация КЖ', executor: 'Конструктор', progress: '0' },
-          { volume_no: '3', code: 'ОВ.Р', name: 'Рабочая документация ОВ', executor: 'Инженер ОВ', progress: '0' },
-        ];
-    for (const data of rows) {
-      await createTemplateRow(project.id, 'design_schedule', data);
-    }
-  }
-
-  renderAuthModel() {
-    document.getElementById('contentArea').innerHTML = `
-      <article class="card col-12">
-        <h3>Авторизация и роли</h3>
-        <p class="metric">Раздел подключен. Права чтения/редактирования шаблонов применяются на API-уровне.</p>
-      </article>`;
   }
 }
 
