@@ -1,348 +1,162 @@
-import { api, issueDemoToken } from './api.js';
-import {
-  listTemplates,
-  getTemplate,
-  listTemplateRows,
-  createTemplateRow,
-  updateTemplateRow,
-  deleteTemplateRow,
-  exportTemplate,
-} from './templates.js';
-
 class ConstructionManagerUI {
-  constructor() {
-    this.currentView = 'home';
-    this.objects = [];
-    this.selectedObjectId = null;
-    this.modalMode = null;
-    this.templatePage = 1;
-    this.templateSearch = '';
-    this.currentTemplateCode = null;
-    this.currentTemplateOwner = null;
-    this.projectsMenuOpen = true;
-    this.expandedProjects = new Set();
-    this.bind();
-    this.bootstrap();
-  }
-
-  async bootstrap() {
-    if (!localStorage.getItem('cm_token')) await issueDemoToken('admin');
-    await this.loadObjects();
-    this.renderProjectTree();
-    this.renderContent();
-  }
-
-  bind() {
-    document.querySelectorAll('.menu-item[data-view]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.menu-item[data-view]').forEach((i) => i.classList.remove('active'));
-        btn.classList.add('active');
-        this.currentView = btn.dataset.view;
-        document.getElementById('pageTitle').textContent = btn.textContent;
-        this.renderContent();
-      });
-    });
-
-    const toggleSidebar = document.getElementById('toggleSidebar');
-    if (toggleSidebar) {
-      toggleSidebar.addEventListener('click', () => {
-        document.getElementById('sidebar').classList.toggle('open');
-      });
+    constructor() {
+        this.projects = [];
+        this.selectedProjectId = null;
+        this.currentView = "dashboard";
+        this.bindEvents();
+        this.init();
     }
 
-    document.getElementById('primaryBtn').addEventListener('click', () => this.handlePrimaryAction());
-    document.getElementById('secondaryBtn').addEventListener('click', () => this.handleSecondaryAction());
-    document.querySelectorAll('[data-close="true"]').forEach((el) => el.addEventListener('click', () => this.closeModal()));
-    document.getElementById('saveEntity').addEventListener('click', () => this.handleSaveModal());
-
-    const menuEditor = document.getElementById('menuEditor');
-    if (menuEditor) {
-      menuEditor.addEventListener('click', () => alert('Редактор меню будет доступен в следующих версиях.'));
-    }
-  }
-
-  async loadObjects(search = '', page = 1, pageSize = 100) {
-    const query = new URLSearchParams({ search, page, page_size: pageSize }).toString();
-    const payload = await api(`/objects?${query}`);
-    this.objects = payload.data || [];
-    if (!this.selectedObjectId && this.objects.length) this.selectedObjectId = this.objects[0].id;
-  }
-
-  currentProject() {
-    return this.objects.find((o) => String(o.id) === String(this.selectedObjectId));
-  }
-
-  renderProjectTree() {
-    const tree = document.getElementById('projectTree');
-    tree.innerHTML = this.objects
-      .map((p) => `<div class="tree-row ${String(p.id) === String(this.selectedObjectId) ? 'active' : ''}" data-project="${p.id}">${p.name}</div>`)
-      .join('');
-
-    tree.querySelectorAll('[data-project]').forEach((row) => {
-      row.addEventListener('click', () => {
-        this.selectedObjectId = row.dataset.project;
+    async init() {
+        await this.loadProjects();
         this.renderProjectTree();
-        this.renderContent();
-      });
-    });
-  }
-
-  configureHeader() {
-    const primary = document.getElementById('primaryBtn');
-    const secondary = document.getElementById('secondaryBtn');
-    secondary.style.display = 'none';
-
-    if (this.currentView === 'home') {
-      primary.textContent = '+ Добавить проект';
-      secondary.style.display = 'inline-block';
-      secondary.textContent = 'Обновить дашборд';
-    } else if (this.currentView === 'tep') {
-      primary.textContent = '+ Добавить ТЭП';
-      secondary.style.display = 'inline-block';
-      secondary.textContent = 'Экспорт в Excel (CSV)';
-    } else if (this.currentView === 'designSchedule') {
-      primary.textContent = '+ Добавить график';
-      secondary.style.display = 'inline-block';
-      secondary.textContent = 'Экспорт графика';
-    } else if (this.currentView === 'projects') {
-      primary.textContent = '+ Добавить проект';
-      secondary.style.display = 'inline-block';
-      secondary.textContent = 'Обновить список';
-    } else if (this.currentView === 'estimate') {
-      primary.textContent = '+ Добавить строку сметы';
-      secondary.style.display = 'inline-block';
-      secondary.textContent = 'Экспорт сметы';
-    } else {
-      primary.textContent = 'Действие';
-    }
-  }
-
-  async renderContent() {
-    this.configureHeader();
-    if (this.currentView === 'auth') return this.renderAuthModel();
-    if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'Технико-экономические показатели');
-    if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График проектирования');
-    if (this.currentView === 'estimate') return this.renderTemplateScreen('summary_estimate', 'Сметная документация');
-    if (this.currentView === 'projects') return this.renderProjects();
-    if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График проектирования');
-    if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'ТЭП');
-    if (this.currentView === 'estimate') return this.renderTemplateScreen('summary_estimate', 'Сметная документация');
-    return this.renderHome();
-  }
-
-  renderHome() {
-    const p = this.currentProject();
-    document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>Наглядный режим</h3><div class="metric">Выбран проект: ${p?.name || 'не выбран'}</div></article>`;
-  }
-
-  renderProjects() {
-    document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>Проекты</h3><table class="table"><thead><tr><th>Наименование</th><th>Адрес</th><th>Статус</th></tr></thead><tbody>${this.objects
-      .map((o) => `<tr><td>${o.name}</td><td>${o.address || '—'}</td><td>${o.status || '—'}</td></tr>`)
-      .join('')}</tbody></table></article>`;
-  }
-
-  async renderTemplateScreen(defaultCode, title) {
-    const project = this.currentProject();
-    if (!project) {
-      document.getElementById('contentArea').innerHTML = '<article class="card col-12">Выберите проект в дереве слева.</article>';
-      return;
+        this.showDashboard();
     }
 
-    if (this.currentTemplateOwner !== defaultCode) {
-      this.currentTemplateOwner = defaultCode;
-      this.currentTemplateCode = defaultCode;
-      this.templatePage = 1;
-      this.templateSearch = '';
-    }
-    const code = this.currentTemplateCode || defaultCode;
-    const [tpl, rowsPayload] = await Promise.all([
-      getTemplate(code),
-      listTemplateRows(project.id, code, { page: this.templatePage, page_size: 20, search: this.templateSearch }),
-    ]);
+    bindEvents() {
+        document.getElementById("toggleSidebar").addEventListener("click", () => {
+            document.getElementById("sidebar").classList.toggle("open");
+        });
 
-    const columns = tpl.columns || [];
-    const rows = rowsPayload.data || [];
-    const pager = rowsPayload.pagination || { page: 1, total: 0, page_size: 20 };
+        document.getElementById("addProjectBtn").addEventListener("click", () => this.openProjectModal());
+        document.getElementById("saveProjectBtn").addEventListener("click", () => this.saveNewProject());
 
-    document.getElementById('contentArea').innerHTML = `
-      <article class="card col-12">
-        <h3>${title}: ${tpl.template.name}</h3>
-        <div class="row-actions" style="margin-bottom:10px;align-items:center;">
-          <input id="templateSearch" placeholder="Поиск" value="${this.templateSearch}">
-          <button class="mini" id="templateSearchBtn">Найти</button>
-          <button class="mini" id="pickTemplateBtn">Выбрать стандартный шаблон</button>
-          ${defaultCode === 'design_schedule' ? '<button class="mini" id="fillStagePBtn">Заполнить по шаблону стадии П</button><button class="mini" id="fillStageRBtn">Заполнить по шаблону стадии Р</button>' : ''}
-          <span class="metric">Стр. ${pager.page}, всего ${pager.total}</span>
-          <button class="mini" id="prevPage">←</button>
-          <button class="mini" id="nextPage">→</button>
-        </div>
-        <table class="table"><thead><tr>${columns.map((c) => `<th>${c.title}${c.required ? ' *' : ''}</th>`).join('')}<th>Действия</th></tr></thead>
-        <tbody>${rows
-          .map(
-            (r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] || ''}</td>`).join('')}<td><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button></td></tr>`,
-          )
-          .join('') || `<tr><td colspan="${columns.length + 1}">Нет данных</td></tr>`}</tbody></table>
-      </article>`;
-
-    document.getElementById('templateSearchBtn').onclick = () => {
-      this.templateSearch = document.getElementById('templateSearch').value.trim();
-      this.templatePage = 1;
-      this.renderTemplateScreen(defaultCode, title);
-    };
-    document.getElementById('pickTemplateBtn').onclick = () => this.openTemplatePicker(defaultCode);
-    document.getElementById('prevPage').onclick = () => {
-      this.templatePage = Math.max(1, this.templatePage - 1);
-      this.renderTemplateScreen(defaultCode, title);
-    };
-    document.getElementById('nextPage').onclick = () => {
-      if (pager.page * pager.page_size < pager.total) this.templatePage += 1;
-      this.renderTemplateScreen(defaultCode, title);
-    };
-    document.querySelectorAll('[data-edit-row]').forEach((btn) => {
-      btn.onclick = () => this.openTemplateForm(tpl, rows.find((r) => String(r.id) === String(btn.dataset.editRow)));
-    });
-    document.querySelectorAll('[data-del-row]').forEach((btn) => {
-      btn.onclick = async () => {
-        await deleteTemplateRow(btn.dataset.delRow);
-        this.renderTemplateScreen(defaultCode, title);
-      };
-    });
-  }
-
-  async openTemplatePicker(defaultCode) {
-    const templates = await listTemplates();
-    const filtered = templates.filter((t) =>
-      preferredCode === 'tep'
-        ? t.code.includes('tep') || t.code.includes('building') || t.code.includes('site')
-        : t.code.includes('design'),
-    );
-    this.modalMode = 'selectTemplate';
-    document.getElementById('modalTitle').textContent = 'Выбор стандартного шаблона';
-    document.getElementById('modalBody').innerHTML = `<div class="form-grid">${(filtered.length ? filtered : templates)
-      .map(
-        (t) => `<label><input type="radio" name="template_code" value="${t.code}" ${t.code === this.currentTemplateCode ? 'checked' : ''}> ${t.name} <span class="metric">(${t.code})</span></label>`,
-      )
-      .join('')}</div>`;
-    this.openModal();
-  }
-
-  openTemplateForm(templatePayload, row = null) {
-    this.modalMode = row ? 'editRow' : 'createRow';
-    document.getElementById('modalTitle').textContent = row
-      ? `Редактировать: ${templatePayload.template.name}`
-      : `Добавить: ${templatePayload.template.name}`;
-    document.getElementById('modalBody').innerHTML = `<div class="form-grid">${templatePayload.columns
-      .map((c) => {
-        const value = (row?.data || {})[c.field_key] || '';
-        const type = c.data_type === 'number' ? 'number' : c.data_type === 'date' ? 'date' : 'text';
-        return `<label>${c.title}${c.required ? ' *' : ''}${c.unit ? ` (${c.unit})` : ''}<input data-field="${c.field_key}" type="${type}" value="${value}"></label>`;
-      })
-      .join('')}</div>`;
-    const modal = document.getElementById('entityModal');
-    modal.dataset.rowId = row?.id || '';
-    this.openModal();
-  }
-
-  openProjectForm() {
-    this.modalMode = 'createProject';
-    document.getElementById('modalTitle').textContent = 'Добавить проект';
-    document.getElementById('modalBody').innerHTML = `
-      <div class="form-grid">
-        <label>Наименование *<input data-project-field="name" type="text" placeholder="Например: Жилой квартал"></label>
-        <label>Адрес<input data-project-field="address" type="text" placeholder="г. Москва, ..."></label>
-        <label>Статус
-          <select data-project-field="status">
-            <option value="planning">planning</option>
-            <option value="design">design</option>
-            <option value="construction">construction</option>
-            <option value="complete">complete</option>
-          </select>
-        </label>
-      </div>`;
-    this.openModal();
-  }
-
-  async handlePrimaryAction() {
-    if (this.currentView === 'projects') {
-      return this.openProjectForm();
-    }
-    if (this.currentView === 'tep') {
-      this.currentTemplateCode = this.currentTemplateCode || 'tep';
-      const tpl = await getTemplate(this.currentTemplateCode);
-      return this.openTemplateForm(tpl, null);
-    }
-    if (this.currentView === 'designSchedule') {
-      this.currentTemplateCode = this.currentTemplateCode || 'design_schedule';
-      const tpl = await getTemplate(this.currentTemplateCode);
-      return this.openTemplateForm(tpl, null);
-    }
-    if (this.currentView === 'estimate') {
-      this.currentTemplateCode = this.currentTemplateCode || 'summary_estimate';
-      const tpl = await getTemplate(this.currentTemplateCode);
-      return this.openTemplateForm(tpl, null);
-    }
-  }
-
-  async handleSecondaryAction() {
-    if (this.currentView === 'home' || this.currentView === 'projects') {
-      await this.loadObjects();
-      this.renderProjectTree();
-      return this.currentView === 'projects' ? this.renderProjects() : this.renderHome();
-    }
-    if (this.currentView === 'tep' || this.currentView === 'designSchedule' || this.currentView === 'estimate') {
-      const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : this.currentView === 'estimate' ? 'summary_estimate' : 'design_schedule');
-      return exportTemplate(this.selectedObjectId, code);
-    }
-  }
-
-  async handleSaveModal() {
-    const modal = document.getElementById('entityModal');
-
-    if (this.modalMode === 'selectTemplate') {
-      const selected = document.querySelector('input[name="template_code"]:checked');
-      if (!selected) return alert('Выберите шаблон');
-      this.currentTemplateCode = selected.value;
-      this.closeModal();
-      return this.renderContent();
+        // Закрытие модалки
+        document.querySelectorAll("[data-close]").forEach(el => {
+            el.addEventListener("click", () => this.closeModal());
+        });
     }
 
-    if (this.modalMode === 'createProject') {
-      const name = (document.querySelector('[data-project-field="name"]')?.value || '').trim();
-      const address = (document.querySelector('[data-project-field="address"]')?.value || '').trim();
-      const status = (document.querySelector('[data-project-field="status"]')?.value || 'planning').trim();
-      if (!name) return alert('Введите наименование проекта');
-
-      await api('/objects', 'POST', { name, address, status });
-      await this.loadObjects();
-      this.selectedObjectId = this.objects.length ? this.objects[this.objects.length - 1].id : null;
-      this.closeModal();
-      this.renderProjectTree();
-      this.renderProjects();
-      return;
+    async loadProjects() {
+        try {
+            const res = await fetch("/api/v1/objects");
+            this.projects = await res.json();
+            if (!this.selectedProjectId && this.projects.length > 0) {
+                this.selectedProjectId = this.projects[0].id;
+            }
+        } catch (e) {
+            console.error("Ошибка загрузки проектов", e);
+        }
     }
 
-    if (this.modalMode !== 'createRow' && this.modalMode !== 'editRow') return;
+    renderProjectTree() {
+        const tree = document.getElementById("projectTree");
+        tree.innerHTML = "";
 
-    const data = {};
-    document.querySelectorAll('[data-field]').forEach((input) => {
-      data[input.dataset.field] = input.value;
-    });
+        this.projects.forEach(project => {
+            const item = document.createElement("div");
+            item.className = `tree-item ${this.selectedProjectId === project.id ? "active" : ""}`;
+            item.textContent = project.name || "Без названия";
+            item.onclick = () => {
+                this.selectedProjectId = project.id;
+                this.renderProjectTree();
+                this.showProjectDashboard(project);
+            };
+            tree.appendChild(item);
+        });
 
-    const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : 'design_schedule');
-    if (modal.dataset.rowId) await updateTemplateRow(modal.dataset.rowId, data);
-    else await createTemplateRow(this.selectedObjectId, code, data);
+        // Кнопка "Добавить проект"
+        const addBtn = document.createElement("button");
+        addBtn.className = "tree-item add";
+        addBtn.textContent = "+ Добавить проект";
+        addBtn.onclick = () => this.openProjectModal();
+        tree.appendChild(addBtn);
+    }
 
-    this.closeModal();
-    this.renderContent();
-  }
+    // Главный дашборд (все проекты)
+    async showDashboard() {
+        this.currentView = "dashboard";
+        document.getElementById("pageTitle").textContent = "Главная";
 
-  openModal() {
-    document.getElementById('entityModal').classList.add('open');
-  }
+        let html = `<h2>Обзор всех проектов</h2><div class="dashboard-grid">`;
 
-  closeModal() {
-    document.getElementById('entityModal').classList.remove('open');
-  }
+        for (const p of this.projects) {
+            const tasks = await this.fetchTasks(p.id).catch(() => []);
+            const progress = tasks.length ?
+                Math.round(tasks.reduce((sum, t) => sum + (t.progress || 0), 0) / tasks.length) : 0;
+
+            html += `
+                <div class="card">
+                    <h3>${p.name}</h3>
+                    <p>${p.address || "Адрес не указан"}</p>
+                    <div class="progress-bar">
+                        <div class="progress" style="width: ${progress}%"></div>
+                    </div>
+                    <small>Готовность: ${progress}%</small>
+                </div>`;
+        }
+
+        html += `</div>`;
+        document.getElementById("contentArea").innerHTML = html;
+    }
+
+    async showProjectDashboard(project) {
+        document.getElementById("pageTitle").textContent = project.name;
+
+        const html = `
+            <div class="project-header">
+                <h2>${project.name}</h2>
+                <p>${project.address || ""}</p>
+            </div>
+            <div class="quick-actions">
+                <button onclick="ui.showSection('design')">График Проектирования</button>
+                <button onclick="ui.showSection('tep')">ТЭП</button>
+                <button onclick="ui.showSection('estimate')">Сметная документация</button>
+                <button onclick="ui.showSection('smr')">График СМР</button>
+            </div>`;
+
+        document.getElementById("contentArea").innerHTML = html;
+    }
+
+    // Вспомогательные методы
+    async fetchTasks(projectId) {
+        const res = await fetch(`/api/v1/objects/${projectId}/tasks`);
+        return res.json();
+    }
+
+    openProjectModal() {
+        document.getElementById("projectModal").style.display = "flex";
+    }
+
+    closeModal() {
+        document.getElementById("projectModal").style.display = "none";
+    }
+
+    async saveNewProject() {
+        const name = document.getElementById("projectName").value.trim();
+        const description = document.getElementById("projectDescription").value.trim();
+
+        if (!name) return alert("Введите наименование проекта");
+
+        try {
+            await fetch("/api/v1/objects", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, address: description, status: "planning" })
+            });
+
+            this.closeModal();
+            document.getElementById("projectName").value = "";
+            document.getElementById("projectDescription").value = "";
+
+            await this.loadProjects();
+            this.renderProjectTree();
+            this.showDashboard();
+
+            alert("Проект успешно добавлен!");
+        } catch (e) {
+            alert("Ошибка при создании проекта: " + e.message);
+        }
+    }
+
+    // Заглушка для будущих разделов
+    showSection(section) {
+        alert(`Раздел "${section}" будет открыт в следующей версии.\n\nСейчас доступны только базовые дашборды.`);
+    }
 }
 
-window.addEventListener('DOMContentLoaded', () => new ConstructionManagerUI());
+// Инициализация
+let ui;
+window.addEventListener("DOMContentLoaded", () => {
+    ui = new ConstructionManagerUI();
+});
