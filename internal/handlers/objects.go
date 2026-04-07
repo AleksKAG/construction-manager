@@ -13,7 +13,7 @@ import (
 
 func ListObjects(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		projects, err := repo.List(c.Request.Context())
+		projects, err := repo.ListProjects(c.Request.Context())
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -35,14 +35,9 @@ func ListObjects(repo repository.Repository) gin.HandlerFunc {
 		}
 		end := objMin(len(filtered), start+pageSize)
 
-		c.JSON(http.StatusOK, gin.H{
-			"data": filtered[start:end],
-			"pagination": gin.H{
-				"page":      page,
-				"page_size": pageSize,
-				"total":     len(filtered),
-			},
-		})
+		_ = page
+		_ = pageSize
+		c.JSON(http.StatusOK, filtered[start:end])
 	}
 }
 
@@ -53,7 +48,7 @@ func CreateObject(repo repository.Repository) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := repo.Create(c.Request.Context(), &p); err != nil {
+		if err := repo.CreateProject(c.Request.Context(), &p); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -68,7 +63,7 @@ func CreateObject(repo repository.Repository) gin.HandlerFunc {
 func GetObject(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		project, err := repo.FindByID(c.Request.Context(), id)
+		project, err := repo.GetProjectByID(c.Request.Context(), id)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
@@ -87,7 +82,7 @@ func UpdateObject(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		existing, err := repo.FindByID(c.Request.Context(), id)
+		existing, err := repo.GetProjectByID(c.Request.Context(), id)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "object not found"})
 			return
@@ -116,7 +111,7 @@ func UpdateObject(repo repository.Repository) gin.HandlerFunc {
 			existing.CostMap = input.CostMap
 		}
 
-		if err := repo.Update(c.Request.Context(), existing); err != nil {
+		if err := repo.UpdateProject(c.Request.Context(), existing); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -129,7 +124,7 @@ func DeleteObject(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		if err := repo.Delete(c.Request.Context(), id); err != nil {
+		if err := repo.DeleteProject(c.Request.Context(), id); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -151,7 +146,7 @@ func ListTasks(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		tasks, err := repo.GetTasksForObject(c.Request.Context(), objectID)
+		tasks, err := repo.ListTasksByProject(c.Request.Context(), objectID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
