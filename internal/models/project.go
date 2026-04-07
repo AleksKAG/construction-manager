@@ -151,6 +151,7 @@ type MenuItem struct {
 	ProjectID string `gorm:"type:text;index" json:"project_id,omitempty"`
 	ParentID  string `gorm:"type:text;index" json:"parent_id,omitempty"`
 	Title     string `gorm:"type:text;not null" json:"title"`
+	ViewKey   string `gorm:"type:text;index" json:"view_key,omitempty"`
 	ItemType  string `gorm:"type:text;default:'section'" json:"item_type"`
 	SortOrder int    `gorm:"type:integer;default:0" json:"sort_order"`
 }

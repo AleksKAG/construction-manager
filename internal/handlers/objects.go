@@ -7,6 +7,7 @@ import (
 
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
+	"github.com/AleksKAG/construction-manager/internal/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -53,6 +54,10 @@ func CreateObject(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 		if err := repo.Create(c.Request.Context(), &p); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if err := services.EnsureDefaultProjectMenu(repo.RawDB().WithContext(c.Request.Context()), p.ID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
