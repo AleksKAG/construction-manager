@@ -53,6 +53,11 @@ class ConstructionManagerUI {
     document.getElementById('secondaryBtn').addEventListener('click', () => this.handleSecondaryAction());
     document.querySelectorAll('[data-close="true"]').forEach((el) => el.addEventListener('click', () => this.closeModal()));
     document.getElementById('saveEntity').addEventListener('click', () => this.handleSaveModal());
+
+    const menuEditor = document.getElementById('menuEditor');
+    if (menuEditor) {
+      menuEditor.addEventListener('click', () => alert('Редактор меню будет доступен в следующих версиях.'));
+    }
   }
 
   async loadObjects(search = '', page = 1, pageSize = 50) {
@@ -86,7 +91,11 @@ class ConstructionManagerUI {
     const secondary = document.getElementById('secondaryBtn');
     secondary.style.display = 'none';
 
-    if (this.currentView === 'tep') {
+    if (this.currentView === 'home') {
+      primary.textContent = '+ Добавить проект';
+      secondary.style.display = 'inline-block';
+      secondary.textContent = 'Обновить дашборд';
+    } else if (this.currentView === 'tep') {
       primary.textContent = '+ Добавить ТЭП';
       secondary.style.display = 'inline-block';
       secondary.textContent = 'Экспорт в Excel (CSV)';
@@ -105,6 +114,7 @@ class ConstructionManagerUI {
 
   async renderContent() {
     this.configureHeader();
+    if (this.currentView === 'auth') return this.renderAuthModel();
     if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'Технико-экономические показатели');
     if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График проектирования');
     if (this.currentView === 'projects') return this.renderProjects();
@@ -253,10 +263,10 @@ class ConstructionManagerUI {
   }
 
   async handleSecondaryAction() {
-    if (this.currentView === 'projects') {
+    if (this.currentView === 'home' || this.currentView === 'projects') {
       await this.loadObjects();
       this.renderProjectTree();
-      return this.renderProjects();
+      return this.currentView === 'projects' ? this.renderProjects() : this.renderHome();
     }
     if (this.currentView === 'tep' || this.currentView === 'designSchedule') {
       const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : 'design_schedule');
