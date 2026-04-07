@@ -26,9 +26,7 @@ class ConstructionManagerUI {
   }
 
   async bootstrap() {
-    if (!localStorage.getItem('cm_token')) {
-      await issueDemoToken('admin');
-    }
+    if (!localStorage.getItem('cm_token')) await issueDemoToken('admin');
     await this.loadObjects();
     this.renderProjectTree();
     this.renderContent();
@@ -63,7 +61,7 @@ class ConstructionManagerUI {
     }
   }
 
-  async loadObjects(search = '', page = 1, pageSize = 50) {
+  async loadObjects(search = '', page = 1, pageSize = 100) {
     const query = new URLSearchParams({ search, page, page_size: pageSize }).toString();
     const payload = await api(`/objects?${query}`);
     this.objects = payload.data || [];
@@ -126,6 +124,9 @@ class ConstructionManagerUI {
     if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График проектирования');
     if (this.currentView === 'estimate') return this.renderTemplateScreen('summary_estimate', 'Сметная документация');
     if (this.currentView === 'projects') return this.renderProjects();
+    if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График проектирования');
+    if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'ТЭП');
+    if (this.currentView === 'estimate') return this.renderTemplateScreen('summary_estimate', 'Сметная документация');
     return this.renderHome();
   }
 
@@ -158,16 +159,16 @@ class ConstructionManagerUI {
       getTemplate(code),
       listTemplateRows(project.id, code, { page: this.templatePage, page_size: 20, search: this.templateSearch }),
     ]);
+
     const columns = tpl.columns || [];
     const rows = rowsPayload.data || [];
     const pager = rowsPayload.pagination || { page: 1, total: 0, page_size: 20 };
-    this.currentTemplateCode = code;
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
         <h3>${title}: ${tpl.template.name}</h3>
         <div class="row-actions" style="margin-bottom:10px;align-items:center;">
-          <input id="templateSearch" placeholder="Поиск по строкам" value="${this.templateSearch}">
+          <input id="templateSearch" placeholder="Поиск" value="${this.templateSearch}">
           <button class="mini" id="templateSearchBtn">Найти</button>
           <button class="mini" id="pickTemplateBtn">Выбрать стандартный шаблон</button>
           ${defaultCode === 'design_schedule' ? '<button class="mini" id="fillStagePBtn">Заполнить по шаблону стадии П</button><button class="mini" id="fillStageRBtn">Заполнить по шаблону стадии Р</button>' : ''}
@@ -208,7 +209,7 @@ class ConstructionManagerUI {
     });
   }
 
-  async openTemplatePicker(preferredCode) {
+  async openTemplatePicker(defaultCode) {
     const templates = await listTemplates();
     const filtered = templates.filter((t) =>
       preferredCode === 'tep'

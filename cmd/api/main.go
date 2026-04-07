@@ -75,6 +75,9 @@ func main() {
 	if err := services.LoadStandardTemplates(repo, logger); err != nil {
 		logger.Warn("Failed to load standard templates: ", err)
 	}
+	if err := services.EnsureProjectMenus(context.Background(), repo.RawDB()); err != nil {
+		logger.Warn("Failed to load project menus: ", err)
+	}
 
 	// === Router ===
 	r := gin.Default()
@@ -128,6 +131,7 @@ func main() {
 		api.GET("/objects", handlers.ListObjects(repo))
 		api.POST("/objects", handlers.CreateObject(repo))
 		api.GET("/objects/:id", handlers.GetObject(repo))
+		api.GET("/objects/:id/menu", handlers.ListProjectMenu(repo))
 		api.PUT("/objects/:id", handlers.UpdateObject(repo))
 		api.DELETE("/objects/:id", handlers.DeleteObject(repo))
 
