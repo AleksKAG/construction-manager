@@ -18,6 +18,9 @@ class ConstructionManagerUI {
     this.templatePage = 1;
     this.templateSearch = '';
     this.currentTemplateCode = null;
+    this.currentTemplateOwner = null;
+    this.projectsMenuOpen = true;
+    this.expandedProjects = new Set();
     this.bind();
     this.bootstrap();
   }
@@ -107,6 +110,10 @@ class ConstructionManagerUI {
       primary.textContent = '+ Добавить проект';
       secondary.style.display = 'inline-block';
       secondary.textContent = 'Обновить список';
+    } else if (this.currentView === 'estimate') {
+      primary.textContent = '+ Добавить строку сметы';
+      secondary.style.display = 'inline-block';
+      secondary.textContent = 'Экспорт сметы';
     } else {
       primary.textContent = 'Действие';
     }
@@ -117,6 +124,7 @@ class ConstructionManagerUI {
     if (this.currentView === 'auth') return this.renderAuthModel();
     if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'Технико-экономические показатели');
     if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График проектирования');
+    if (this.currentView === 'estimate') return this.renderTemplateScreen('summary_estimate', 'Сметная документация');
     if (this.currentView === 'projects') return this.renderProjects();
     return this.renderHome();
   }
@@ -139,6 +147,12 @@ class ConstructionManagerUI {
       return;
     }
 
+    if (this.currentTemplateOwner !== defaultCode) {
+      this.currentTemplateOwner = defaultCode;
+      this.currentTemplateCode = defaultCode;
+      this.templatePage = 1;
+      this.templateSearch = '';
+    }
     const code = this.currentTemplateCode || defaultCode;
     const [tpl, rowsPayload] = await Promise.all([
       getTemplate(code),
@@ -156,6 +170,7 @@ class ConstructionManagerUI {
           <input id="templateSearch" placeholder="Поиск по строкам" value="${this.templateSearch}">
           <button class="mini" id="templateSearchBtn">Найти</button>
           <button class="mini" id="pickTemplateBtn">Выбрать стандартный шаблон</button>
+          ${defaultCode === 'design_schedule' ? '<button class="mini" id="fillStagePBtn">Заполнить по шаблону стадии П</button><button class="mini" id="fillStageRBtn">Заполнить по шаблону стадии Р</button>' : ''}
           <span class="metric">Стр. ${pager.page}, всего ${pager.total}</span>
           <button class="mini" id="prevPage">←</button>
           <button class="mini" id="nextPage">→</button>
@@ -260,6 +275,11 @@ class ConstructionManagerUI {
       const tpl = await getTemplate(this.currentTemplateCode);
       return this.openTemplateForm(tpl, null);
     }
+    if (this.currentView === 'estimate') {
+      this.currentTemplateCode = this.currentTemplateCode || 'summary_estimate';
+      const tpl = await getTemplate(this.currentTemplateCode);
+      return this.openTemplateForm(tpl, null);
+    }
   }
 
   async handleSecondaryAction() {
@@ -268,8 +288,8 @@ class ConstructionManagerUI {
       this.renderProjectTree();
       return this.currentView === 'projects' ? this.renderProjects() : this.renderHome();
     }
-    if (this.currentView === 'tep' || this.currentView === 'designSchedule') {
-      const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : 'design_schedule');
+    if (this.currentView === 'tep' || this.currentView === 'designSchedule' || this.currentView === 'estimate') {
+      const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : this.currentView === 'estimate' ? 'summary_estimate' : 'design_schedule');
       return exportTemplate(this.selectedObjectId, code);
     }
   }

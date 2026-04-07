@@ -199,8 +199,10 @@ func ExportTemplateRowsXLSX(repo repository.Repository) gin.HandlerFunc {
 		filename := fmt.Sprintf("%s_%s.csv", code, projectID)
 		c.Header("Content-Type", "text/csv; charset=utf-8")
 		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+		_, _ = c.Writer.Write([]byte{0xEF, 0xBB, 0xBF})
 
 		writer := csv.NewWriter(c.Writer)
+		writer.Comma = ';'
 		header := make([]string, 0, len(columns))
 		for _, col := range columns {
 			header = append(header, col.Title)
