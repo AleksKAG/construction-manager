@@ -34,7 +34,7 @@ func main() {
 	logger.SetLevel(logrus.InfoLevel)
 
 	// === SQLite подключение ===
-	dbPath := getEnv("DB_PATH", "/tmp/construction_ai.db")
+	dbPath := getEnv("DB_PATH", "./construction_manager.db")
 
 	// Создаём директорию если нет
 	_ = os.MkdirAll(filepath.Dir(dbPath), 0755)
