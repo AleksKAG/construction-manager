@@ -135,6 +135,8 @@ func main() {
 		api.PUT("/objects/:id", handlers.UpdateObject(repo))
 		api.DELETE("/objects/:id", handlers.DeleteObject(repo))
 
+		api.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
+		api.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
 		// Gantt Tasks endpoints
 		api.GET("/objects/:id/tasks", handlers.ListTasks(repo))
 		api.POST("/tasks", handlers.CreateTask(repo))
