@@ -10,7 +10,7 @@ services:
       - .env
     environment:
       - PORT=8080
-      - DB_PATH=/data/construction_ai.db
+      - DB_PATH=./construction-manager.db
     volumes:
       - cm_data:/data
     restart: unless-stopped
