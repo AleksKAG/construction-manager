@@ -17,6 +17,7 @@ RUN apk --no-cache add ca-certificates wget libgcc aws-cli
 WORKDIR /app
 COPY --from=builder /app/main .
 COPY --from=builder /app/web ./web 
+COPY --from=builder /app/construction.db ./construction.db
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 EXPOSE 8080

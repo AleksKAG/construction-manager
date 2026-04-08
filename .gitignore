@@ -1,17 +1,4 @@
 ```
-# Environment files
-.env
-.env.local
-*.env.*
-
-# Logs
-*.log
-
-# Temporary files
-*.tmp
-*.swp
-*.swo
-
 # Dependencies
 node_modules/
 venv/
@@ -24,14 +11,6 @@ build/
 target/
 .gradle/
 
-# IDE files
-.vscode/
-.idea/
-
-# System files
-.DS_Store
-Thumbs.db
-
 # Compiled files
 *.pyc
 *.class
@@ -43,7 +22,22 @@ Thumbs.db
 *.obj
 *.out
 
-# Coverage
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# System files
+.DS_Store
+Thumbs.db
+.env
+.env.local
+*.env.*
+
+# Logs and coverage
+*.log
 coverage/
 htmlcov/
 .coverage
