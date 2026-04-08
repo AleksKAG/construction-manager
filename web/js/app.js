@@ -22,6 +22,7 @@ class ConstructionManagerUI {
     this.editRowId = null;
     this.projectsMenuOpen = true;
     this.expandedProjects = new Set();
+    this.expandedMenuNodes = new Set();
     this.projectMenus = {};
 
     this.bind();
@@ -120,24 +121,36 @@ class ConstructionManagerUI {
         this.switchView(view, item.dataset.viewTitle);
       });
     });
+
+    tree.querySelectorAll('[data-menu-toggle]').forEach((item) => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const key = item.dataset.menuToggle;
+        if (!key) return;
+        if (this.expandedMenuNodes.has(key)) this.expandedMenuNodes.delete(key);
+        else this.expandedMenuNodes.add(key);
+        this.renderProjectTree();
+      });
+    });
   }
 
   renderProjectSubmenu(projectId) {
     const menu = this.projectMenus[projectId] || [];
-    const staticNodes = [
-      { title: 'ТЭП', view_key: 'tep', children: [] },
-      { title: 'Смета', view_key: 'estimate', children: [] },
-      { title: 'График проектирования', view_key: 'designSchedule', children: [] },
-    ];
-    return this.renderMenuNodes([...(menu || []), ...staticNodes], 1);
+    return this.renderMenuNodes(projectId, menu || [], 1);
   }
 
-  renderMenuNodes(nodes, level = 1) {
+  renderMenuNodes(projectId, nodes, level = 1) {
     return (nodes || [])
       .map((node) => {
+        const nodeKey = `${projectId}:${node.id}`;
+        const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+        const expanded = hasChildren && this.expandedMenuNodes.has(nodeKey);
+        const marker = hasChildren ? (expanded ? '▼ ' : '▶ ') : '';
         const attrs = node.view_key ? `data-view-link="${node.view_key}" data-view-title="${node.title}"` : '';
-        const row = `<div class="tree-row level-${Math.min(level, 2)}" ${attrs}>${node.title}</div>`;
-        return `${row}${this.renderMenuNodes(node.children || [], level + 1)}`;
+        const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}"` : '';
+        const row = `<div class="tree-row level-${Math.min(level, 4)}" ${attrs} ${toggleAttrs}>${marker}${node.title}</div>`;
+        const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1) : '';
+        return `${row}${children}`;
       })
       .join('');
   }
@@ -196,7 +209,7 @@ class ConstructionManagerUI {
       <article class="card col-12">
         <h3>Дашборд</h3>
         <div class="metric">Данные агрегируются из API и демонстрационных записей в БД.</div>
-        <div class="notice">Выберите проект слева и откройте вкладки «График проектирования», «ТЭП» или «Смета», чтобы заполнить таблицы и сделать экспорт.</div>
+        <div class="notice">Выберите проект слева и откройте нужный раздел в дереве проекта, чтобы заполнить таблицы и сделать экспорт.</div>
       </article>
     `;
   }
@@ -416,15 +429,19 @@ class ConstructionManagerUI {
     }
 
     if (this.modalMode === 'createRow' || this.modalMode === 'editRow') {
-      const data = {};
-      document.querySelectorAll('[data-field]').forEach((input) => {
-        data[input.dataset.field] = input.value;
-      });
-      const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
-      if (this.editRowId) await updateTemplateRow(this.editRowId, data);
-      else await createTemplateRow(this.selectedObjectId, code, data);
-      this.closeModal();
-      return this.renderContent();
+      try {
+        const data = {};
+        document.querySelectorAll('[data-field]').forEach((input) => {
+          data[input.dataset.field] = input.value;
+        });
+        const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
+        if (this.editRowId) await updateTemplateRow(this.editRowId, data);
+        else await createTemplateRow(this.selectedObjectId, code, data);
+        this.closeModal();
+        return this.renderContent();
+      } catch (error) {
+        alert(error?.message || 'Не удалось сохранить строку');
+      }
     }
   }
 
