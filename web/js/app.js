@@ -165,19 +165,45 @@ class ConstructionManagerUI {
   renderProjects() {
     document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>Проекты</h3><table class="table"><thead><tr><th>Наименование</th><th>Адрес</th><th>Статус</th></tr></thead><tbody>${this.objects.map((o) => `<tr><td>${o.name}</td><td>${o.address || '—'}</td><td>${o.status || '—'}</td></tr>`).join('')}</tbody></table></article>`;
   }
-
-  async renderTemplateScreen(defaultCode, title) {
-    const project = this.currentProject();
-    if (!project) {
-      document.getElementById('contentArea').innerHTML = '<article class="card col-12">Выберите проект в дереве слева.</article>';
-      return;
+class ConstructionManagerUI {
+    constructor() {
+        this.projects = [];
+        this.selectedProjectId = null;
+        this.currentView = "dashboard";
+        this.bindEvents();
+        this.init();
     }
 
-    if (this.currentTemplateOwner !== defaultCode) {
-      this.currentTemplateOwner = defaultCode;
-      this.currentTemplateCode = defaultCode;
-      this.templatePage = 1;
-      this.templateSearch = '';
+    async init() {
+        await this.loadProjects();
+        this.renderProjectTree();
+        this.showDashboard();
+    }
+
+    bindEvents() {
+        document.getElementById("toggleSidebar").addEventListener("click", () => {
+            document.getElementById("sidebar").classList.toggle("open");
+        });
+
+        document.getElementById("addProjectBtn").addEventListener("click", () => this.openProjectModal());
+        document.getElementById("saveProjectBtn").addEventListener("click", () => this.saveNewProject());
+
+        // Закрытие модалки
+        document.querySelectorAll("[data-close]").forEach(el => {
+            el.addEventListener("click", () => this.closeModal());
+        });
+    }
+
+    async loadProjects() {
+        try {
+            const res = await fetch("/api/v1/objects");
+            this.projects = await res.json();
+            if (!this.selectedProjectId && this.projects.length > 0) {
+                this.selectedProjectId = this.projects[0].id;
+            }
+        } catch (e) {
+            console.error("Ошибка загрузки проектов", e);
+        }
     }
 
     const code = this.currentTemplateCode || defaultCode;
@@ -306,18 +332,80 @@ class ConstructionManagerUI {
     if (['tep', 'designSchedule', 'estimate'].includes(this.currentView)) {
       const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : this.currentView === 'estimate' ? 'summary_estimate' : 'design_schedule');
       return exportTemplate(this.selectedObjectId, code);
+
+    renderProjectTree() {
+        const tree = document.getElementById("projectTree");
+        tree.innerHTML = "";
+
+        this.projects.forEach(project => {
+            const item = document.createElement("div");
+            item.className = `tree-item ${this.selectedProjectId === project.id ? "active" : ""}`;
+            item.textContent = project.name || "Без названия";
+            item.onclick = () => {
+                this.selectedProjectId = project.id;
+                this.renderProjectTree();
+                this.showProjectDashboard(project);
+            };
+            tree.appendChild(item);
+        });
+
+        // Кнопка "Добавить проект"
+        const addBtn = document.createElement("button");
+        addBtn.className = "tree-item add";
+        addBtn.textContent = "+ Добавить проект";
+        addBtn.onclick = () => this.openProjectModal();
+        tree.appendChild(addBtn);
     }
-  }
 
-  async handleSaveModal() {
-    const modal = document.getElementById('entityModal');
+    // Главный дашборд (все проекты)
+    async showDashboard() {
+        this.currentView = "dashboard";
+        document.getElementById("pageTitle").textContent = "Главная";
 
-    if (this.modalMode === 'selectTemplate') {
-      const selected = document.querySelector('input[name="template_code"]:checked');
-      if (!selected) return alert('Выберите шаблон');
-      this.currentTemplateCode = selected.value;
-      this.closeModal();
-      return this.renderContent();
+        let html = `<h2>Обзор всех проектов</h2><div class="dashboard-grid">`;
+
+        for (const p of this.projects) {
+            const tasks = await this.fetchTasks(p.id).catch(() => []);
+            const progress = tasks.length ?
+                Math.round(tasks.reduce((sum, t) => sum + (t.progress || 0), 0) / tasks.length) : 0;
+
+            html += `
+                <div class="card">
+                    <h3>${p.name}</h3>
+                    <p>${p.address || "Адрес не указан"}</p>
+                    <div class="progress-bar">
+                        <div class="progress" style="width: ${progress}%"></div>
+                    </div>
+                    <small>Готовность: ${progress}%</small>
+                </div>`;
+        }
+
+        html += `</div>`;
+        document.getElementById("contentArea").innerHTML = html;
+    }
+
+    async showProjectDashboard(project) {
+        document.getElementById("pageTitle").textContent = project.name;
+
+        const html = `
+            <div class="project-header">
+                <h2>${project.name}</h2>
+                <p>${project.address || ""}</p>
+            </div>
+            <div class="quick-actions">
+                <button onclick="ui.showSection('design')">График Проектирования</button>
+                <button onclick="ui.showSection('tep')">ТЭП</button>
+                <button onclick="ui.showSection('estimate')">Сметная документация</button>
+                <button onclick="ui.showSection('smr')">График СМР</button>
+            </div>`;
+
+        document.getElementById("contentArea").innerHTML = html;
+    }
+
+    // Вспомогательные методы
+    async fetchTasks(projectId) {
+        const res = await fetch(`/api/v1/objects/${projectId}/tasks`);
+        return res.json();
     }
 
     if (this.modalMode === 'createProject') {
@@ -332,19 +420,35 @@ class ConstructionManagerUI {
       this.renderProjectTree();
       this.switchView('projects', 'Проекты');
       return;
+    openProjectModal() {
+        document.getElementById("projectModal").style.display = "flex";
     }
 
-    if (this.modalMode !== 'createRow' && this.modalMode !== 'editRow') return;
+    closeModal() {
+        document.getElementById("projectModal").style.display = "none";
+    }
+
+    async saveNewProject() {
+        const name = document.getElementById("projectName").value.trim();
+        const description = document.getElementById("projectDescription").value.trim();
 
     const data = {};
     document.querySelectorAll('[data-field]').forEach((input) => { data[input.dataset.field] = input.value; });
     const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : this.currentView === 'estimate' ? 'summary_estimate' : 'design_schedule');
     if (modal.dataset.rowId) await updateTemplateRow(modal.dataset.rowId, data);
     else await createTemplateRow(this.selectedObjectId, code, data);
+        if (!name) return alert("Введите наименование проекта");
 
-    this.closeModal();
-    this.renderContent();
-  }
+        try {
+            await fetch("/api/v1/objects", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, address: description, status: "planning" })
+            });
+
+            this.closeModal();
+            document.getElementById("projectName").value = "";
+            document.getElementById("projectDescription").value = "";
 
   async fillDesignTemplate(stage) {
     const project = this.currentProject();
@@ -365,30 +469,14 @@ class ConstructionManagerUI {
     }
   }
 
-  normalizeView(view) {
-    const map = {
-      dashboard: 'home',
-      design_schedule: 'designSchedule',
-      design: 'designSchedule',
-      summary_estimate: 'estimate',
-      estimate: 'estimate',
-      tep: 'tep',
-      projects: 'projects',
-      auth: 'auth',
-      home: 'home',
-    };
-    return map[view] || view;
-  }
-
   switchView(view, title) {
-    const normalizedView = this.normalizeView(view);
-    this.currentView = normalizedView;
-    if (normalizedView === 'tep') this.currentTemplateOwner = 'tep';
-    if (normalizedView === 'designSchedule') this.currentTemplateOwner = 'design_schedule';
-    if (normalizedView === 'estimate') this.currentTemplateOwner = 'summary_estimate';
+    this.currentView = view;
+    if (view === 'tep') this.currentTemplateOwner = 'tep';
+    if (view === 'designSchedule') this.currentTemplateOwner = 'design_schedule';
+    if (view === 'estimate') this.currentTemplateOwner = 'summary_estimate';
 
-    document.getElementById('pageTitle').textContent = title || 'Раздел';
-    document.querySelectorAll('.menu-item[data-view]').forEach((btn) => btn.classList.toggle('active', btn.dataset.view === normalizedView));
+    document.getElementById('pageTitle').textContent = title;
+    document.querySelectorAll('.menu-item[data-view]').forEach((btn) => btn.classList.toggle('active', btn.dataset.view === view));
     this.renderContent();
   }
 
@@ -398,6 +486,24 @@ class ConstructionManagerUI {
 
   openModal() { document.getElementById('entityModal').classList.add('open'); }
   closeModal() { document.getElementById('entityModal').classList.remove('open'); }
+            await this.loadProjects();
+            this.renderProjectTree();
+            this.showDashboard();
+
+            alert("Проект успешно добавлен!");
+        } catch (e) {
+            alert("Ошибка при создании проекта: " + e.message);
+        }
+    }
+
+    // Заглушка для будущих разделов
+    showSection(section) {
+        alert(`Раздел "${section}" будет открыт в следующей версии.\n\nСейчас доступны только базовые дашборды.`);
+    }
 }
 
-window.addEventListener('DOMContentLoaded', () => new ConstructionManagerUI());
+// Инициализация
+let ui;
+window.addEventListener("DOMContentLoaded", () => {
+    ui = new ConstructionManagerUI();
+});
