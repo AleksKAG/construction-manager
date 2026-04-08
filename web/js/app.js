@@ -115,7 +115,9 @@ class ConstructionManagerUI {
     tree.querySelectorAll('[data-view-link]').forEach((item) => {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.switchView(item.dataset.viewLink, item.dataset.viewTitle);
+        const rawView = item.dataset.viewLink;
+        const view = this.isKnownView(rawView) ? rawView : `template:${rawView}`;
+        this.switchView(view, item.dataset.viewTitle);
       });
     });
   }
@@ -156,7 +158,9 @@ class ConstructionManagerUI {
       auth: { primary: 'Выдать demo token', secondary: '' },
     };
 
-    const cfg = map[this.currentView] || map.home;
+    const cfg = this.isTemplateView(this.currentView)
+      ? { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' }
+      : (map[this.currentView] || map.home);
     primary.textContent = cfg.primary;
     if (cfg.secondary) {
       secondary.style.display = 'inline-block';
@@ -172,6 +176,10 @@ class ConstructionManagerUI {
     if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'ТЭП');
     if (this.currentView === 'estimate') return this.renderTemplateScreen('summary_estimate', 'Сметная документация');
     if (this.currentView === 'auth') return this.renderAuthView();
+    if (this.isTemplateView(this.currentView)) {
+      const { code, title } = this.resolveTemplateView(this.currentView);
+      return this.renderTemplateScreen(code, title);
+    }
 
     return this.renderHome();
   }
@@ -244,6 +252,7 @@ class ConstructionManagerUI {
           <input id="templateSearch" placeholder="Поиск" value="${this.templateSearch}">
           <button class="mini" id="templateSearchBtn">Найти</button>
           <button class="mini" id="pickTemplateBtn">Выбрать шаблон</button>
+          <button class="mini" id="createByTemplateBtn">Новая таблица по шаблону</button>
           <span class="metric">Стр. ${pager.page}, всего ${pager.total}</span>
           <button class="mini" id="prevPage">←</button>
           <button class="mini" id="nextPage">→</button>
@@ -264,6 +273,7 @@ class ConstructionManagerUI {
     };
 
     document.getElementById('pickTemplateBtn').onclick = () => this.openTemplatePicker(defaultCode);
+    document.getElementById('createByTemplateBtn').onclick = () => this.openTemplatePicker();
 
     document.getElementById('prevPage').onclick = () => {
       this.templatePage = Math.max(1, this.templatePage - 1);
@@ -287,7 +297,7 @@ class ConstructionManagerUI {
     });
   }
 
-  async openTemplatePicker(defaultCode) {
+  async openTemplatePicker(defaultCode = '') {
     const templates = await listTemplates();
     const filtered = templates.filter((t) => {
       if (defaultCode === 'design_schedule') return t.code.includes('design');
@@ -356,8 +366,8 @@ class ConstructionManagerUI {
       await issueDemoToken('admin');
       return alert('Demo token обновлён.');
     }
-    if (['tep', 'designSchedule', 'estimate'].includes(this.currentView)) {
-      const fallback = this.currentView === 'tep' ? 'tep' : this.currentView === 'estimate' ? 'summary_estimate' : 'design_schedule';
+    if (this.isTemplateView(this.currentView)) {
+      const fallback = this.resolveTemplateView(this.currentView).code;
       this.currentTemplateCode = this.currentTemplateCode || fallback;
       const tpl = await getTemplate(this.currentTemplateCode);
       return this.openTemplateForm(tpl, null);
@@ -370,8 +380,8 @@ class ConstructionManagerUI {
       this.renderProjectTree();
       return this.renderContent();
     }
-    if (['tep', 'designSchedule', 'estimate'].includes(this.currentView)) {
-      const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : this.currentView === 'estimate' ? 'summary_estimate' : 'design_schedule');
+    if (this.isTemplateView(this.currentView)) {
+      const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
       return exportTemplate(this.selectedObjectId, code);
     }
   }
@@ -398,6 +408,10 @@ class ConstructionManagerUI {
       this.currentTemplateCode = selected;
       this.templatePage = 1;
       this.closeModal();
+      if (!this.isTemplateView(this.currentView)) {
+        this.switchView(`template:${selected}`, `Таблица: ${selected}`);
+        return;
+      }
       return this.renderContent();
     }
 
@@ -406,7 +420,7 @@ class ConstructionManagerUI {
       document.querySelectorAll('[data-field]').forEach((input) => {
         data[input.dataset.field] = input.value;
       });
-      const code = this.currentTemplateCode || (this.currentView === 'tep' ? 'tep' : this.currentView === 'estimate' ? 'summary_estimate' : 'design_schedule');
+      const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
       if (this.editRowId) await updateTemplateRow(this.editRowId, data);
       else await createTemplateRow(this.selectedObjectId, code, data);
       this.closeModal();
@@ -417,6 +431,7 @@ class ConstructionManagerUI {
   switchView(view, title) {
     this.currentView = view;
     this.currentTemplateCode = null;
+    this.currentTemplateName = null;
     this.templatePage = 1;
     this.templateSearch = '';
 
@@ -445,6 +460,25 @@ class ConstructionManagerUI {
     document.getElementById('entityModal').classList.remove('open');
     this.modalMode = null;
     this.editRowId = null;
+  }
+
+  isTemplateView(view) {
+    return ['tep', 'designSchedule', 'estimate'].includes(view) || String(view || '').startsWith('template:');
+  }
+
+  isKnownView(view) {
+    return ['home', 'projects', 'auth', 'tep', 'designSchedule', 'estimate'].includes(view);
+  }
+
+  resolveTemplateView(view) {
+    if (view === 'tep') return { code: 'tep', title: 'ТЭП' };
+    if (view === 'designSchedule') return { code: 'design_schedule', title: 'График проектирования' };
+    if (view === 'estimate') return { code: 'summary_estimate', title: 'Сметная документация' };
+    if (String(view || '').startsWith('template:')) {
+      const code = String(view).replace('template:', '') || 'tep';
+      return { code, title: `Таблица: ${code}` };
+    }
+    return { code: 'tep', title: 'ТЭП' };
   }
 }
 
