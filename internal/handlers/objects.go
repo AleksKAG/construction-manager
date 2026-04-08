@@ -76,7 +76,7 @@ func UpdateObject(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		var input models.ProjectObject
+		var input projectObjectUpdatePayload
 		if err := c.ShouldBindJSON(&input); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -88,28 +88,7 @@ func UpdateObject(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		// Обновляем поля
-		if input.Name != "" {
-			existing.Name = input.Name
-		}
-		if input.Address != "" {
-			existing.Address = input.Address
-		}
-		if input.Budget > 0 {
-			existing.Budget = input.Budget
-		}
-		if input.Status != "" {
-			existing.Status = input.Status
-		}
-		if input.DurationDays > 0 {
-			existing.DurationDays = input.DurationDays
-		}
-		if input.CharMap != nil {
-			existing.CharMap = input.CharMap
-		}
-		if input.CostMap != nil {
-			existing.CostMap = input.CostMap
-		}
+		applyProjectObjectPatch(existing, input)
 
 		if err := repo.UpdateProject(c.Request.Context(), existing); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -192,7 +171,7 @@ func UpdateTask(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		var input models.GanttTask
+		var input ganttTaskUpdatePayload
 		if err := c.ShouldBindJSON(&input); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -204,25 +183,11 @@ func UpdateTask(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		// Обновляем поля
-		if input.Name != "" {
-			existing.Name = input.Name
+		if input.Progress != nil && (*input.Progress < 0 || *input.Progress > 100) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "progress must be in range [0, 100]"})
+			return
 		}
-		if input.StartDate != "" {
-			existing.StartDate = input.StartDate
-		}
-		if input.EndDate != "" {
-			existing.EndDate = input.EndDate
-		}
-		if input.Duration > 0 {
-			existing.Duration = input.Duration
-		}
-		if input.Progress >= 0 {
-			existing.Progress = input.Progress
-		}
-		if input.Status != "" {
-			existing.Status = input.Status
-		}
+		applyGanttTaskPatch(existing, input)
 
 		if err := repo.UpdateTask(c.Request.Context(), existing); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -278,4 +243,68 @@ func objParseInt(s string, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+type projectObjectUpdatePayload struct {
+	Name         *string             `json:"name"`
+	Address      *string             `json:"address"`
+	Budget       *float64            `json:"budget"`
+	Status       *string             `json:"status"`
+	DurationDays *int                `json:"duration_days"`
+	CharMap      *map[string]string  `json:"characteristics"`
+	CostMap      *map[string]float64 `json:"cost_estimates"`
+}
+
+func applyProjectObjectPatch(existing *models.ProjectObject, payload projectObjectUpdatePayload) {
+	if payload.Name != nil {
+		existing.Name = *payload.Name
+	}
+	if payload.Address != nil {
+		existing.Address = *payload.Address
+	}
+	if payload.Budget != nil {
+		existing.Budget = *payload.Budget
+	}
+	if payload.Status != nil {
+		existing.Status = *payload.Status
+	}
+	if payload.DurationDays != nil {
+		existing.DurationDays = *payload.DurationDays
+	}
+	if payload.CharMap != nil {
+		existing.CharMap = *payload.CharMap
+	}
+	if payload.CostMap != nil {
+		existing.CostMap = *payload.CostMap
+	}
+}
+
+type ganttTaskUpdatePayload struct {
+	Name      *string  `json:"name"`
+	StartDate *string  `json:"start_date"`
+	EndDate   *string  `json:"end_date"`
+	Duration  *int     `json:"duration"`
+	Progress  *float64 `json:"progress"`
+	Status    *string  `json:"status"`
+}
+
+func applyGanttTaskPatch(existing *models.GanttTask, payload ganttTaskUpdatePayload) {
+	if payload.Name != nil {
+		existing.Name = *payload.Name
+	}
+	if payload.StartDate != nil {
+		existing.StartDate = *payload.StartDate
+	}
+	if payload.EndDate != nil {
+		existing.EndDate = *payload.EndDate
+	}
+	if payload.Duration != nil {
+		existing.Duration = *payload.Duration
+	}
+	if payload.Progress != nil {
+		existing.Progress = *payload.Progress
+	}
+	if payload.Status != nil {
+		existing.Status = *payload.Status
+	}
 }
