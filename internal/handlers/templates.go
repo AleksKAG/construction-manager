@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func ListTemplates(repo *repository.ProjectRepository) gin.HandlerFunc {
+func ListTemplates(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		templates, err := repo.ListTemplateDefinitions(c.Request.Context())
 		if err != nil {
