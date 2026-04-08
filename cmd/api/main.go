@@ -128,21 +128,24 @@ func main() {
 		}
 
 		// Objects endpoints
+		api.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
+		api.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
+		// Gantt Tasks endpoints - перемещаем перед /objects/:id чтобы избежать конфликта
+		api.GET("/tasks", handlers.ListTasks(repo)) // GET all tasks (optional)
+		api.POST("/tasks", handlers.CreateTask(repo))
+		api.GET("/tasks/:id", handlers.GetTask(repo))
+		api.PUT("/tasks/:id", handlers.UpdateTask(repo))
+		api.DELETE("/tasks/:id", handlers.DeleteTask(repo))
+
+		// Objects endpoints должны быть ПОСЛЕ /tasks чтобы избежать конфликта
 		api.GET("/objects", handlers.ListObjects(repo))
 		api.POST("/objects", handlers.CreateObject(repo))
 		api.GET("/objects/:id", handlers.GetObject(repo))
 		api.GET("/objects/:id/menu", handlers.ListProjectMenu(repo))
 		api.PUT("/objects/:id", handlers.UpdateObject(repo))
 		api.DELETE("/objects/:id", handlers.DeleteObject(repo))
-
-		api.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
-		api.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
-		// Gantt Tasks endpoints
-		api.GET("/objects/:id/tasks", handlers.ListTasks(repo))
-		api.POST("/tasks", handlers.CreateTask(repo))
-		api.GET("/tasks/:id", handlers.GetTask(repo))
-		api.PUT("/tasks/:id", handlers.UpdateTask(repo))
-		api.DELETE("/tasks/:id", handlers.DeleteTask(repo))
+		// Задачи по объекту - используем query параметр вместо path
+		api.GET("/tasks/by-object", handlers.ListTasksByObject(repo))
 
 	}
 

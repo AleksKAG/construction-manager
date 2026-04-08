@@ -116,12 +116,20 @@ func DeleteObject(repo repository.Repository) gin.HandlerFunc {
 
 func ListTasks(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		objectID := c.Param("id")
-		if objectID == "" {
-			objectID = c.Param("object_id")
+		tasks, err := repo.ListTasksByProject(c.Request.Context(), "")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
+		c.JSON(http.StatusOK, tasks)
+	}
+}
+
+func ListTasksByObject(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		objectID := c.Query("object_id")
 		if objectID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "object_id is required"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "object_id query parameter is required"})
 			return
 		}
 
