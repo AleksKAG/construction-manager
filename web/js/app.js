@@ -9,6 +9,29 @@ import {
   exportTemplate,
 } from './templates.js';
 
+const DEFAULT_TEP_ROWS = [
+  { num: '', indicator: 'Характеристика земельного участка', unit: '', amount: '' },
+  { num: '1', indicator: 'Общая площадь земельного участка', unit: 'м2', amount: '' },
+  { num: '2', indicator: 'Площадь участка в границах проектирования', unit: 'м2', amount: '' },
+  { num: '3', indicator: 'Площадь застройки', unit: 'м2', amount: '' },
+  { num: '4', indicator: 'Площадь озеленения', unit: 'м2', amount: '' },
+  { num: '5', indicator: 'Площадь покрытий', unit: 'м2', amount: '' },
+  { num: '', indicator: 'Характеристики зданий, строений, сооружений', unit: '', amount: '' },
+  { num: '6', indicator: 'Строительный объем', unit: 'м3', amount: '' },
+  { num: '7', indicator: 'Общая площадь здания', unit: 'м2', amount: '' },
+  { num: '8', indicator: 'Высота этажа (в чистоте)', unit: 'м', amount: '' },
+  { num: '9', indicator: 'Количество этажей', unit: '', amount: '' },
+  { num: '', indicator: 'Потребность объекта капитального строительства в топливе, газе, воде и электрической энергии', unit: '', amount: '' },
+  { num: '10', indicator: 'Холодное водоснабжение', unit: 'м3/сут', amount: '' },
+  { num: '11', indicator: 'Горячее водоснабжение', unit: 'м3/сут', amount: '' },
+  { num: '12', indicator: 'Водоотведение хозяйственно-бытовых сточных вод', unit: 'м3/сут', amount: '' },
+  { num: '13', indicator: 'Расход тепла', unit: 'кВт', amount: '' },
+  { num: '14', indicator: 'в т.ч. - отопление, вентиляцию', unit: 'кВт', amount: '' },
+  { num: '15', indicator: 'ГВС', unit: 'кВт', amount: '' },
+  { num: '16', indicator: 'Установленная мощность', unit: 'кВт', amount: '' },
+  { num: '17', indicator: 'Расчетная мощность', unit: 'кВт', amount: '' },
+];
+
 class ConstructionManagerUI {
   constructor() {
     this.currentView = 'home';
@@ -59,6 +82,26 @@ class ConstructionManagerUI {
 
   currentProject() {
     return this.objects.find((o) => String(o.id) === String(this.selectedObjectId));
+  }
+
+  normalizeTemplateColumnTitle(code, column) {
+    if (code !== 'tep') return column.title;
+    const titles = {
+      num: '№ п/п',
+      indicator: 'Наименование',
+      unit: 'Ед. изм.',
+      amount: 'Количество',
+    };
+    return titles[column.field_key] || column.title;
+  }
+
+  async ensureDefaultTemplateRows(projectId, code, rowsPayload) {
+    const rows = rowsPayload.data || [];
+    if (code !== 'tep' || rows.length > 0 || this.templateSearch) return rowsPayload;
+    for (let i = 0; i < DEFAULT_TEP_ROWS.length; i += 1) {
+      await createTemplateRow(projectId, code, DEFAULT_TEP_ROWS[i]);
+    }
+    return listTemplateRows(projectId, code, { page: this.templatePage, page_size: 20, search: this.templateSearch });
   }
 
   async loadProjectMenu(projectId) {
@@ -252,6 +295,7 @@ class ConstructionManagerUI {
     }
 
     const columns = tpl.columns || [];
+    rowsPayload = await this.ensureDefaultTemplateRows(project.id, code, rowsPayload);
     const rows = rowsPayload.data || [];
     const pager = rowsPayload.pagination || { page: 1, total: rows.length, page_size: 20 };
 
@@ -264,14 +308,12 @@ class ConstructionManagerUI {
         <div class="row-actions" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;">
           <input id="templateSearch" placeholder="Поиск" value="${this.templateSearch}">
           <button class="mini" id="templateSearchBtn">Найти</button>
-          <button class="mini" id="pickTemplateBtn">Выбрать шаблон</button>
-          <button class="mini" id="createByTemplateBtn">Новая таблица по шаблону</button>
           <span class="metric">Стр. ${pager.page}, всего ${pager.total}</span>
           <button class="mini" id="prevPage">←</button>
           <button class="mini" id="nextPage">→</button>
         </div>
         <table class="table">
-          <thead><tr>${columns.map((c) => `<th>${c.title}</th>`).join('')}<th>Действия</th></tr></thead>
+          <thead><tr>${columns.map((c) => `<th>${this.normalizeTemplateColumnTitle(code, c)}</th>`).join('')}<th>Действия</th></tr></thead>
           <tbody>
             ${rows.map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ''}</td>`).join('')}<td><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button></td></tr>`).join('') || `<tr><td colspan="${columns.length + 1}">Нет данных</td></tr>`}
           </tbody>
@@ -284,9 +326,6 @@ class ConstructionManagerUI {
       this.templatePage = 1;
       this.renderTemplateScreen(defaultCode, title);
     };
-
-    document.getElementById('pickTemplateBtn').onclick = () => this.openTemplatePicker(defaultCode);
-    document.getElementById('createByTemplateBtn').onclick = () => this.openTemplatePicker();
 
     document.getElementById('prevPage').onclick = () => {
       this.templatePage = Math.max(1, this.templatePage - 1);
