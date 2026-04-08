@@ -64,10 +64,6 @@ class ConstructionManagerUI {
       btn.addEventListener('click', () => this.switchView(btn.dataset.view, btn.textContent.trim()));
     });
 
-    document.getElementById('toggleSidebar')?.addEventListener('click', () => {
-      document.getElementById('sidebar').classList.toggle('open');
-    });
-
     document.getElementById('primaryBtn')?.addEventListener('click', () => this.handlePrimaryAction());
     document.getElementById('secondaryBtn')?.addEventListener('click', () => this.handleSecondaryAction());
     document.getElementById('saveEntity')?.addEventListener('click', () => this.handleSaveModal());
@@ -145,11 +141,10 @@ class ConstructionManagerUI {
       row.addEventListener('click', async () => {
         const pid = String(row.dataset.project);
         this.selectedObjectId = pid;
-        if (this.expandedProjects.has(pid)) this.expandedProjects.delete(pid);
-        else {
-          this.expandedProjects.add(pid);
-          await this.loadProjectMenu(pid);
-        }
+        // Close all other expanded projects and only expand the selected one
+        this.expandedProjects.clear();
+        this.expandedProjects.add(pid);
+        await this.loadProjectMenu(pid);
         this.renderProjectTree();
         this.renderContent();
       });
@@ -170,8 +165,12 @@ class ConstructionManagerUI {
         e.stopPropagation();
         const key = item.dataset.menuToggle;
         if (!key) return;
-        if (this.expandedMenuNodes.has(key)) this.expandedMenuNodes.delete(key);
-        else this.expandedMenuNodes.add(key);
+        // Clear all expanded menu nodes for other projects and toggle only the clicked one
+        const projectId = key.split(':')[0];
+        this.expandedMenuNodes.clear();
+        if (!this.expandedMenuNodes.has(key)) {
+          this.expandedMenuNodes.add(key);
+        }
         this.renderProjectTree();
       });
     });

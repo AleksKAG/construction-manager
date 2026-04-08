@@ -59,7 +59,7 @@ button { font: inherit; }
 .dialog label { display: block; font-size: 13px; margin-bottom: 10px; color: var(--muted); }
 .dialog input, .dialog textarea { width: 100%; margin-top: 6px; border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-@media (max-width: 1100px){ .layout{grid-template-columns: 1fr;} .sidebar{display:none;} .sidebar.open{display:block; position:fixed; inset:0 auto 0 0; width:320px; z-index:20;} .col-4,.col-6,.col-8{grid-column:span 12;} }
+@media (max-width: 1100px){ .layout{grid-template-columns: 1fr;} .sidebar{display:none;} .col-4,.col-6,.col-8{grid-column:span 12;} }
 
 .notice{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#f8fbff;font-size:13px;}
 .row-actions{display:flex;gap:6px;}
