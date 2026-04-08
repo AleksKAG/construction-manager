@@ -150,6 +150,14 @@ class ConstructionApp {
             });
         }
 
+        // Sidebar close button
+        const sidebarClose = document.getElementById('sidebarClose');
+        if (sidebarClose) {
+            sidebarClose.addEventListener('click', () => {
+                document.getElementById('sidebar').classList.remove('active');
+            });
+        }
+
         // Add action button
         const addActionBtn = document.getElementById('addActionBtn');
         if (addActionBtn) {

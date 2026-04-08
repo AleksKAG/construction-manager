@@ -68,6 +68,22 @@ class ConstructionManagerUI {
     document.getElementById('secondaryBtn')?.addEventListener('click', () => this.handleSecondaryAction());
     document.getElementById('saveEntity')?.addEventListener('click', () => this.handleSaveModal());
     document.querySelectorAll('[data-close="true"]').forEach((el) => el.addEventListener('click', () => this.closeModal()));
+
+    // Mobile menu toggle
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    if (mobileMenuBtn) {
+      mobileMenuBtn.addEventListener('click', () => {
+        document.getElementById('sidebar').classList.add('active');
+      });
+    }
+
+    // Sidebar close button
+    const sidebarClose = document.getElementById('sidebarClose');
+    if (sidebarClose) {
+      sidebarClose.addEventListener('click', () => {
+        document.getElementById('sidebar').classList.remove('active');
+      });
+    }
   }
 
   async loadObjects() {
@@ -150,7 +166,15 @@ class ConstructionManagerUI {
       });
     });
 
-    tree.querySelector('[data-add-project]')?.addEventListener('click', () => this.openProjectForm());
+    tree.querySelectorAll('[data-add-project]')?.addEventListener('click', () => this.openProjectForm());
+    tree.querySelectorAll('[data-edit-project]').forEach((item) => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const pid = item.dataset.editProject;
+        const project = this.objects.find((o) => String(o.id) === String(pid));
+        if (project) this.openProjectForm(project);
+      });
+    });
     tree.querySelectorAll('[data-view-link]').forEach((item) => {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -178,7 +202,11 @@ class ConstructionManagerUI {
 
   renderProjectSubmenu(projectId) {
     const menu = this.projectMenus[projectId] || [];
-    return this.renderMenuNodes(projectId, menu || [], 1);
+    const project = this.objects.find((o) => String(o.id) === String(projectId));
+    const editBtn = project
+      ? `<div class="tree-row level-1" data-edit-project="${projectId}" style="color:#7eb4ff;">✏️ Редактировать проект</div>`
+      : '';
+    return `${editBtn}${this.renderMenuNodes(projectId, menu || [], 1)}`;
   }
 
   renderMenuNodes(projectId, nodes, level = 1) {
@@ -207,13 +235,13 @@ class ConstructionManagerUI {
     const map = {
       home: { primary: '+ Добавить проект', secondary: 'Обновить дашборд' },
       projects: { primary: '+ Добавить проект', secondary: 'Обновить список' },
-      designSchedule: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
+      designSchedule: { primary: '+ Добавить этап ПД', secondary: 'Экспорт в CSV' },
       tep: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
       estimate: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
       auth: { primary: 'Выдать demo token', secondary: '' },
     };
 
-    const cfg = this.isTemplateView(this.currentView)
+    const cfg = this.isTemplateView(this.currentView) && this.currentView !== 'designSchedule'
       ? { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' }
       : (map[this.currentView] || map.home);
     primary.textContent = cfg.primary;
@@ -227,7 +255,7 @@ class ConstructionManagerUI {
     this.configureHeader();
 
     if (this.currentView === 'projects') return this.renderProjects();
-    if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График проектирования');
+    if (this.currentView === 'designSchedule') return this.renderDesignScheduleScreen();
     if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'ТЭП');
     if (this.currentView === 'estimate') return this.renderTemplateScreen('summary_estimate', 'Сметная документация');
     if (this.currentView === 'auth') return this.renderAuthView();
@@ -391,19 +419,19 @@ class ConstructionManagerUI {
     this.openModal();
   }
 
-  openProjectForm() {
-    this.modalMode = 'createProject';
-    document.getElementById('modalTitle').textContent = 'Добавить проект';
+  openProjectForm(project = null) {
+    this.modalMode = project ? 'editProject' : 'createProject';
+    document.getElementById('modalTitle').textContent = project ? 'Редактировать проект' : 'Добавить проект';
     document.getElementById('modalBody').innerHTML = `
       <div class="form-grid">
-        <label>Наименование *<input data-project-field="name" type="text" placeholder="Наименование"></label>
-        <label>Адрес<input data-project-field="address" type="text" placeholder="Адрес"></label>
+        <label>Наименование *<input data-project-field="name" type="text" placeholder="Наименование" value="${project?.name || ''}"></label>
+        <label>Адрес<input data-project-field="address" type="text" placeholder="Адрес" value="${project?.address || ''}"></label>
         <label>Статус
           <select data-project-field="status">
-            <option value="planning">planning</option>
-            <option value="design">design</option>
-            <option value="construction">construction</option>
-            <option value="complete">complete</option>
+            <option value="planning" ${project?.status === 'planning' ? 'selected' : ''}>planning</option>
+            <option value="design" ${project?.status === 'design' ? 'selected' : ''}>design</option>
+            <option value="construction" ${project?.status === 'construction' ? 'selected' : ''}>construction</option>
+            <option value="complete" ${project?.status === 'complete' ? 'selected' : ''}>complete</option>
           </select>
         </label>
       </div>
@@ -416,6 +444,11 @@ class ConstructionManagerUI {
     if (this.currentView === 'auth') {
       await issueDemoToken('admin');
       return alert('Demo token обновлён.');
+    }
+    if (this.currentView === 'designSchedule') {
+      this.currentTemplateCode = 'design_schedule';
+      const tpl = await getTemplate(this.currentTemplateCode);
+      return this.openTemplateForm(tpl, null);
     }
     if (this.isTemplateView(this.currentView)) {
       const fallback = this.resolveTemplateView(this.currentView).code;
@@ -430,6 +463,9 @@ class ConstructionManagerUI {
       await this.loadObjects();
       this.renderProjectTree();
       return this.renderContent();
+    }
+    if (this.currentView === 'designSchedule') {
+      return exportTemplate(this.selectedObjectId, 'design_schedule');
     }
     if (this.isTemplateView(this.currentView)) {
       const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
@@ -450,6 +486,20 @@ class ConstructionManagerUI {
       this.closeModal();
       this.renderProjectTree();
       this.switchView('projects', 'Проекты');
+      return;
+    }
+
+    if (this.modalMode === 'editProject') {
+      const name = (document.querySelector('[data-project-field="name"]')?.value || '').trim();
+      const address = (document.querySelector('[data-project-field="address"]')?.value || '').trim();
+      const status = (document.querySelector('[data-project-field="status"]')?.value || 'planning').trim();
+      if (!name) return alert('Введите наименование проекта');
+
+      await api(`/objects/${this.selectedObjectId}`, 'PUT', { name, address, status });
+      await this.loadObjects();
+      this.closeModal();
+      this.renderProjectTree();
+      this.renderContent();
       return;
     }
 
@@ -505,6 +555,113 @@ class ConstructionManagerUI {
         <div class="notice">Если вкладки таблиц не открываются, нажмите «Выдать demo token» в правом верхнем углу и обновите страницу.</div>
       </article>
     `;
+  }
+
+  async renderDesignScheduleScreen() {
+    const project = this.currentProject();
+    if (!project) {
+      document.getElementById('contentArea').innerHTML = '<article class="card col-12"><h3>Нет проектов</h3><p>Добавьте проект, чтобы работать с графиками.</p></article>';
+      return;
+    }
+
+    let pdRowsPayload, rdRowsPayload;
+    try {
+      [pdRowsPayload, rdRowsPayload] = await Promise.all([
+        listTemplateRows(project.id, 'design_schedule', { page: 1, page_size: 100 }),
+        listTemplateRows(project.id, 'working_docs_schedule', { page: 1, page_size: 100 }),
+      ]);
+    } catch (error) {
+      document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>График проектирования</h3><p>${error.message}</p></article>`;
+      return;
+    }
+
+    const pdRows = pdRowsPayload.data || [];
+    const rdRows = rdRowsPayload.data || [];
+
+    const calcProgress = (rows) => {
+      if (!rows.length) return 0;
+      const withProgress = rows.filter((r) => r.data?.progress !== undefined && r.data?.progress !== '');
+      if (!withProgress.length) return 0;
+      const sum = withProgress.reduce((acc, r) => acc + (parseFloat(r.data.progress) || 0), 0);
+      return Math.round(sum / withProgress.length);
+    };
+
+    const pdProgress = calcProgress(pdRows);
+    const rdProgress = calcProgress(rdRows);
+
+    const renderDashboard = (title, code, rows, progress, defaultCode) => {
+      const statusColor = progress >= 100 ? '#08a66c' : progress >= 50 ? '#2663ff' : '#d48806';
+      return `
+        <article class="card col-6" data-dashboard="${code}" style="cursor:pointer;">
+          <span class="tag">${title}</span>
+          <div class="kpi"><span>Выполнение</span><strong style="color:${statusColor}">${progress}%</strong></div>
+          <div class="progress"><span style="width:${progress}%;background:${statusColor}"></span></div>
+          <p class="metric">Всего этапов: ${rows.length}</p>
+        </article>
+      `;
+    };
+
+    const renderTable = (title, rows, columns) => {
+      if (!columns.length) return '';
+      return `
+        <article class="card col-12" style="margin-top:14px;">
+          <h4>${title}</h4>
+          <table class="table">
+            <thead><tr>${columns.map((c) => `<th>${c.title}</th>`).join('')}<th>Действия</th></tr></thead>
+            <tbody>
+              ${rows.map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ''}</td>`).join('')}<td><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button></td></tr>`).join('') || `<tr><td colspan="${columns.length + 1}">Нет данных</td></tr>`}
+            </tbody>
+          </table>
+        </article>
+      `;
+    };
+
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-12">
+        <h3>График проектирования</h3>
+        <p class="metric">Нажмите на дашборд, чтобы просмотреть подробную таблицу</p>
+        <div class="grid" style="margin-top:14px;">
+          ${renderDashboard('Проектная документация', 'design_schedule', pdRows, pdProgress)}
+          ${renderDashboard('Рабочая документация', 'working_docs_schedule', rdRows, rdProgress)}
+        </div>
+        <div id="dashboardDetails" class="grid"></div>
+      </article>
+    `;
+
+    document.querySelectorAll('[data-dashboard]').forEach((card) => {
+      card.addEventListener('click', async () => {
+        const code = card.dataset.dashboard;
+        const title = code === 'design_schedule' ? 'Проектная документация' : 'Рабочая документация';
+        const isPD = code === 'design_schedule';
+        const currentRows = isPD ? pdRows : rdRows;
+
+        let tpl;
+        try {
+          tpl = await getTemplate(code);
+        } catch (error) {
+          document.getElementById('dashboardDetails').innerHTML = `<article class="card col-12"><p>${error.message}</p></article>`;
+          return;
+        }
+
+        const columns = tpl.columns || [];
+        const tableHTML = renderTable(title, currentRows, columns);
+        document.getElementById('dashboardDetails').innerHTML = tableHTML;
+
+        document.querySelectorAll('#dashboardDetails [data-edit-row]').forEach((btn) => {
+          btn.onclick = () => this.openTemplateForm(tpl, currentRows.find((r) => String(r.id) === String(btn.dataset.editRow)));
+        });
+
+        document.querySelectorAll('#dashboardDetails [data-del-row]').forEach((btn) => {
+          btn.onclick = async () => {
+            await deleteTemplateRow(btn.dataset.delRow);
+            this.renderDesignScheduleScreen();
+          };
+        });
+
+        document.querySelectorAll('[data-dashboard]').forEach((c) => c.style.border = '1px solid var(--line)');
+        card.style.border = '2px solid var(--primary)';
+      });
+    });
   }
 
   openModal() {
