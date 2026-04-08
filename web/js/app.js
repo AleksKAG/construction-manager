@@ -52,7 +52,7 @@ class ConstructionManagerUI {
 
   async loadObjects() {
     const payload = await api('/objects?page=1&page_size=200');
-    this.objects = payload.data || [];
+    this.objects = Array.isArray(payload) ? payload : (payload?.data || []);
     if (!this.selectedObjectId && this.objects.length) this.selectedObjectId = this.objects[0].id;
   }
 
