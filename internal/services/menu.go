@@ -15,6 +15,9 @@ func EnsureProjectMenus(ctx context.Context, db *gorm.DB) error {
 		if err := EnsureDefaultProjectMenu(db.WithContext(ctx), p.ID); err != nil {
 			return err
 		}
+		if err := EnsureProjectMenuStructure(db.WithContext(ctx), p.ID); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -42,8 +45,9 @@ func EnsureDefaultProjectMenu(db *gorm.DB, projectID string) error {
 	}
 
 	children := []models.MenuItem{
-		{ProjectID: projectID, ParentID: items[0].ID, Title: "График проектирования", ViewKey: "designSchedule", ItemType: "view", SortOrder: 1},
-		{ProjectID: projectID, ParentID: items[0].ID, Title: "Документация (Проектирование)", ItemType: "section", SortOrder: 2},
+		{ProjectID: projectID, ParentID: items[0].ID, Title: "ТЭП", ViewKey: "tep", ItemType: "view", SortOrder: 1},
+		{ProjectID: projectID, ParentID: items[0].ID, Title: "График проектирования", ViewKey: "designSchedule", ItemType: "view", SortOrder: 2},
+		{ProjectID: projectID, ParentID: items[0].ID, Title: "Документация (Проектирование)", ItemType: "section", SortOrder: 3},
 
 		{ProjectID: projectID, ParentID: items[1].ID, Title: "Сметная документация согласованная в экспертизе", ViewKey: "estimate", ItemType: "view", SortOrder: 1},
 		{ProjectID: projectID, ParentID: items[1].ID, Title: "Корректировка смет", ItemType: "section", SortOrder: 2},
@@ -92,4 +96,33 @@ func EnsureDefaultProjectMenu(db *gorm.DB, projectID string) error {
 		{ProjectID: projectID, ParentID: adjustNode.ID, Title: "Сметы изм", ItemType: "leaf", SortOrder: 3},
 		{ProjectID: projectID, ParentID: adjustNode.ID, Title: "Экспертиза повторная", ItemType: "leaf", SortOrder: 4},
 	}).Error
+}
+
+func EnsureProjectMenuStructure(db *gorm.DB, projectID string) error {
+	var designSection models.MenuItem
+	if err := db.Where("project_id = ? AND parent_id = ? AND title = ?", projectID, "", "Проектирование").First(&designSection).Error; err != nil {
+		return nil
+	}
+
+	var tepItem models.MenuItem
+	if err := db.Where("project_id = ? AND parent_id = ? AND title = ?", projectID, designSection.ID, "ТЭП").First(&tepItem).Error; err != nil {
+		if err := db.Create(&models.MenuItem{
+			ProjectID: projectID,
+			ParentID:  designSection.ID,
+			Title:     "ТЭП",
+			ViewKey:   "tep",
+			ItemType:  "view",
+			SortOrder: 1,
+		}).Error; err != nil {
+			return err
+		}
+	} else if tepItem.ViewKey != "tep" || tepItem.SortOrder != 1 {
+		if err := db.Model(&tepItem).Updates(map[string]any{"view_key": "tep", "sort_order": 1, "item_type": "view"}).Error; err != nil {
+			return err
+		}
+	}
+
+	return db.Model(&models.MenuItem{}).
+		Where("project_id = ? AND parent_id = ? AND title = ?", projectID, designSection.ID, "График проектирования").
+		Updates(map[string]any{"sort_order": 2, "view_key": "designSchedule", "item_type": "view"}).Error
 }
