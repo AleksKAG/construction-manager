@@ -35,14 +35,9 @@ func ListObjects(repo repository.Repository) gin.HandlerFunc {
 		}
 		end := objMin(len(filtered), start+pageSize)
 
-		c.JSON(http.StatusOK, gin.H{
-			"data": filtered[start:end],
-			"pagination": gin.H{
-				"page":      page,
-				"page_size": pageSize,
-				"total":     len(filtered),
-			},
-		})
+		_ = page
+		_ = pageSize
+		c.JSON(http.StatusOK, filtered[start:end])
 	}
 }
 
