@@ -8,14 +8,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-<div class="layout">
-  <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <div class="brand-mark">CM</div>
-      <div>
-        <div class="brand-title">Construction Manager</div>
-        <div class="brand-subtitle">Технический заказчик</div>
+<div class="layout" id="appLayout">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar" aria-hidden="false">
+    <div class="sidebar-top">
+      <div class="brand">
+        <div class="brand-mark">CM</div>
+        <div>
+          <div class="brand-title">Construction Manager</div>
+          <div class="brand-subtitle">Технический заказчик</div>
+        </div>
       </div>
+      <button class="sidebar-close" id="sidebarCloseBtn" aria-label="Закрыть меню">✕</button>
     </div>
 
     <div class="section-title">Основное</div>
@@ -29,8 +33,9 @@
     <div id="projectTree" class="tree"></div>
   </aside>
 
-  <main class="content">
+  <main class="content" id="mainContent">
     <header class="header">
+      <button id="mobileMenuBtn" class="ghost mobile-only" aria-label="Открыть меню">☰</button>
       <h1 id="pageTitle">Главная</h1>
       <button id="secondaryBtn" class="ghost" style="display:none"></button>
       <button id="primaryBtn" class="primary">+ Добавить проект</button>

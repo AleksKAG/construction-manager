@@ -34,6 +34,19 @@ const DEFAULT_TEP_ROWS = [
 
 class ConstructionManagerUI {
   constructor() {
+    this.state = {
+      sidebarOpen: JSON.parse(localStorage.getItem('cm_sidebar_open') || 'true'),
+      isDesktop: window.matchMedia('(min-width: 1024px)').matches,
+      dashboards: JSON.parse(localStorage.getItem('cm_dashboards') || '[]'),
+      dashboardRefreshSeconds: Number(localStorage.getItem('cm_dashboard_refresh_sec') || 60),
+      projectRefreshSeconds: 120,
+      dashboardRefreshing: false,
+      projectsRefreshing: false,
+      modalDirty: false,
+      editProjectId: null,
+      projectFormSnapshot: '',
+    };
+
     this.currentView = 'home';
     this.objects = [];
     this.selectedObjectId = null;
@@ -47,15 +60,23 @@ class ConstructionManagerUI {
     this.expandedProjects = new Set();
     this.expandedMenuNodes = new Set();
     this.projectMenus = {};
+    this.dashboardTimer = null;
+    this.projectsTimer = null;
+    this.touchStartX = null;
 
     this.bind();
+    this.setupResponsiveSidebar();
     this.bootstrap();
   }
 
   async bootstrap() {
     if (!localStorage.getItem('cm_token')) await issueDemoToken('admin');
     await this.loadObjects();
+    if (!this.state.dashboards.length) this.seedDashboards();
     this.renderProjectTree();
+    this.applySidebarState();
+    this.bindConnectivity();
+    this.setupAutoRefresh();
     await this.renderContent();
   }
 
@@ -67,7 +88,99 @@ class ConstructionManagerUI {
     document.getElementById('primaryBtn')?.addEventListener('click', () => this.handlePrimaryAction());
     document.getElementById('secondaryBtn')?.addEventListener('click', () => this.handleSecondaryAction());
     document.getElementById('saveEntity')?.addEventListener('click', () => this.handleSaveModal());
-    document.querySelectorAll('[data-close="true"]').forEach((el) => el.addEventListener('click', () => this.closeModal()));
+    document.querySelectorAll('[data-close="true"]').forEach((el) => el.addEventListener('click', () => this.handleModalCancel()));
+
+    document.getElementById('mobileMenuBtn')?.addEventListener('click', () => this.toggleSidebar(true));
+    document.getElementById('sidebarCloseBtn')?.addEventListener('click', () => this.toggleSidebar(false));
+    document.getElementById('sidebarBackdrop')?.addEventListener('click', () => this.toggleSidebar(false));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        this.toggleSidebar(false);
+        if (this.modalMode) this.handleModalCancel();
+      }
+    });
+
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) {
+      sidebar.addEventListener('touchstart', (e) => {
+        this.touchStartX = e.changedTouches?.[0]?.clientX ?? null;
+      }, { passive: true });
+      sidebar.addEventListener('touchend', (e) => {
+        const endX = e.changedTouches?.[0]?.clientX;
+        if (this.touchStartX != null && endX != null && this.touchStartX - endX > 70 && !this.state.isDesktop) {
+          this.toggleSidebar(false);
+        }
+      }, { passive: true });
+    }
+  }
+
+  setupResponsiveSidebar() {
+    const media = window.matchMedia('(min-width: 1024px)');
+    const handler = (ev) => {
+      this.state.isDesktop = ev.matches;
+      this.applySidebarState();
+    };
+    if (media.addEventListener) media.addEventListener('change', handler);
+    else media.addListener(handler);
+  }
+
+  toggleSidebar(open) {
+    this.state.sidebarOpen = open;
+    localStorage.setItem('cm_sidebar_open', JSON.stringify(open));
+    this.applySidebarState();
+  }
+
+  applySidebarState() {
+    const layout = document.getElementById('appLayout');
+    if (!layout) return;
+    layout.classList.toggle('sidebar-mobile-open', !this.state.isDesktop && this.state.sidebarOpen);
+  }
+
+  bindConnectivity() {
+    const rerender = () => {
+      if (this.currentView === 'home') this.renderHome();
+    };
+    window.addEventListener('online', rerender);
+    window.addEventListener('offline', rerender);
+  }
+
+  setupAutoRefresh() {
+    clearInterval(this.dashboardTimer);
+    clearInterval(this.projectsTimer);
+
+    this.dashboardTimer = setInterval(async () => {
+      if (this.currentView !== 'home') return;
+      this.state.dashboardRefreshing = true;
+      this.renderHome();
+      await this.loadObjects();
+      this.state.dashboardRefreshing = false;
+      this.renderHome();
+    }, this.state.dashboardRefreshSeconds * 1000);
+
+    this.projectsTimer = setInterval(async () => {
+      if (this.currentView !== 'projects') return;
+      this.state.projectsRefreshing = true;
+      this.renderProjects();
+      await this.loadObjects();
+      this.state.projectsRefreshing = false;
+      this.renderProjects();
+    }, this.state.projectRefreshSeconds * 1000);
+  }
+
+  seedDashboards() {
+    this.state.dashboards = this.objects.slice(0, 3).map((o, i) => ({
+      id: crypto.randomUUID(),
+      projectId: o.id,
+      projectName: o.name,
+      type: i === 0 ? 'basic' : i === 1 ? 'extended' : 'financial',
+      title: `${o.name} (${i === 0 ? 'Карточка' : i === 1 ? 'Расширенный' : 'Финансовый'})`,
+    }));
+    this.persistDashboards();
+  }
+
+  persistDashboards() {
+    localStorage.setItem('cm_dashboards', JSON.stringify(this.state.dashboards));
   }
 
   async loadObjects() {
@@ -82,21 +195,14 @@ class ConstructionManagerUI {
 
   normalizeTemplateColumnTitle(code, column) {
     if (code !== 'tep') return column.title;
-    const titles = {
-      num: '№ п/п',
-      indicator: 'Наименование',
-      unit: 'Ед. изм.',
-      amount: 'Количество',
-    };
+    const titles = { num: '№ п/п', indicator: 'Наименование', unit: 'Ед. изм.', amount: 'Количество' };
     return titles[column.field_key] || column.title;
   }
 
   async ensureDefaultTemplateRows(projectId, code, rowsPayload) {
     const rows = rowsPayload.data || [];
     if (code !== 'tep' || rows.length > 0 || this.templateSearch) return rowsPayload;
-    for (let i = 0; i < DEFAULT_TEP_ROWS.length; i += 1) {
-      await createTemplateRow(projectId, code, DEFAULT_TEP_ROWS[i]);
-    }
+    for (let i = 0; i < DEFAULT_TEP_ROWS.length; i += 1) await createTemplateRow(projectId, code, DEFAULT_TEP_ROWS[i]);
     return listTemplateRows(projectId, code, { page: this.templatePage, page_size: 20, search: this.templateSearch });
   }
 
@@ -115,15 +221,13 @@ class ConstructionManagerUI {
     if (!tree) return;
 
     const projectRows = this.projectsMenuOpen
-      ? this.objects
-          .map((project) => {
-            const id = String(project.id);
-            const active = String(this.selectedObjectId) === id;
-            const expanded = this.expandedProjects.has(id);
-            const submenu = expanded ? this.renderProjectSubmenu(project.id) : '';
-            return `<div class="tree-row ${active ? 'active' : ''}" data-project="${project.id}">${expanded ? '▼' : '▶'} ${project.name}</div>${submenu}`;
-          })
-          .join('')
+      ? this.objects.map((project) => {
+          const id = String(project.id);
+          const active = String(this.selectedObjectId) === id;
+          const expanded = this.expandedProjects.has(id);
+          const submenu = expanded ? this.renderProjectSubmenu(project.id) : '';
+          return `<div class="tree-row ${active ? 'active' : ''}" data-project="${project.id}">${expanded ? '▼' : '▶'} ${project.name}</div>${submenu}`;
+        }).join('')
       : '';
 
     tree.innerHTML = `
@@ -141,12 +245,12 @@ class ConstructionManagerUI {
       row.addEventListener('click', async () => {
         const pid = String(row.dataset.project);
         this.selectedObjectId = pid;
-        // Close all other expanded projects and only expand the selected one
         this.expandedProjects.clear();
         this.expandedProjects.add(pid);
         await this.loadProjectMenu(pid);
         this.renderProjectTree();
         this.renderContent();
+        if (!this.state.isDesktop) this.toggleSidebar(false);
       });
     });
 
@@ -165,12 +269,8 @@ class ConstructionManagerUI {
         e.stopPropagation();
         const key = item.dataset.menuToggle;
         if (!key) return;
-        // Clear all expanded menu nodes for other projects and toggle only the clicked one
-        const projectId = key.split(':')[0];
-        this.expandedMenuNodes.clear();
-        if (!this.expandedMenuNodes.has(key)) {
-          this.expandedMenuNodes.add(key);
-        }
+        if (this.expandedMenuNodes.has(key)) this.expandedMenuNodes.delete(key);
+        else this.expandedMenuNodes.add(key);
         this.renderProjectTree();
       });
     });
@@ -182,19 +282,17 @@ class ConstructionManagerUI {
   }
 
   renderMenuNodes(projectId, nodes, level = 1) {
-    return (nodes || [])
-      .map((node) => {
-        const nodeKey = `${projectId}:${node.id}`;
-        const hasChildren = Array.isArray(node.children) && node.children.length > 0;
-        const expanded = hasChildren && this.expandedMenuNodes.has(nodeKey);
-        const marker = hasChildren ? (expanded ? '▼ ' : '▶ ') : '';
-        const attrs = node.view_key ? `data-view-link="${node.view_key}" data-view-title="${node.title}"` : '';
-        const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}"` : '';
-        const row = `<div class="tree-row level-${Math.min(level, 4)}" ${attrs} ${toggleAttrs}>${marker}${node.title}</div>`;
-        const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1) : '';
-        return `${row}${children}`;
-      })
-      .join('');
+    return (nodes || []).map((node) => {
+      const nodeKey = `${projectId}:${node.id}`;
+      const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+      const expanded = hasChildren && this.expandedMenuNodes.has(nodeKey);
+      const marker = hasChildren ? (expanded ? '▼ ' : '▶ ') : '';
+      const attrs = node.view_key ? `data-view-link="${node.view_key}" data-view-title="${node.title}"` : '';
+      const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}"` : '';
+      const row = `<div class="tree-row level-${Math.min(level, 4)}" ${attrs} ${toggleAttrs}>${marker}${node.title}</div>`;
+      const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1) : '';
+      return `${row}${children}`;
+    }).join('');
   }
 
   configureHeader() {
@@ -203,10 +301,9 @@ class ConstructionManagerUI {
     if (!primary || !secondary) return;
 
     secondary.style.display = 'none';
-
     const map = {
-      home: { primary: '+ Добавить проект', secondary: 'Обновить дашборд' },
-      projects: { primary: '+ Добавить проект', secondary: 'Обновить список' },
+      home: { primary: '+ Добавить дашборд', secondary: '' },
+      projects: { primary: '+ Добавить проект', secondary: '' },
       designSchedule: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
       tep: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
       estimate: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
@@ -225,7 +322,6 @@ class ConstructionManagerUI {
 
   async renderContent() {
     this.configureHeader();
-
     if (this.currentView === 'projects') return this.renderProjects();
     if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График проектирования');
     if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'ТЭП');
@@ -235,41 +331,148 @@ class ConstructionManagerUI {
       const { code, title } = this.resolveTemplateView(this.currentView);
       return this.renderTemplateScreen(code, title);
     }
-
     return this.renderHome();
+  }
+
+  metricDataFor(project) {
+    const budget = Number(project?.budget || 0);
+    const plan = Math.min(100, Math.max(10, 35 + (project?.name?.length || 0) % 55));
+    const fact = Math.max(0, Math.min(100, plan - 8 + (project?.address?.length || 0) % 15));
+    const deviation = fact - plan;
+    const spent = budget * (fact / 100);
+    const remainder = Math.max(0, budget - spent);
+    return {
+      address: project?.address || '—',
+      area: 1200 + ((project?.name?.length || 1) * 25),
+      cost: budget,
+      plan,
+      fact,
+      deviation,
+      milestones: ['Разрешение', 'Фундамент', 'Каркас', 'Фасад', 'Отделка'].slice(0, 3 + ((project?.name?.length || 0) % 3)),
+      spent,
+      remainder,
+      eac: budget ? budget * (100 / Math.max(1, fact)) : 0,
+    };
+  }
+
+  statusClass(fact) {
+    if (fact >= 75) return 'ok';
+    if (fact >= 45) return 'warn';
+    return 'danger';
+  }
+
+  renderDashboardCard(d) {
+    const project = this.objects.find((o) => String(o.id) === String(d.projectId));
+    if (!project) return '';
+    const m = this.metricDataFor(project);
+    const statusClass = this.statusClass(m.fact);
+
+    const common = `
+      <div class="kv"><span>📍 Адрес:</span><strong>${m.address}</strong></div>
+      <div class="kv"><span>📐 Площадь:</span><strong>${m.area.toLocaleString('ru-RU')} м²</strong></div>
+      <div class="kv"><span>💰 Стоимость:</span><strong>${m.cost.toLocaleString('ru-RU')} руб.</strong></div>
+      <div class="kv"><span>План:</span><strong>${m.plan}%</strong></div>
+      <div class="kv"><span>Факт:</span><strong>${m.fact}%</strong></div>
+      <div class="kv"><span>Отклонение:</span><strong>${m.deviation > 0 ? '+' : ''}${m.deviation}%</strong></div>
+      <div class="progress"><span style="width:${m.fact}%"></span></div>
+      <span class="status-pill ${statusClass}">${statusClass === 'ok' ? 'Зеленый статус' : statusClass === 'warn' ? 'Желтый статус' : 'Красный статус'}</span>
+    `;
+
+    const extended = `
+      <div class="notice" style="margin-top:8px">Мини-Гант: ${m.milestones.join(' → ')}</div>
+      <div class="kv"><span>Бюджет план/факт:</span><strong>${Math.round(m.plan)}% / ${Math.round(m.fact)}%</strong></div>
+      <div class="mini-chart">${Array.from({ length: 10 }, (_, i) => `<span style="height:${10 + ((i * 7 + m.fact) % 24)}px"></span>`).join('')}</div>
+    `;
+    const financial = `
+      <div class="kv"><span>Освоено:</span><strong>${m.spent.toLocaleString('ru-RU')} руб. (${m.fact}%)</strong></div>
+      <div class="kv"><span>Остаток:</span><strong>${m.remainder.toLocaleString('ru-RU')} руб.</strong></div>
+      <div class="kv"><span>Прогноз EAC:</span><strong>${Math.round(m.eac).toLocaleString('ru-RU')} руб.</strong></div>
+    `;
+
+    return `
+      <article class="card dashboard-card">
+        <button class="card-remove" data-remove-dashboard="${d.id}" title="Удалить">✕</button>
+        <h3>${d.title || project.name}</h3>
+        ${common}
+        ${d.type === 'extended' ? extended : ''}
+        ${d.type === 'financial' ? financial : ''}
+      </article>
+    `;
   }
 
   renderHome() {
     const total = this.objects.length;
     const inProgress = this.objects.filter((o) => ['planning', 'design', 'construction'].includes((o.status || '').toLowerCase())).length;
     const selected = this.currentProject();
+    const lastUpdate = new Date().toLocaleTimeString('ru-RU');
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-4"><span class="tag">Всего проектов</span><h3>${total}</h3></article>
       <article class="card col-4"><span class="tag">В работе</span><h3>${inProgress}</h3></article>
       <article class="card col-4"><span class="tag">Выбранный проект</span><h3>${selected?.name || '—'}</h3></article>
       <article class="card col-12">
-        <h3>Дашборд</h3>
-        <div class="metric">Данные агрегируются из API и демонстрационных записей в БД.</div>
-        <div class="notice">Выберите проект слева и откройте нужный раздел в дереве проекта, чтобы заполнить таблицы и сделать экспорт.</div>
+        <div class="dashboard-toolbar">
+          <h3>Дашборды проектов</h3>
+          <div class="row-actions">
+            <label class="metric">Интервал (сек)
+              <input id="dashboardRefreshInput" type="number" min="15" value="${this.state.dashboardRefreshSeconds}" style="width:88px;margin-left:6px;">
+            </label>
+            <button class="mini" id="saveDashboardRefresh">Применить</button>
+          </div>
+        </div>
+        <div class="status-line">
+          <span>Обновлено: ${lastUpdate}</span>
+          <span class="connection ${navigator.onLine ? 'online' : 'offline'}">${navigator.onLine ? 'online' : 'offline'}</span>
+          <span class="spinner ${this.state.dashboardRefreshing ? '' : 'hidden'}"></span>
+        </div>
+        <div class="dashboard-grid" id="dashboardGrid">
+          ${this.state.dashboards.map((d) => this.renderDashboardCard(d)).join('') || '<div class="notice">Добавьте дашборд через кнопку в шапке.</div>'}
+        </div>
       </article>
     `;
+
+    document.getElementById('saveDashboardRefresh')?.addEventListener('click', () => {
+      const sec = Number(document.getElementById('dashboardRefreshInput').value || 60);
+      this.state.dashboardRefreshSeconds = Math.max(15, sec);
+      localStorage.setItem('cm_dashboard_refresh_sec', String(this.state.dashboardRefreshSeconds));
+      this.setupAutoRefresh();
+    });
+
+    document.querySelectorAll('[data-remove-dashboard]').forEach((btn) => {
+      btn.addEventListener('click', () => this.removeDashboard(btn.dataset.removeDashboard));
+    });
   }
 
   renderProjects() {
-    const rows = this.objects
-      .map((o) => `<tr><td>${o.name}</td><td>${o.address || '—'}</td><td>${o.status || '—'}</td></tr>`)
-      .join('') || '<tr><td colspan="3">Нет проектов</td></tr>';
+    const rows = this.objects.map((o) => `
+      <tr>
+        <td>${o.name}</td>
+        <td>${o.address || '—'}</td>
+        <td>${o.status || '—'}</td>
+        <td>${(Number(o.budget) || 0).toLocaleString('ru-RU')}</td>
+        <td><button class="mini" data-edit-project="${o.id}">✏️</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="5">Нет проектов</td></tr>';
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
-        <h3>Проекты</h3>
+        <div class="dashboard-toolbar">
+          <h3>Проекты</h3>
+          <div class="status-line">
+            <span>Автообновление: ${this.state.projectRefreshSeconds} сек.</span>
+            <span class="spinner ${this.state.projectsRefreshing ? '' : 'hidden'}"></span>
+          </div>
+        </div>
         <table class="table">
-          <thead><tr><th>Наименование</th><th>Адрес</th><th>Статус</th></tr></thead>
+          <thead><tr><th>Наименование</th><th>Адрес</th><th>Статус</th><th>Бюджет</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </article>
     `;
+
+    document.querySelectorAll('[data-edit-project]').forEach((btn) => {
+      btn.addEventListener('click', () => this.openProjectEditForm(btn.dataset.editProject));
+    });
   }
 
   async renderTemplateScreen(defaultCode, title) {
@@ -325,85 +528,39 @@ class ConstructionManagerUI {
       this.templatePage = 1;
       this.renderTemplateScreen(defaultCode, title);
     };
-
-    document.getElementById('prevPage').onclick = () => {
-      this.templatePage = Math.max(1, this.templatePage - 1);
-      this.renderTemplateScreen(defaultCode, title);
-    };
-
-    document.getElementById('nextPage').onclick = () => {
-      if (pager.page * pager.page_size < pager.total) this.templatePage += 1;
-      this.renderTemplateScreen(defaultCode, title);
-    };
-
-    document.querySelectorAll('[data-edit-row]').forEach((btn) => {
-      btn.onclick = () => this.openTemplateForm(tpl, rows.find((r) => String(r.id) === String(btn.dataset.editRow)));
-    });
-
-    document.querySelectorAll('[data-del-row]').forEach((btn) => {
-      btn.onclick = async () => {
-        await deleteTemplateRow(btn.dataset.delRow);
-        await this.renderTemplateScreen(defaultCode, title);
-      };
-    });
-  }
-
-  async openTemplatePicker(defaultCode = '') {
-    const templates = await listTemplates();
-    const filtered = templates.filter((t) => {
-      if (defaultCode === 'design_schedule') return t.code.includes('design');
-      if (defaultCode === 'tep') return t.code.includes('tep') || t.code.includes('building');
-      if (defaultCode === 'summary_estimate') return t.code.includes('estimate') || t.code.includes('ssr');
-      return true;
-    });
-
-    this.modalMode = 'selectTemplate';
-    document.getElementById('modalTitle').textContent = 'Выбор шаблона';
-    document.getElementById('modalBody').innerHTML = `
-      <div class="form-grid">
-        ${(filtered.length ? filtered : templates)
-          .map((t) => `<label><input type="radio" name="template_code" value="${t.code}" ${t.code === this.currentTemplateCode ? 'checked' : ''}> ${t.name}</label>`)
-          .join('')}
-      </div>
-    `;
-    this.openModal();
+    document.getElementById('prevPage').onclick = () => { this.templatePage = Math.max(1, this.templatePage - 1); this.renderTemplateScreen(defaultCode, title); };
+    document.getElementById('nextPage').onclick = () => { if (pager.page * pager.page_size < pager.total) this.templatePage += 1; this.renderTemplateScreen(defaultCode, title); };
+    document.querySelectorAll('[data-edit-row]').forEach((btn) => { btn.onclick = () => this.openTemplateForm(tpl, rows.find((r) => String(r.id) === String(btn.dataset.editRow))); });
+    document.querySelectorAll('[data-del-row]').forEach((btn) => { btn.onclick = async () => { await deleteTemplateRow(btn.dataset.delRow); await this.renderTemplateScreen(defaultCode, title); }; });
   }
 
   openTemplateForm(templatePayload, row = null) {
     this.modalMode = row ? 'editRow' : 'createRow';
     this.editRowId = row?.id || null;
-
-    document.getElementById('modalTitle').textContent = row
-      ? `Редактировать: ${templatePayload.template.name}`
-      : `Добавить: ${templatePayload.template.name}`;
-
-    document.getElementById('modalBody').innerHTML = `
-      <div class="form-grid">
-        ${templatePayload.columns
-          .map((c) => {
-            const value = (row?.data || {})[c.field_key] || '';
-            const type = c.data_type === 'number' ? 'number' : c.data_type === 'date' ? 'date' : 'text';
-            return `<label>${c.title}<input data-field="${c.field_key}" type="${type}" value="${value}"></label>`;
-          })
-          .join('')}
-      </div>
-    `;
+    document.getElementById('modalTitle').textContent = row ? `Редактировать: ${templatePayload.template.name}` : `Добавить: ${templatePayload.template.name}`;
+    document.getElementById('modalBody').innerHTML = `<div class="form-grid">${templatePayload.columns.map((c) => {
+      const value = (row?.data || {})[c.field_key] || '';
+      const type = c.data_type === 'number' ? 'number' : c.data_type === 'date' ? 'date' : 'text';
+      return `<label>${c.title}<input data-field="${c.field_key}" type="${type}" value="${value}"></label>`;
+    }).join('')}</div>`;
     this.openModal();
   }
 
   openProjectForm() {
+    this.state.editProjectId = null;
     this.modalMode = 'createProject';
     document.getElementById('modalTitle').textContent = 'Добавить проект';
     document.getElementById('modalBody').innerHTML = `
       <div class="form-grid">
-        <label>Наименование *<input data-project-field="name" type="text" placeholder="Наименование"></label>
-        <label>Адрес<input data-project-field="address" type="text" placeholder="Адрес"></label>
+        <label>Наименование *<input data-project-field="name" type="text"></label>
+        <label>Адрес<input data-project-field="address" type="text"></label>
+        <label>Бюджет<input data-project-field="budget" type="number" min="0"></label>
         <label>Статус
           <select data-project-field="status">
-            <option value="planning">planning</option>
-            <option value="design">design</option>
-            <option value="construction">construction</option>
-            <option value="complete">complete</option>
+            <option value="planning">Черновик</option>
+            <option value="design">Активный</option>
+            <option value="construction">На паузе</option>
+            <option value="complete">Завершен</option>
           </select>
         </label>
       </div>
@@ -411,8 +568,80 @@ class ConstructionManagerUI {
     this.openModal();
   }
 
+  async openProjectEditForm(id) {
+    this.modalMode = 'editProject';
+    this.state.editProjectId = id;
+    document.getElementById('modalTitle').textContent = 'Редактирование проекта';
+    document.getElementById('modalBody').innerHTML = '<div class="metric">Загрузка...</div>';
+    this.openModal();
+
+    try {
+      const p = await api(`/objects/${id}`);
+      document.getElementById('modalBody').innerHTML = `
+        <div class="form-grid">
+          <h4>Основная информация</h4>
+          <label>Наименование*<input data-project-field="name" value="${p.name || ''}" required></label>
+          <label>Адрес объекта*<input data-project-field="address" value="${p.address || ''}" required></label>
+          <div class="form-grid two">
+            <label>Город<input data-project-field="city"></label>
+            <label>Улица<input data-project-field="street"></label>
+          </div>
+          <label>Описание<textarea data-project-field="description" rows="3"></textarea></label>
+          <h4>Параметры проекта</h4>
+          <div class="form-grid two">
+            <label>Дата начала*<input data-project-field="start_date" type="date"></label>
+            <label>Плановая дата конца<input data-project-field="planned_end_date" type="date"></label>
+          </div>
+          <label>Бюджет проекта<input data-project-field="budget" type="number" min="0" value="${p.budget || 0}"></label>
+          <label>Статус
+            <select data-project-field="status">
+              <option value="planning" ${(p.status || '') === 'planning' ? 'selected' : ''}>Черновик</option>
+              <option value="design" ${(p.status || '') === 'design' ? 'selected' : ''}>Активный</option>
+              <option value="construction" ${(p.status || '') === 'construction' ? 'selected' : ''}>На паузе</option>
+              <option value="complete" ${(p.status || '') === 'complete' ? 'selected' : ''}>Завершен</option>
+            </select>
+          </label>
+          <h4>Ответственные</h4>
+          <div class="form-grid two">
+            <label>Генподрядчик<input data-project-field="general_contractor"></label>
+            <label>Генпроектировщик<input data-project-field="general_designer"></label>
+          </div>
+        </div>
+      `;
+      this.state.projectFormSnapshot = this.serializedProjectForm();
+      document.querySelectorAll('[data-project-field]').forEach((el) => el.addEventListener('input', () => {
+        this.state.modalDirty = this.serializedProjectForm() !== this.state.projectFormSnapshot;
+      }));
+    } catch (e) {
+      document.getElementById('modalBody').innerHTML = `<div class="notice">${e.message}</div>`;
+    }
+  }
+
+  serializedProjectForm() {
+    const obj = {};
+    document.querySelectorAll('[data-project-field]').forEach((el) => { obj[el.dataset.projectField] = el.value; });
+    return JSON.stringify(obj);
+  }
+
+  collectProjectForm() {
+    const data = {};
+    document.querySelectorAll('[data-project-field]').forEach((el) => { data[el.dataset.projectField] = (el.value || '').trim(); });
+    return data;
+  }
+
+  validateProjectForm(data, isEdit = false) {
+    if (!data.name) return 'Наименование обязательно';
+    if (!data.address) return 'Адрес обязателен';
+    if (data.budget && Number(data.budget) < 0) return 'Бюджет должен быть >= 0';
+    if (data.start_date && data.planned_end_date && new Date(data.start_date) > new Date(data.planned_end_date)) return 'Дата начала должна быть раньше даты окончания';
+    const duplicate = this.objects.find((o) => o.name.toLowerCase() === data.name.toLowerCase() && (!isEdit || String(o.id) !== String(this.state.editProjectId)));
+    if (duplicate) return 'Проект с таким наименованием уже существует';
+    return null;
+  }
+
   async handlePrimaryAction() {
-    if (this.currentView === 'home' || this.currentView === 'projects') return this.openProjectForm();
+    if (this.currentView === 'home') return this.openDashboardForm();
+    if (this.currentView === 'projects') return this.openProjectForm();
     if (this.currentView === 'auth') {
       await issueDemoToken('admin');
       return alert('Demo token обновлён.');
@@ -426,25 +655,51 @@ class ConstructionManagerUI {
   }
 
   async handleSecondaryAction() {
-    if (this.currentView === 'home' || this.currentView === 'projects') {
-      await this.loadObjects();
-      this.renderProjectTree();
-      return this.renderContent();
-    }
     if (this.isTemplateView(this.currentView)) {
       const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
       return exportTemplate(this.selectedObjectId, code);
     }
   }
 
+  openDashboardForm() {
+    this.modalMode = 'addDashboard';
+    document.getElementById('modalTitle').textContent = 'Добавить дашборд';
+    document.getElementById('modalBody').innerHTML = `
+      <div class="form-grid">
+        <label>Проект
+          <input id="dashboardProjectSearch" placeholder="Поиск проекта" style="margin-bottom:8px">
+          <select id="dashboardProject">${this.objects.map((o) => `<option value="${o.id}">${o.name}</option>`).join('')}</select>
+        </label>
+        <label>Тип дашборда</label>
+        <div class="radio-row">
+          <label><input type="radio" name="dashType" value="basic" checked> Карточка проекта</label>
+          <label><input type="radio" name="dashType" value="extended"> Расширенный</label>
+          <label><input type="radio" name="dashType" value="financial"> Финансовый</label>
+        </div>
+        <label>Название (опционально)<input id="dashboardName"></label>
+      </div>
+    `;
+    document.getElementById('dashboardProjectSearch')?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      const select = document.getElementById('dashboardProject');
+      select.innerHTML = this.objects.filter((o) => o.name.toLowerCase().includes(q)).map((o) => `<option value="${o.id}">${o.name}</option>`).join('');
+    });
+    this.openModal();
+  }
+
+  removeDashboard(id) {
+    if (!confirm('Удалить дашборд?')) return;
+    this.state.dashboards = this.state.dashboards.filter((d) => d.id !== id);
+    this.persistDashboards();
+    this.renderHome();
+  }
+
   async handleSaveModal() {
     if (this.modalMode === 'createProject') {
-      const name = (document.querySelector('[data-project-field="name"]')?.value || '').trim();
-      const address = (document.querySelector('[data-project-field="address"]')?.value || '').trim();
-      const status = (document.querySelector('[data-project-field="status"]')?.value || 'planning').trim();
-      if (!name) return alert('Введите наименование проекта');
-
-      await api('/objects', 'POST', { name, address, status });
+      const data = this.collectProjectForm();
+      const err = this.validateProjectForm(data);
+      if (err) return alert(err);
+      await api('/objects', 'POST', { name: data.name, address: data.address, budget: Number(data.budget || 0), status: data.status || 'planning' });
       await this.loadObjects();
       this.selectedObjectId = this.objects.at(-1)?.id || this.selectedObjectId;
       this.closeModal();
@@ -453,25 +708,61 @@ class ConstructionManagerUI {
       return;
     }
 
-    if (this.modalMode === 'selectTemplate') {
-      const selected = document.querySelector('input[name="template_code"]:checked')?.value;
-      if (!selected) return alert('Выберите шаблон');
-      this.currentTemplateCode = selected;
-      this.templatePage = 1;
-      this.closeModal();
-      if (!this.isTemplateView(this.currentView)) {
-        this.switchView(`template:${selected}`, `Таблица: ${selected}`);
-        return;
+    if (this.modalMode === 'editProject') {
+      const saveBtn = document.getElementById('saveEntity');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Сохранение...';
+      const data = this.collectProjectForm();
+      const err = this.validateProjectForm(data, true);
+      if (err) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Сохранить';
+        return alert(err);
       }
-      return this.renderContent();
+      try {
+        await api(`/objects/${this.state.editProjectId}`, 'PUT', {
+          name: data.name,
+          address: data.address,
+          budget: Number(data.budget || 0),
+          status: data.status || 'planning',
+          start_date: data.start_date || null,
+          planned_end_date: data.planned_end_date || null,
+          description: data.description || '',
+        });
+        alert('Сохранено');
+        await this.loadObjects();
+        this.renderProjectTree();
+        this.closeModal();
+        this.renderProjects();
+      } catch (e) {
+        alert(e.message || 'Ошибка сохранения');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Сохранить';
+      }
+      return;
+    }
+
+    if (this.modalMode === 'addDashboard') {
+      const projectId = document.getElementById('dashboardProject')?.value;
+      const type = document.querySelector('input[name="dashType"]:checked')?.value || 'basic';
+      const name = document.getElementById('dashboardName')?.value?.trim();
+      if (!projectId) return alert('Выберите проект');
+      if (this.state.dashboards.some((d) => String(d.projectId) === String(projectId) && d.type === type)) {
+        return alert('Этот проект уже добавлен для выбранного типа дашборда');
+      }
+      const project = this.objects.find((o) => String(o.id) === String(projectId));
+      this.state.dashboards.push({ id: crypto.randomUUID(), projectId, projectName: project?.name || 'Проект', type, title: name || `${project?.name || 'Проект'} • ${type}` });
+      this.persistDashboards();
+      this.closeModal();
+      this.renderHome();
+      return;
     }
 
     if (this.modalMode === 'createRow' || this.modalMode === 'editRow') {
       try {
         const data = {};
-        document.querySelectorAll('[data-field]').forEach((input) => {
-          data[input.dataset.field] = input.value;
-        });
+        document.querySelectorAll('[data-field]').forEach((input) => { data[input.dataset.field] = input.value; });
         const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
         if (this.editRowId) await updateTemplateRow(this.editRowId, data);
         else await createTemplateRow(this.selectedObjectId, code, data);
@@ -483,6 +774,13 @@ class ConstructionManagerUI {
     }
   }
 
+  handleModalCancel() {
+    if (this.modalMode === 'editProject' && this.state.modalDirty) {
+      if (!confirm('Есть несохраненные изменения. Закрыть без сохранения?')) return;
+    }
+    this.closeModal();
+  }
+
   switchView(view, title) {
     this.currentView = view;
     this.currentTemplateCode = null;
@@ -491,10 +789,9 @@ class ConstructionManagerUI {
     this.templateSearch = '';
 
     document.getElementById('pageTitle').textContent = title;
-    document.querySelectorAll('.menu-item[data-view]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.view === view);
-    });
+    document.querySelectorAll('.menu-item[data-view]').forEach((btn) => btn.classList.toggle('active', btn.dataset.view === view));
     this.renderContent();
+    if (!this.state.isDesktop) this.toggleSidebar(false);
   }
 
   renderAuthView() {
@@ -502,19 +799,23 @@ class ConstructionManagerUI {
       <article class="card col-12">
         <h3>Авторизация и роли</h3>
         <p class="metric">Приложение использует demo JWT-токен для работы вкладок шаблонов.</p>
-        <div class="notice">Если вкладки таблиц не открываются, нажмите «Выдать demo token» в правом верхнем углу и обновите страницу.</div>
       </article>
     `;
   }
 
   openModal() {
+    document.body.style.overflow = 'hidden';
     document.getElementById('entityModal').classList.add('open');
   }
 
   closeModal() {
+    document.body.style.overflow = '';
     document.getElementById('entityModal').classList.remove('open');
     this.modalMode = null;
     this.editRowId = null;
+    this.state.modalDirty = false;
+    this.state.editProjectId = null;
+    this.state.projectFormSnapshot = '';
   }
 
   isTemplateView(view) {
