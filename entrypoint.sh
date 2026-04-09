@@ -26,6 +26,9 @@ DB_DOWNLOADED=false
 
 # Если указаны параметры S3, пытаемся скачать базу
 if [ -n "$S3_BUCKET" ] && [ -n "$S3_ACCESS_KEY" ] && [ -n "$S3_SECRET_KEY" ]; then
+    if ! command -v aws >/dev/null 2>&1; then
+        echo "=== Warning: aws cli is not installed. Skip S3 download. Build with --build-arg INSTALL_AWSCLI=true to enable S3 sync. ==="
+    else
     echo "=== Attempting to download database from S3 ==="
     
     # Настраиваем aws cli
@@ -40,6 +43,7 @@ if [ -n "$S3_BUCKET" ] && [ -n "$S3_ACCESS_KEY" ] && [ -n "$S3_SECRET_KEY" ]; th
         DB_DOWNLOADED=true
     else
         echo "=== Warning: Could not download database from S3 (file may not exist or credentials invalid) ==="
+    fi
     fi
 else
     echo "=== S3 credentials not provided, skipping download ==="

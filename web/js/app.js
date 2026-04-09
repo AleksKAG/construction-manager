@@ -30,6 +30,11 @@ const DEFAULT_TEP_ROWS = [
   { num: '15', indicator: 'ГВС', unit: 'кВт', amount: '' },
   { num: '16', indicator: 'Установленная мощность', unit: 'кВт', amount: '' },
   { num: '17', indicator: 'Расчетная мощность', unit: 'кВт', amount: '' },
+  { num: '', indicator: 'Стоимостные показатели', unit: '', amount: '' },
+  { num: '18', indicator: 'Стоимость строительства', unit: 'руб.', amount: '' },
+  { num: '19', indicator: 'Проектно-изыскательские работы', unit: 'руб.', amount: '' },
+  { num: '20', indicator: 'Стоимость СМР', unit: 'руб.', amount: '' },
+  { num: '21', indicator: 'Прочие затраты', unit: 'руб.', amount: '' },
 ];
 
 class ConstructionManagerUI {

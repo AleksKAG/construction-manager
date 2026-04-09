@@ -1,6 +1,7 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.23-alpine3.21 AS builder
 
-RUN apk add --no-cache git ca-certificates gcc musl-dev
+RUN apk add --no-cache --virtual .build-deps git gcc musl-dev \
+    && apk add --no-cache ca-certificates
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -12,8 +13,10 @@ COPY . .
 RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
     go build -a -installsuffix cgo -o main ./cmd/api
 
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates wget libgcc aws-cli bash
+FROM alpine:3.21
+ARG INSTALL_AWSCLI=false
+RUN apk --no-cache add ca-certificates wget libgcc bash \
+    && if [ "$INSTALL_AWSCLI" = "true" ]; then apk --no-cache add aws-cli; fi
 WORKDIR /app
 COPY --from=builder /app/main .
 COPY --from=builder /app/web ./web 

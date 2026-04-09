@@ -23,6 +23,11 @@ if [ -z "$S3_BUCKET" ] || [ -z "$S3_ACCESS_KEY" ] || [ -z "$S3_SECRET_KEY" ]; th
     exit 0
 fi
 
+if ! command -v aws >/dev/null 2>&1; then
+    echo "=== aws cli is not installed, backup scheduler disabled. Build with --build-arg INSTALL_AWSCLI=true to enable S3 sync. ==="
+    exit 0
+fi
+
 # Настраиваем aws cli
 export AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY"
 export AWS_SECRET_ACCESS_KEY="$S3_SECRET_KEY"
