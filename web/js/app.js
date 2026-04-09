@@ -30,6 +30,11 @@ const DEFAULT_TEP_ROWS = [
   { num: '15', indicator: 'ГВС', unit: 'кВт', amount: '' },
   { num: '16', indicator: 'Установленная мощность', unit: 'кВт', amount: '' },
   { num: '17', indicator: 'Расчетная мощность', unit: 'кВт', amount: '' },
+  { num: '', indicator: 'Стоимостные показатели', unit: '', amount: '' },
+  { num: '18', indicator: 'Стоимость строительства', unit: 'руб.', amount: '' },
+  { num: '19', indicator: 'Проектно-изыскательские работы', unit: 'руб.', amount: '' },
+  { num: '20', indicator: 'Стоимость СМР', unit: 'руб.', amount: '' },
+  { num: '21', indicator: 'Прочие затраты', unit: 'руб.', amount: '' },
 ];
 
 class ConstructionManagerUI {
@@ -63,6 +68,9 @@ class ConstructionManagerUI {
     this.dashboardTimer = null;
     this.projectsTimer = null;
     this.touchStartX = null;
+    this.dashboardMetrics = {};
+    this.templateEditMode = false;
+    this.templateRowsCache = [];
 
     this.bind();
     this.setupResponsiveSidebar();
@@ -187,6 +195,7 @@ class ConstructionManagerUI {
     const payload = await api('/objects?page=1&page_size=200');
     this.objects = Array.isArray(payload) ? payload : (payload?.data || []);
     if (!this.selectedObjectId && this.objects.length) this.selectedObjectId = this.objects[0].id;
+    await this.refreshDashboardMetrics();
   }
 
   currentProject() {
@@ -335,24 +344,39 @@ class ConstructionManagerUI {
   }
 
   metricDataFor(project) {
-    const budget = Number(project?.budget || 0);
-    const plan = Math.min(100, Math.max(10, 35 + (project?.name?.length || 0) % 55));
-    const fact = Math.max(0, Math.min(100, plan - 8 + (project?.address?.length || 0) % 15));
+    const metrics = this.dashboardMetrics[String(project?.id)] || {};
+    const plan = Number(metrics?.progress?.plan_percent || 0);
+    const fact = Number(metrics?.progress?.fact_percent || 0);
     const deviation = fact - plan;
-    const spent = budget * (fact / 100);
-    const remainder = Math.max(0, budget - spent);
+    const cost = Number(metrics?.cost?.value || project?.budget || 0);
+    const spent = cost * (Math.max(0, Math.min(100, fact)) / 100);
+    const remainder = Math.max(0, cost - spent);
     return {
-      address: project?.address || '—',
-      area: 1200 + ((project?.name?.length || 1) * 25),
-      cost: budget,
+      address: project?.address || "—",
+      area: Number(metrics?.area?.total_area_m2 || 0),
+      cost,
       plan,
       fact,
       deviation,
-      milestones: ['Разрешение', 'Фундамент', 'Каркас', 'Фасад', 'Отделка'].slice(0, 3 + ((project?.name?.length || 0) % 3)),
+      milestones: ["Разрешение", "Фундамент", "Каркас", "Фасад", "Отделка"].slice(0, 3 + ((project?.name?.length || 0) % 3)),
       spent,
       remainder,
-      eac: budget ? budget * (100 / Math.max(1, fact)) : 0,
+      eac: cost ? cost * (100 / Math.max(1, fact || 1)) : 0,
     };
+  }
+
+  async refreshDashboardMetrics() {
+    const ids = [...new Set(this.state.dashboards.map((d) => String(d.projectId)))];
+    if (!ids.length) return;
+    const entries = await Promise.all(ids.map(async (id) => {
+      try {
+        const payload = await api(`/dashboard/metrics/${id}`);
+        return [id, payload];
+      } catch (_) {
+        return [id, null];
+      }
+    }));
+    entries.forEach(([id, payload]) => { if (payload) this.dashboardMetrics[id] = payload; });
   }
 
   statusClass(fact) {
@@ -392,7 +416,7 @@ class ConstructionManagerUI {
     return `
       <article class="card dashboard-card">
         <button class="card-remove" data-remove-dashboard="${d.id}" title="Удалить">✕</button>
-        <h3>${d.title || project.name}</h3>
+        <h3>${project.name}</h3>
         ${common}
         ${d.type === 'extended' ? extended : ''}
         ${d.type === 'financial' ? financial : ''}
@@ -403,13 +427,11 @@ class ConstructionManagerUI {
   renderHome() {
     const total = this.objects.length;
     const inProgress = this.objects.filter((o) => ['planning', 'design', 'construction'].includes((o.status || '').toLowerCase())).length;
-    const selected = this.currentProject();
     const lastUpdate = new Date().toLocaleTimeString('ru-RU');
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-4"><span class="tag">Всего проектов</span><h3>${total}</h3></article>
       <article class="card col-4"><span class="tag">В работе</span><h3>${inProgress}</h3></article>
-      <article class="card col-4"><span class="tag">Выбранный проект</span><h3>${selected?.name || '—'}</h3></article>
       <article class="card col-12">
         <div class="dashboard-toolbar">
           <h3>Дашборды проектов</h3>
@@ -443,12 +465,27 @@ class ConstructionManagerUI {
     });
   }
 
+  localizeProjectStatus(status) {
+    const map = {
+      draft: "Черновик",
+      planning: "Черновик",
+      active: "В работе",
+      design: "В работе",
+      construction: "В работе",
+      on_hold: "Приостановлен",
+      completed: "Завершен",
+      complete: "Завершен",
+      archived: "Архив",
+    };
+    return map[String(status || "").toLowerCase()] || (status || "—");
+  }
+
   renderProjects() {
     const rows = this.objects.map((o) => `
       <tr>
         <td>${o.name}</td>
         <td>${o.address || '—'}</td>
-        <td>${o.status || '—'}</td>
+        <td>${this.localizeProjectStatus(o.status)}</td>
         <td>${(Number(o.budget) || 0).toLocaleString('ru-RU')}</td>
         <td><button class="mini" data-edit-project="${o.id}">✏️</button></td>
       </tr>
@@ -506,18 +543,19 @@ class ConstructionManagerUI {
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
-        <h3>${title}: ${this.currentTemplateName}</h3>
+        <h3>${code === "tep" ? `ТЭП объекта: ${project.name}` : `${title}: ${this.currentTemplateName}`}</h3>
         <div class="row-actions" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;">
           <input id="templateSearch" placeholder="Поиск" value="${this.templateSearch}">
           <button class="mini" id="templateSearchBtn">Найти</button>
           <span class="metric">Стр. ${pager.page}, всего ${pager.total}</span>
+          <button class="mini" id="toggleEditMode">✏️ Режим редактирования: ${this.templateEditMode ? "вкл" : "выкл"}</button>
           <button class="mini" id="prevPage">←</button>
           <button class="mini" id="nextPage">→</button>
         </div>
         <table class="table">
-          <thead><tr>${columns.map((c) => `<th>${this.normalizeTemplateColumnTitle(code, c)}</th>`).join('')}<th>Действия</th></tr></thead>
+          <thead><tr>${columns.map((c) => `<th>${this.normalizeTemplateColumnTitle(code, c)}</th>`).join('')}<th class="actions-col ${this.templateEditMode ? "" : "hidden"}">Действия</th></tr></thead>
           <tbody>
-            ${rows.map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ''}</td>`).join('')}<td><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button></td></tr>`).join('') || `<tr><td colspan="${columns.length + 1}">Нет данных</td></tr>`}
+            ${this.renderTemplateRows(code, rows, columns) || `<tr><td colspan="${columns.length + 1}">Нет данных</td></tr>`}
           </tbody>
         </table>
       </article>
@@ -530,8 +568,67 @@ class ConstructionManagerUI {
     };
     document.getElementById('prevPage').onclick = () => { this.templatePage = Math.max(1, this.templatePage - 1); this.renderTemplateScreen(defaultCode, title); };
     document.getElementById('nextPage').onclick = () => { if (pager.page * pager.page_size < pager.total) this.templatePage += 1; this.renderTemplateScreen(defaultCode, title); };
+    document.getElementById('toggleEditMode').onclick = () => { this.templateEditMode = !this.templateEditMode; this.renderTemplateScreen(defaultCode, title); };
     document.querySelectorAll('[data-edit-row]').forEach((btn) => { btn.onclick = () => this.openTemplateForm(tpl, rows.find((r) => String(r.id) === String(btn.dataset.editRow))); });
-    document.querySelectorAll('[data-del-row]').forEach((btn) => { btn.onclick = async () => { await deleteTemplateRow(btn.dataset.delRow); await this.renderTemplateScreen(defaultCode, title); }; });
+    document.querySelectorAll('[data-del-row]').forEach((btn) => { btn.onclick = async () => { if (!confirm("Удалить строку?")) return; await deleteTemplateRow(btn.dataset.delRow); if (["tep", "summary_estimate"].includes(code)) await this.refreshDashboardMetrics(); await this.renderTemplateScreen(defaultCode, title); }; });
+    document.querySelectorAll("[data-move-row]").forEach((btn) => { btn.onclick = async () => { const [rowId, direction] = String(btn.dataset.moveRow).split(":"); await this.moveTemplateRow(code, rowId, direction); await this.renderTemplateScreen(defaultCode, title); }; });
+  }
+
+
+  renderTemplateRows(code, rows, columns) {
+    this.templateRowsCache = rows;
+    if (code === "tep") {
+      return this.renderTEPSectionedRows(rows, columns);
+    }
+    return rows.map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ""}</td>`).join("")}<td class="actions-col ${this.templateEditMode ? "" : "hidden"}"><div class="row-actions"><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button><button class="mini" data-move-row="${r.id}:up">↑</button><button class="mini" data-move-row="${r.id}:down">↓</button></div></td></tr>`).join("");
+  }
+
+  renderTEPSectionedRows(rows, columns) {
+    const groups = [
+      { title: "Раздел 1. Характеристика земельного участка", min: 1, max: 5 },
+      { title: "Раздел 2. Характеристики зданий, строений, сооружений", min: 6, max: 9 },
+      { title: "Раздел 3. Инженерные нагрузки и ресурсы", min: 10, max: 17 },
+      { title: "Раздел 4. Стоимостные показатели", min: 18, max: 9999 },
+    ];
+    const classify = (row) => {
+      const n = Number((row.data || {}).num || row.row_number || 0);
+      if (Number.isFinite(n)) {
+        if (n >= 1 && n <= 5) return 0;
+        if (n >= 6 && n <= 9) return 1;
+        if (n >= 10 && n <= 17) return 2;
+        if (n >= 18) return 3;
+      }
+      const indicator = String((row.data || {}).indicator || "").toLowerCase();
+      if (indicator.includes("стоим")) return 3;
+      return 3;
+    };
+    const grouped = [[], [], [], []];
+    rows.forEach((row) => grouped[classify(row)].push(row));
+    return groups.map((g, i) => {
+      const body = grouped[i].map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ""}</td>`).join("")}<td class="actions-col ${this.templateEditMode ? "" : "hidden"}"><div class="row-actions"><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button><button class="mini" data-move-row="${r.id}:up">↑</button><button class="mini" data-move-row="${r.id}:down">↓</button></div></td></tr>`).join("");
+      const sectionRow = `<tr class="section-row"><td colspan="${columns.length + 1}">${g.title}</td></tr>`;
+      return sectionRow + (body || `<tr><td colspan="${columns.length + 1}" class="metric">Пусто</td></tr>`);
+    }).join("");
+  }
+
+  async moveTemplateRow(code, rowId, direction) {
+    const rows = [...this.templateRowsCache].sort((a, b) => (a.row_number || 0) - (b.row_number || 0));
+    const idx = rows.findIndex((r) => String(r.id) === String(rowId));
+    if (idx < 0) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= rows.length) return;
+    const current = rows[idx];
+    const swap = rows[swapIdx];
+    const curOrder = current.row_number || idx + 1;
+    const swapOrder = swap.row_number || swapIdx + 1;
+    if (code === "tep") {
+      await api(`/tep/${current.id}`, "PATCH", { sort_order: swapOrder });
+      await api(`/tep/${swap.id}`, "PATCH", { sort_order: curOrder });
+    } else {
+      await api(`/template-rows/${current.id}`, "PUT", { sort_order: swapOrder });
+      await api(`/template-rows/${swap.id}`, "PUT", { sort_order: curOrder });
+    }
+    if (["tep", "summary_estimate"].includes(code)) await this.refreshDashboardMetrics();
   }
 
   openTemplateForm(templatePayload, row = null) {
@@ -767,6 +864,7 @@ class ConstructionManagerUI {
         if (this.editRowId) await updateTemplateRow(this.editRowId, data);
         else await createTemplateRow(this.selectedObjectId, code, data);
         this.closeModal();
+        if (["tep", "summary_estimate"].includes(code)) await this.refreshDashboardMetrics();
         return this.renderContent();
       } catch (error) {
         alert(error?.message || 'Не удалось сохранить строку');

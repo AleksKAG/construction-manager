@@ -138,7 +138,9 @@ func UpdateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("rowId")
 		var input struct {
-			Data map[string]string `json:"data"`
+			Data      map[string]string `json:"data"`
+			SortOrder *int              `json:"sort_order"`
+			RowNumber *int              `json:"row_number"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -156,12 +158,24 @@ func UpdateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "template not found"})
 			return
 		}
-		if err := validateTemplateData(columns, input.Data); err != nil {
+		dataToValidate := input.Data
+		if dataToValidate == nil {
+			dataToValidate = row.ValuesMap
+		}
+		if err := validateTemplateData(columns, dataToValidate); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		row.ValuesMap = input.Data
+		if input.Data != nil {
+			row.ValuesMap = input.Data
+		}
+		if input.SortOrder != nil && *input.SortOrder > 0 {
+			row.RowNumber = *input.SortOrder
+		}
+		if input.RowNumber != nil && *input.RowNumber > 0 {
+			row.RowNumber = *input.RowNumber
+		}
 		if err := repo.UpdateTemplateRow(c.Request.Context(), row); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
