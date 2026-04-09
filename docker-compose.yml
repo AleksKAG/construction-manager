@@ -17,9 +17,12 @@ services:
       - S3_SECRET_KEY=${S3_SECRET_KEY}
       - S3_REGION=${S3_REGION:-ru-1}
       - DB_FILE_NAME=${DB_FILE_NAME:-construction.db}
+      - UPLOAD_INTERVAL=${UPLOAD_INTERVAL:-300}
     volumes:
       - cm_data:/data
     restart: unless-stopped
+    command: >
+      sh -c "/sync_db_to_s3.sh & ./main"
 
 volumes:
   cm_data:

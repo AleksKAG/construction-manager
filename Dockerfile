@@ -13,12 +13,13 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
     go build -a -installsuffix cgo -o main ./cmd/api
 
 FROM alpine:latest
-RUN apk --no-cache add ca-certificates wget libgcc aws-cli
+RUN apk --no-cache add ca-certificates wget libgcc aws-cli bash
 WORKDIR /app
 COPY --from=builder /app/main .
 COPY --from=builder /app/web ./web 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY scripts/sync_db_to_s3.sh /sync_db_to_s3.sh
+RUN chmod +x /entrypoint.sh /sync_db_to_s3.sh
 EXPOSE 8080
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["./main"]
