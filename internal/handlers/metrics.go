@@ -194,13 +194,6 @@ func GetDashboardMetrics(repo repository.Repository) gin.HandlerFunc {
 		area := resolveTotalArea(tepRows)
 		cost, costSource := resolveProjectCost(project, tepRows, estimateRows)
 		plan, fact := resolvePlanFact(scheduleRows)
-		if plan == 0 && fact == 0 {
-			designProgress, smrProgress, progressErr := repo.GetProjectProgress(c.Request.Context(), projectID)
-			if progressErr == nil {
-				plan = 100
-				fact = maxFloat(designProgress, smrProgress)
-			}
-		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"project_id": projectID,
@@ -382,13 +375,6 @@ func firstNonEmpty(values ...string) string {
 
 func round2(v float64) float64 {
 	return math.Round(v*100) / 100
-}
-
-func maxFloat(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func sortRows(rows []models.ProjectTemplateRow) {
