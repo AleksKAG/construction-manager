@@ -1,5 +1,4 @@
 #!/bin/sh
-set -e
 
 # Скрипт для периодической выгрузки базы данных в S3
 # Запускается в фоновом режиме вместе с основным приложением
@@ -33,10 +32,11 @@ export AWS_DEFAULT_REGION="$S3_REGION"
 upload_to_s3() {
     if [ -f "$DB_PATH" ]; then
         echo "=== Uploading database to S3 at $(date) ==="
-        if aws s3 cp "$DB_PATH" "s3://${S3_BUCKET}/${DB_FILE_NAME}" --endpoint-url "$S3_ENDPOINT" 2>/dev/null; then
+        # Убираем перенаправление ошибок, чтобы видеть их в логах
+        if aws s3 cp "$DB_PATH" "s3://${S3_BUCKET}/${DB_FILE_NAME}" --endpoint-url "$S3_ENDPOINT"; then
             echo "=== Database uploaded successfully to S3 ==="
         else
-            echo "=== Warning: Failed to upload database to S3 ==="
+            echo "=== ERROR: Failed to upload database to S3 at $(date) ==="
         fi
     else
         echo "=== Warning: Database file not found at ${DB_PATH} ==="
@@ -48,6 +48,7 @@ upload_to_s3
 
 # Периодическая загрузка каждые UPLOAD_INTERVAL секунд
 while true; do
+    echo "=== Sleeping for ${UPLOAD_INTERVAL} seconds ==="
     sleep "$UPLOAD_INTERVAL"
     upload_to_s3
 done
