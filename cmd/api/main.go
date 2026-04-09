@@ -86,7 +86,7 @@ func main() {
 	// CORS middleware
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -129,6 +129,10 @@ func main() {
 
 		// Objects endpoints
 		api.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
+		api.GET("/dashboard/metrics/:projectId", handlers.GetDashboardMetrics(repo))
+		api.GET("/estimates/:projectId/summary", handlers.GetEstimateSummary(repo))
+		api.GET("/tep/:projectId", handlers.GetTEPByProject(repo))
+		api.PATCH("/tep/:id", handlers.PatchTEPRow(repo))
 		api.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
 		// Gantt Tasks endpoints - перемещаем перед /objects/:id чтобы избежать конфликта
 		api.GET("/tasks", handlers.ListTasks(repo)) // GET all tasks (optional)

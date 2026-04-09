@@ -58,6 +58,8 @@ button { font: inherit; }
 .table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .table th, .table td { border-bottom: 1px solid var(--line); text-align: left; padding: 8px 6px; }
 .table th { color: var(--muted); font-weight: 600; }
+.hidden { display: none; }
+.section-row td { background: #f7faff; font-weight: 600; color: #304666; }
 .row-actions { display: flex; gap: 6px; align-items: center; }
 .mini { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-size: 12px; }
 .mini.danger { border-color: #f2b8b5; color: #b42318; background: #fff5f4; }
