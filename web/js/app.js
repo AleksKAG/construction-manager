@@ -888,7 +888,7 @@ class ConstructionManagerUI {
       saveBtn.textContent = 'Запрос...';
       try {
         const payload = await api('/agent/summary', 'POST', { project_id: String(projectId), question });
-        const lines = [`Провайдер: ${payload.provider || 'local'}`, '', payload.answer, '', 'Рекомендации:', ...(payload.next_actions || []).map((a, i) => `${i + 1}. ${a}`)];
+        const lines = [payload.answer, '', 'Рекомендации:', ...(payload.next_actions || []).map((a, i) => `${i + 1}. ${a}`)];
         answerEl.textContent = lines.join('\n');
       } catch (error) {
         answerEl.textContent = error?.message || 'Не удалось получить ответ агента';

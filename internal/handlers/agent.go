@@ -1,24 +1,17 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/AleksKAG/construction-manager/internal/repository"
-	"github.com/AleksKAG/construction-manager/internal/services"
 	"github.com/gin-gonic/gin"
 )
 
 type agentSummaryRequest struct {
 	ProjectID string `json:"project_id"`
 	Question  string `json:"question"`
-}
-
-type agentLLMOutput struct {
-	Answer      string   `json:"answer"`
-	NextActions []string `json:"next_actions"`
 }
 
 func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
@@ -82,7 +75,7 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 			actions = append(actions, "Продолжать мониторинг: обновлять факт и контрольные точки еженедельно.")
 		}
 
-		baseSummary := fmt.Sprintf(
+		summary := fmt.Sprintf(
 			"Проект: %s\nАдрес: %s\nПлощадь: %.2f м²\nБюджет/стоимость: %.2f руб.\nПлан: %.2f%%\nФакт: %.2f%%\nОтклонение: %.2f п.п.\nЗадач в проекте: %d",
 			project.Name,
 			project.Address,
@@ -93,26 +86,8 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 			deviation,
 			len(tasks),
 		)
-		summary := baseSummary
 		if q := strings.TrimSpace(input.Question); q != "" {
 			summary = fmt.Sprintf("%s\n\nФокус вопроса: %s", summary, q)
-		}
-
-		provider := "local"
-		if services.QwenEnabled() {
-			systemPrompt := "Ты помощник технического заказчика в строительстве. Верни строго JSON: {\"answer\":\"...\",\"next_actions\":[\"...\",\"...\"]}. Без markdown."
-			userPrompt := fmt.Sprintf("Контекст проекта:\n%s\n\nВопрос пользователя: %s", baseSummary, firstNonEmpty(strings.TrimSpace(input.Question), "Дай краткую сводку и приоритетные действия."))
-			llmText, err := services.AskQwen(c.Request.Context(), systemPrompt, userPrompt)
-			if err == nil {
-				var out agentLLMOutput
-				if json.Unmarshal([]byte(llmText), &out) == nil && strings.TrimSpace(out.Answer) != "" {
-					summary = strings.TrimSpace(out.Answer)
-					if len(out.NextActions) > 0 {
-						actions = out.NextActions
-					}
-					provider = "qwen"
-				}
-			}
 		}
 
 		c.JSON(http.StatusOK, gin.H{
@@ -121,7 +96,6 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 			"answer":        summary,
 			"next_actions":  actions,
 			"question_echo": strings.TrimSpace(input.Question),
-			"provider":      provider,
 		})
 	}
 }
