@@ -10,6 +10,7 @@ S3_SECRET_KEY="${S3_SECRET_KEY}"
 S3_REGION="${S3_REGION:-ru-1}"
 DB_FILE_NAME="${DB_FILE_NAME:-construction.db}"
 DB_PATH="${DB_PATH:-/data/construction.db}"
+TMP_BACKUP_PATH="/tmp/${DB_FILE_NAME}.backup"
 UPLOAD_INTERVAL="${UPLOAD_INTERVAL:-300}" # По умолчанию 300 секунд (5 минут)
 
 echo "=== Starting S3 backup scheduler ==="
@@ -36,12 +37,28 @@ export AWS_DEFAULT_REGION="$S3_REGION"
 # Функция для выгрузки БД в S3
 upload_to_s3() {
     if [ -f "$DB_PATH" ]; then
+        LOCAL_UPLOAD_PATH="$DB_PATH"
         echo "=== Uploading database to S3 at $(date) ==="
+
+        # Для SQLite в WAL-режиме обычное копирование DB файла может пропускать свежие изменения.
+        # Если sqlite3 доступен, делаем консистентный backup-слепок.
+        if command -v sqlite3 >/dev/null 2>&1; then
+            if sqlite3 "$DB_PATH" ".backup '$TMP_BACKUP_PATH'"; then
+                LOCAL_UPLOAD_PATH="$TMP_BACKUP_PATH"
+            else
+                echo "=== Warning: sqlite backup failed, uploading original DB file ==="
+            fi
+        fi
+
         # Убираем перенаправление ошибок, чтобы видеть их в логах
-        if aws s3 cp "$DB_PATH" "s3://${S3_BUCKET}/${DB_FILE_NAME}" --endpoint-url "$S3_ENDPOINT"; then
+        if aws s3 cp "$LOCAL_UPLOAD_PATH" "s3://${S3_BUCKET}/${DB_FILE_NAME}" --endpoint-url "$S3_ENDPOINT"; then
             echo "=== Database uploaded successfully to S3 ==="
         else
             echo "=== ERROR: Failed to upload database to S3 at $(date) ==="
+        fi
+
+        if [ -f "$TMP_BACKUP_PATH" ]; then
+            rm -f "$TMP_BACKUP_PATH"
         fi
     else
         echo "=== Warning: Database file not found at ${DB_PATH} ==="
