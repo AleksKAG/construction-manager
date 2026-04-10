@@ -392,9 +392,9 @@ class ConstructionManagerUI {
     const statusClass = this.statusClass(m.fact);
 
     const common = `
-      <div class="kv"><span>📍 Адрес:</span><strong>${m.address}</strong></div>
-      <div class="kv"><span>📐 Площадь:</span><strong>${m.area.toLocaleString('ru-RU')} м²</strong></div>
-      <div class="kv"><span>💰 Стоимость:</span><strong>${m.cost.toLocaleString('ru-RU')} руб.</strong></div>
+      <div class="kv"><span>Адрес:</span><strong>${m.address}</strong></div>
+      <div class="kv"><span>Площадь:</span><strong>${m.area.toLocaleString('ru-RU')} м²</strong></div>
+      <div class="kv"><span>Стоимость:</span><strong>${m.cost.toLocaleString('ru-RU')} руб.</strong></div>
       <div class="kv"><span>План:</span><strong>${m.plan}%</strong></div>
       <div class="kv"><span>Факт:</span><strong>${m.fact}%</strong></div>
       <div class="kv"><span>Отклонение:</span><strong>${m.deviation > 0 ? '+' : ''}${m.deviation}%</strong></div>
@@ -436,6 +436,7 @@ class ConstructionManagerUI {
         <div class="dashboard-toolbar">
           <h3>Дашборды проектов</h3>
           <div class="row-actions">
+            <button class="mini" id="openAgentSummary">AI-сводка</button>
             <label class="metric">Интервал (сек)
               <input id="dashboardRefreshInput" type="number" min="15" value="${this.state.dashboardRefreshSeconds}" style="width:88px;margin-left:6px;">
             </label>
@@ -459,6 +460,7 @@ class ConstructionManagerUI {
       localStorage.setItem('cm_dashboard_refresh_sec', String(this.state.dashboardRefreshSeconds));
       this.setupAutoRefresh();
     });
+    document.getElementById('openAgentSummary')?.addEventListener('click', () => this.openAgentSummaryForm());
 
     document.querySelectorAll('[data-remove-dashboard]').forEach((btn) => {
       btn.addEventListener('click', () => this.removeDashboard(btn.dataset.removeDashboard));
@@ -784,6 +786,26 @@ class ConstructionManagerUI {
     this.openModal();
   }
 
+  openAgentSummaryForm() {
+    const selected = this.currentProject();
+    this.modalMode = 'agentSummary';
+    document.getElementById('modalTitle').textContent = 'AI-агент: сводка по проекту';
+    document.getElementById('modalBody').innerHTML = `
+      <div class="form-grid">
+        <label>Проект
+          <select id="agentProject">${this.objects.map((o) => `<option value="${o.id}" ${String(o.id) === String(selected?.id) ? 'selected' : ''}>${o.name}</option>`).join('')}</select>
+        </label>
+        <label>Вопрос (опционально)
+          <textarea id="agentQuestion" rows="3" placeholder="Например: какие главные риски на 2 недели?"></textarea>
+        </label>
+        <div id="agentAnswer" class="notice">Нажмите «Спросить агента», чтобы получить сводку.</div>
+      </div>
+    `;
+    const saveBtn = document.getElementById('saveEntity');
+    if (saveBtn) saveBtn.textContent = 'Спросить агента';
+    this.openModal();
+  }
+
   removeDashboard(id) {
     if (!confirm('Удалить дашборд?')) return;
     this.state.dashboards = this.state.dashboards.filter((d) => d.id !== id);
@@ -856,6 +878,27 @@ class ConstructionManagerUI {
       return;
     }
 
+    if (this.modalMode === 'agentSummary') {
+      const saveBtn = document.getElementById('saveEntity');
+      const projectId = document.getElementById('agentProject')?.value;
+      const question = document.getElementById('agentQuestion')?.value?.trim() || '';
+      const answerEl = document.getElementById('agentAnswer');
+      if (!projectId) return alert('Выберите проект');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Запрос...';
+      try {
+        const payload = await api('/agent/summary', 'POST', { project_id: String(projectId), question });
+        const lines = [payload.answer, '', 'Рекомендации:', ...(payload.next_actions || []).map((a, i) => `${i + 1}. ${a}`)];
+        answerEl.textContent = lines.join('\n');
+      } catch (error) {
+        answerEl.textContent = error?.message || 'Не удалось получить ответ агента';
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Спросить агента';
+      }
+      return;
+    }
+
     if (this.modalMode === 'createRow' || this.modalMode === 'editRow') {
       try {
         const data = {};
@@ -914,6 +957,11 @@ class ConstructionManagerUI {
     this.state.modalDirty = false;
     this.state.editProjectId = null;
     this.state.projectFormSnapshot = '';
+    const saveBtn = document.getElementById('saveEntity');
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Сохранить';
+    }
   }
 
   isTemplateView(view) {
