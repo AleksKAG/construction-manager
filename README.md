@@ -104,6 +104,26 @@ docker compose down
 - `PUT /api/v1/objects/:id/templates/:code/rows/:rowId`
 - `DELETE /api/v1/objects/:id/templates/:code/rows/:rowId`
 
+### AI-агент (сводка проекта)
+- `POST /api/v1/agent/summary`
+- Тело запроса:
+  ```json
+  {
+    "project_id": "1",
+    "question": "Какие риски на 2 недели?"
+  }
+  ```
+- Если задан `QWEN_API_KEY`, endpoint использует Qwen через OpenAI-compatible `/chat/completions`.
+- Если ключ не задан или Qwen недоступен, endpoint возвращает локально рассчитанную сводку.
+
+Пример переменных окружения для Qwen:
+
+```bash
+QWEN_API_KEY=your_key
+QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+QWEN_MODEL=qwen-plus
+```
+
 ---
 
 ## План развития
