@@ -14,8 +14,8 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
     go build -a -installsuffix cgo -o main ./cmd/api
 
 FROM alpine:3.21
-ARG INSTALL_AWSCLI=false
-RUN apk --no-cache add ca-certificates wget libgcc bash \
+ARG INSTALL_AWSCLI=true
+RUN apk --no-cache add ca-certificates wget libgcc bash sqlite \
     && if [ "$INSTALL_AWSCLI" = "true" ]; then apk --no-cache add aws-cli; fi
 WORKDIR /app
 COPY --from=builder /app/main .
