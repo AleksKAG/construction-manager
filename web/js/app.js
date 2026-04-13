@@ -87,15 +87,30 @@ class ConstructionManagerUI {
   }
 
   async bootstrap() {
-    if (!localStorage.getItem('cm_token')) await issueDemoToken('admin');
-    await this.loadObjects();
-    if (!this.state.dashboards.length) this.seedDashboards();
-    this.renderProjectTree();
-    this.applySidebarState();
-    this.bindConnectivity();
-    this.setupAutoRefresh();
-    this.initAIAssistantWidget();
-    await this.renderContent();
+    try {
+      if (!localStorage.getItem('cm_token')) await issueDemoToken('admin');
+      await this.loadObjects();
+      if (!this.state.dashboards.length) this.seedDashboards();
+      this.renderProjectTree();
+      this.applySidebarState();
+      this.bindConnectivity();
+      this.setupAutoRefresh();
+      this.initAIAssistantWidget();
+      await this.renderContent();
+    } catch (error) {
+      this.renderFatalError(error);
+    }
+  }
+
+  renderFatalError(error) {
+    const message = error?.message || 'Не удалось инициализировать приложение.';
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-12">
+        <h3>Ошибка загрузки данных</h3>
+        <p>${message}</p>
+        <p>Проверьте доступность API по адресу <code>/api/v1/health</code> и обновите страницу.</p>
+      </article>
+    `;
   }
 
   bind() {
