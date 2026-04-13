@@ -71,6 +71,15 @@ class ConstructionManagerUI {
     this.dashboardMetrics = {};
     this.templateEditMode = false;
     this.templateRowsCache = [];
+    this.aiState = {
+      open: false,
+      minimized: false,
+      input: '',
+      messages: [],
+      loading: false,
+      screenshotDataUrl: '',
+      screenshotName: '',
+    };
 
     this.bind();
     this.setupResponsiveSidebar();
@@ -85,6 +94,7 @@ class ConstructionManagerUI {
     this.applySidebarState();
     this.bindConnectivity();
     this.setupAutoRefresh();
+    this.initAIAssistantWidget();
     await this.renderContent();
   }
 
@@ -962,6 +972,251 @@ class ConstructionManagerUI {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Сохранить';
     }
+  }
+
+  initAIAssistantWidget() {
+    if (document.getElementById('aiAssistantRoot')) return;
+    const host = document.createElement('div');
+    host.id = 'aiAssistantRoot';
+    document.body.appendChild(host);
+    this.renderAIAssistant();
+  }
+
+  renderAIAssistant() {
+    const root = document.getElementById('aiAssistantRoot');
+    if (!root) return;
+
+    if (!this.aiState.open) {
+      root.innerHTML = `<button class="ai-fab" id="aiToggleBtn" aria-label="Открыть AI ассистента">🤖</button>`;
+      document.getElementById('aiToggleBtn')?.addEventListener('click', () => {
+        this.aiState.open = true;
+        this.aiState.minimized = false;
+        this.renderAIAssistant();
+      });
+      return;
+    }
+
+    const messages = this.aiState.messages.map((m) => `
+      <div class="ai-msg ${m.role}"><div class="ai-bubble">${m.text.replaceAll('<', '&lt;')}</div></div>
+    `).join('');
+
+    root.innerHTML = `
+      <section class="ai-widget ${this.aiState.minimized ? 'min' : ''}">
+        <header class="ai-head" id="aiHeadToggle">
+          <strong>🤖 AI Ассистент</strong>
+          <div class="ai-head-actions">
+            <button class="ai-icon-btn" id="aiMinBtn" title="Свернуть">${this.aiState.minimized ? '▢' : '—'}</button>
+            <button class="ai-icon-btn" id="aiCloseBtn" title="Закрыть">✕</button>
+          </div>
+        </header>
+        <div class="ai-body">
+          <div class="ai-messages" id="aiMessages">
+            ${messages || '<div class="notice">Задайте вопрос по текущему проекту.</div>'}
+          </div>
+          ${this.aiState.screenshotDataUrl ? `<div class="ai-attachment">📎 ${this.aiState.screenshotName || 'Снимок экрана'} <button id="aiClearShot" class="mini">Удалить</button></div>` : ''}
+          <div class="ai-input-row">
+            <input id="aiInput" class="ai-input" placeholder="Спросите по проекту..." value="${this.aiState.input.replaceAll('"', '&quot;')}">
+            <button id="aiShotBtn" class="mini" title="Снимок экрана">📸</button>
+            <button id="aiSendBtn" class="primary" ${this.aiState.loading ? 'disabled' : ''}>➤</button>
+          </div>
+        </div>
+      </section>
+    `;
+
+    document.getElementById('aiHeadToggle')?.addEventListener('click', (e) => {
+      if (e.target?.id === 'aiCloseBtn' || e.target?.id === 'aiMinBtn') return;
+      this.aiState.minimized = !this.aiState.minimized;
+      this.renderAIAssistant();
+    });
+    document.getElementById('aiCloseBtn')?.addEventListener('click', () => {
+      this.aiState.open = false;
+      this.renderAIAssistant();
+    });
+    document.getElementById('aiMinBtn')?.addEventListener('click', () => {
+      this.aiState.minimized = !this.aiState.minimized;
+      this.renderAIAssistant();
+    });
+    document.getElementById('aiInput')?.addEventListener('input', (e) => {
+      this.aiState.input = e.target.value;
+    });
+    document.getElementById('aiInput')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.sendAIMessage();
+    });
+    document.getElementById('aiSendBtn')?.addEventListener('click', () => this.sendAIMessage());
+    document.getElementById('aiShotBtn')?.addEventListener('click', () => this.captureScreenshotArea());
+    document.getElementById('aiClearShot')?.addEventListener('click', () => {
+      this.aiState.screenshotDataUrl = '';
+      this.aiState.screenshotName = '';
+      this.renderAIAssistant();
+    });
+
+    const box = document.getElementById('aiMessages');
+    if (box) box.scrollTop = box.scrollHeight;
+  }
+
+  async sendAIMessage() {
+    const text = this.aiState.input.trim();
+    if (!text || this.aiState.loading) return;
+
+    this.aiState.messages.push({ role: 'user', text });
+    this.aiState.input = '';
+    this.aiState.loading = true;
+    this.renderAIAssistant();
+
+    const token = localStorage.getItem('cm_token');
+    const projectId = String(this.selectedObjectId || this.objects[0]?.id || '');
+    let assistantText = '';
+    this.aiState.messages.push({ role: 'assistant', text: '' });
+    this.renderAIAssistant();
+
+    try {
+      const res = await fetch('/api/v1/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          message: text,
+          screenshot: this.aiState.screenshotDataUrl || '',
+          context: {
+            project_id: projectId,
+            route: this.currentView,
+            selected_doc: this.currentTemplateCode || '',
+          },
+        }),
+      });
+
+      if (!res.ok || !res.body) throw new Error(`AI недоступен (${res.status})`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        for (const evt of events) {
+          const eventMatch = evt.match(/event:\s*(\w+)/);
+          const dataMatch = evt.match(/data:\s*(.*)/);
+          const eventType = eventMatch?.[1] || 'token';
+          const data = dataMatch?.[1] || '{}';
+          if (eventType === 'token') {
+            try {
+              const parsed = JSON.parse(data);
+              assistantText += parsed.text || '';
+            } catch {
+              assistantText += data;
+            }
+            this.aiState.messages[this.aiState.messages.length - 1].text = assistantText;
+            this.renderAIAssistant();
+          }
+        }
+      }
+
+      this.aiState.screenshotDataUrl = '';
+      this.aiState.screenshotName = '';
+    } catch (error) {
+      this.aiState.messages[this.aiState.messages.length - 1].text = error?.message || 'Не удалось получить ответ.';
+    } finally {
+      this.aiState.loading = false;
+      this.renderAIAssistant();
+    }
+  }
+
+  async captureScreenshotArea() {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      alert('Ваш браузер не поддерживает захват экрана.');
+      return;
+    }
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' }, audio: false });
+    } catch {
+      return;
+    }
+
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    await video.play();
+
+    const frameCanvas = document.createElement('canvas');
+    frameCanvas.width = video.videoWidth;
+    frameCanvas.height = video.videoHeight;
+    frameCanvas.getContext('2d')?.drawImage(video, 0, 0);
+    stream.getTracks().forEach((t) => t.stop());
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ai-capture-overlay';
+    overlay.innerHTML = `
+      <div class="ai-capture-hint">Выделите область мышью. Esc — отмена.</div>
+      <img src="${frameCanvas.toDataURL('image/png')}" class="ai-capture-image" alt="capture">
+      <div class="ai-capture-rect" id="aiCaptureRect"></div>
+    `;
+    document.body.appendChild(overlay);
+
+    const img = overlay.querySelector('.ai-capture-image');
+    const rect = overlay.querySelector('#aiCaptureRect');
+    let startX = 0;
+    let startY = 0;
+    let drawing = false;
+
+    const cleanup = () => {
+      document.removeEventListener('keydown', onKey);
+      overlay.remove();
+    };
+
+    const onKey = (e) => { if (e.key === 'Escape') cleanup(); };
+    document.addEventListener('keydown', onKey);
+
+    img.addEventListener('mousedown', (e) => {
+      drawing = true;
+      startX = e.offsetX;
+      startY = e.offsetY;
+      rect.style.display = 'block';
+      rect.style.left = `${startX}px`;
+      rect.style.top = `${startY}px`;
+      rect.style.width = '0px';
+      rect.style.height = '0px';
+    });
+
+    img.addEventListener('mousemove', (e) => {
+      if (!drawing) return;
+      const x = Math.min(e.offsetX, startX);
+      const y = Math.min(e.offsetY, startY);
+      const w = Math.abs(e.offsetX - startX);
+      const h = Math.abs(e.offsetY - startY);
+      rect.style.left = `${x}px`;
+      rect.style.top = `${y}px`;
+      rect.style.width = `${w}px`;
+      rect.style.height = `${h}px`;
+    });
+
+    img.addEventListener('mouseup', (e) => {
+      if (!drawing) return;
+      drawing = false;
+      const x1 = Math.min(e.offsetX, startX);
+      const y1 = Math.min(e.offsetY, startY);
+      const w = Math.abs(e.offsetX - startX);
+      const h = Math.abs(e.offsetY - startY);
+      if (w < 8 || h < 8) {
+        cleanup();
+        return;
+      }
+
+      const crop = document.createElement('canvas');
+      crop.width = w;
+      crop.height = h;
+      crop.getContext('2d')?.drawImage(frameCanvas, x1, y1, w, h, 0, 0, w, h);
+      this.aiState.screenshotDataUrl = crop.toDataURL('image/jpeg', 0.92);
+      this.aiState.screenshotName = `capture_${Date.now()}.jpg`;
+      cleanup();
+      this.renderAIAssistant();
+    });
   }
 
   isTemplateView(view) {
