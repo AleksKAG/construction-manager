@@ -145,3 +145,14 @@ QWEN_MODEL=qwen-plus
 3. Добавить OpenAPI/Swagger.
 4. Покрыть сервисы тестами.
 5. Улучшить дашборды и отчеты.
+
+
+## AI-ассистент с RAG (добавлено)
+
+Добавлены заготовки для внедрения контекстного AI-ассистента под строительные проекты:
+
+- `docs/ai_assistant_integration.md` — архитектура (React ↔ Gin ↔ pgvector ↔ YandexGPT), чек-лист и рекомендации по безопасности.
+- `schema/007_ai_rag.sql` — PostgreSQL-миграция для `pgvector` и таблицы `ai_document_chunks`.
+- `scripts/embed_existing_data.go` — one-shot backfill скрипт для чанкинга и загрузки эмбеддингов из таблиц `ird/stage_p/stage_r/estimates/protocols`.
+
+> Скрипт в `scripts/embed_existing_data.go` помечен build-тегом `ignore` и запускается отдельно через `go run scripts/embed_existing_data.go`.
