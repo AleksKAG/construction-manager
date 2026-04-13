@@ -114,6 +114,7 @@ docker compose down
   }
   ```
 - Если задан `QWEN_API_KEY`, endpoint использует Qwen через OpenAI-compatible `/chat/completions`.
+- Если задан `AI_PROVIDER=yandex_manager`, endpoint использует Yandex AI Studio Manager через `/v1/responses`.
 - Если ключ не задан или Qwen недоступен, endpoint возвращает локально рассчитанную сводку.
 
 Пример переменных окружения для Qwen:
@@ -122,6 +123,16 @@ docker compose down
 QWEN_API_KEY=your_key
 QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 QWEN_MODEL=qwen-plus
+```
+
+Пример переменных окружения для Yandex AI Manager:
+
+```bash
+AI_PROVIDER=yandex_manager
+YANDEX_API_KEY=your_api_key
+YANDEX_FOLDER_ID=your_folder_id
+YANDEX_PROMPT_ID=your_prompt_id
+YANDEX_BASE_URL=https://ai.api.cloud.yandex.net/v1
 ```
 
 ---
