@@ -155,6 +155,12 @@ button { font: inherit; }
 .ai-input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
 .ai-input { flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
 .ai-attachment { margin: 0 12px 8px; padding: 8px 10px; background: #f7faff; border: 1px solid #d4e7ff; border-radius: 8px; font-size: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ai-attachment-thumb { width: 56px; height: 40px; object-fit: cover; border: 1px solid #c7d6eb; border-radius: 6px; }
+.ai-capture-overlay { position: fixed; inset: 0; background: rgba(15, 26, 45, .86); z-index: 120; display: grid; place-items: center; }
+.ai-capture-hint { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); color: #fff; background: rgba(0,0,0,.45); padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+.ai-capture-stage { position: relative; line-height: 0; }
+.ai-capture-image { max-width: 92vw; max-height: 86vh; object-fit: contain; cursor: crosshair; user-select: none; }
+.ai-capture-rect { position: absolute; border: 2px dashed #1890ff; background: rgba(24, 144, 255, .2); pointer-events: none; display: none; }
 .ai-capture-overlay { position: fixed; inset: 0; background: rgba(15, 26, 45, .86); z-index: 120; display: grid; place-items: center; }
 .ai-capture-hint { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); color: #fff; background: rgba(0,0,0,.45); padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 .ai-capture-image { max-width: 92vw; max-height: 86vh; object-fit: contain; cursor: crosshair; user-select: none; }

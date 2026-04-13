@@ -1013,6 +1013,7 @@ class ConstructionManagerUI {
           <div class="ai-messages" id="aiMessages">
             ${messages || '<div class="notice">Задайте вопрос по текущему проекту.</div>'}
           </div>
+          ${this.aiState.screenshotDataUrl ? `<div class="ai-attachment"><span>📎 ${this.aiState.screenshotName || 'Снимок экрана'}</span><img src="${this.aiState.screenshotDataUrl}" alt="attachment" class="ai-attachment-thumb"><button id="aiClearShot" class="mini">Удалить</button></div>` : ''}
           ${this.aiState.screenshotDataUrl ? `<div class="ai-attachment">📎 ${this.aiState.screenshotName || 'Снимок экрана'} <button id="aiClearShot" class="mini">Удалить</button></div>` : ''}
           <div class="ai-input-row">
             <input id="aiInput" class="ai-input" placeholder="Спросите по проекту..." value="${this.aiState.input.replaceAll('"', '&quot;')}">
@@ -1081,6 +1082,7 @@ class ConstructionManagerUI {
           screenshot: this.aiState.screenshotDataUrl || '',
           context: {
             project_id: projectId,
+            route: `${window.location.pathname}#${this.currentView}`,
             route: this.currentView,
             selected_doc: this.currentTemplateCode || '',
           },
@@ -1154,6 +1156,14 @@ class ConstructionManagerUI {
     overlay.className = 'ai-capture-overlay';
     overlay.innerHTML = `
       <div class="ai-capture-hint">Выделите область мышью. Esc — отмена.</div>
+      <div class="ai-capture-stage">
+        <img src="${frameCanvas.toDataURL('image/png')}" class="ai-capture-image" alt="capture">
+        <div class="ai-capture-rect" id="aiCaptureRect"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const stage = overlay.querySelector('.ai-capture-stage');
       <img src="${frameCanvas.toDataURL('image/png')}" class="ai-capture-image" alt="capture">
       <div class="ai-capture-rect" id="aiCaptureRect"></div>
     `;
@@ -1173,6 +1183,21 @@ class ConstructionManagerUI {
     const onKey = (e) => { if (e.key === 'Escape') cleanup(); };
     document.addEventListener('keydown', onKey);
 
+    const localPos = (event) => {
+      const bounds = img.getBoundingClientRect();
+      return {
+        x: Math.max(0, Math.min(bounds.width, event.clientX - bounds.left)),
+        y: Math.max(0, Math.min(bounds.height, event.clientY - bounds.top)),
+        width: bounds.width,
+        height: bounds.height,
+      };
+    };
+
+    img.addEventListener('mousedown', (e) => {
+      drawing = true;
+      const pos = localPos(e);
+      startX = pos.x;
+      startY = pos.y;
     img.addEventListener('mousedown', (e) => {
       drawing = true;
       startX = e.offsetX;
@@ -1186,6 +1211,11 @@ class ConstructionManagerUI {
 
     img.addEventListener('mousemove', (e) => {
       if (!drawing) return;
+      const pos = localPos(e);
+      const x = Math.min(pos.x, startX);
+      const y = Math.min(pos.y, startY);
+      const w = Math.abs(pos.x - startX);
+      const h = Math.abs(pos.y - startY);
       const x = Math.min(e.offsetX, startX);
       const y = Math.min(e.offsetY, startY);
       const w = Math.abs(e.offsetX - startX);
@@ -1199,6 +1229,11 @@ class ConstructionManagerUI {
     img.addEventListener('mouseup', (e) => {
       if (!drawing) return;
       drawing = false;
+      const pos = localPos(e);
+      const x1 = Math.min(pos.x, startX);
+      const y1 = Math.min(pos.y, startY);
+      const w = Math.abs(pos.x - startX);
+      const h = Math.abs(pos.y - startY);
       const x1 = Math.min(e.offsetX, startX);
       const y1 = Math.min(e.offsetY, startY);
       const w = Math.abs(e.offsetX - startX);
@@ -1208,6 +1243,22 @@ class ConstructionManagerUI {
         return;
       }
 
+      const scaleX = frameCanvas.width / pos.width;
+      const scaleY = frameCanvas.height / pos.height;
+      const crop = document.createElement('canvas');
+      crop.width = Math.floor(w * scaleX);
+      crop.height = Math.floor(h * scaleY);
+      crop.getContext('2d')?.drawImage(
+        frameCanvas,
+        Math.floor(x1 * scaleX),
+        Math.floor(y1 * scaleY),
+        Math.floor(w * scaleX),
+        Math.floor(h * scaleY),
+        0,
+        0,
+        Math.floor(w * scaleX),
+        Math.floor(h * scaleY),
+      );
       const crop = document.createElement('canvas');
       crop.width = w;
       crop.height = h;
@@ -1217,6 +1268,13 @@ class ConstructionManagerUI {
       cleanup();
       this.renderAIAssistant();
     });
+
+    stage.addEventListener('click', (e) => {
+      if (e.target === stage) cleanup();
+    });
+  }
+
+
   }
 
   isTemplateView(view) {
