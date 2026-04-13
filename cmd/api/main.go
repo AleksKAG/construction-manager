@@ -132,6 +132,7 @@ func main() {
 		api.GET("/dashboard/metrics/:projectId", handlers.GetDashboardMetrics(repo))
 		api.POST("/agent/summary", handlers.GetAgentSummary(repo))
 		api.POST("/ai/chat", middleware.JWTAuthMiddleware(), middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetAIChatStream(repo))
+		api.POST("/ai/chat", handlers.GetAIChatStream(repo))
 		api.GET("/estimates/:projectId/summary", handlers.GetEstimateSummary(repo))
 		api.GET("/tep/:projectId", handlers.GetTEPByProject(repo))
 		api.PATCH("/tep/:id", handlers.PatchTEPRow(repo))

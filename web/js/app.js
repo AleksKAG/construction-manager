@@ -1014,6 +1014,7 @@ class ConstructionManagerUI {
             ${messages || '<div class="notice">Задайте вопрос по текущему проекту.</div>'}
           </div>
           ${this.aiState.screenshotDataUrl ? `<div class="ai-attachment"><span>📎 ${this.aiState.screenshotName || 'Снимок экрана'}</span><img src="${this.aiState.screenshotDataUrl}" alt="attachment" class="ai-attachment-thumb"><button id="aiClearShot" class="mini">Удалить</button></div>` : ''}
+          ${this.aiState.screenshotDataUrl ? `<div class="ai-attachment">📎 ${this.aiState.screenshotName || 'Снимок экрана'} <button id="aiClearShot" class="mini">Удалить</button></div>` : ''}
           <div class="ai-input-row">
             <input id="aiInput" class="ai-input" placeholder="Спросите по проекту..." value="${this.aiState.input.replaceAll('"', '&quot;')}">
             <button id="aiShotBtn" class="mini" title="Снимок экрана">📸</button>
@@ -1082,6 +1083,7 @@ class ConstructionManagerUI {
           context: {
             project_id: projectId,
             route: `${window.location.pathname}#${this.currentView}`,
+            route: this.currentView,
             selected_doc: this.currentTemplateCode || '',
           },
         }),
@@ -1162,6 +1164,11 @@ class ConstructionManagerUI {
     document.body.appendChild(overlay);
 
     const stage = overlay.querySelector('.ai-capture-stage');
+      <img src="${frameCanvas.toDataURL('image/png')}" class="ai-capture-image" alt="capture">
+      <div class="ai-capture-rect" id="aiCaptureRect"></div>
+    `;
+    document.body.appendChild(overlay);
+
     const img = overlay.querySelector('.ai-capture-image');
     const rect = overlay.querySelector('#aiCaptureRect');
     let startX = 0;
@@ -1191,6 +1198,10 @@ class ConstructionManagerUI {
       const pos = localPos(e);
       startX = pos.x;
       startY = pos.y;
+    img.addEventListener('mousedown', (e) => {
+      drawing = true;
+      startX = e.offsetX;
+      startY = e.offsetY;
       rect.style.display = 'block';
       rect.style.left = `${startX}px`;
       rect.style.top = `${startY}px`;
@@ -1205,6 +1216,10 @@ class ConstructionManagerUI {
       const y = Math.min(pos.y, startY);
       const w = Math.abs(pos.x - startX);
       const h = Math.abs(pos.y - startY);
+      const x = Math.min(e.offsetX, startX);
+      const y = Math.min(e.offsetY, startY);
+      const w = Math.abs(e.offsetX - startX);
+      const h = Math.abs(e.offsetY - startY);
       rect.style.left = `${x}px`;
       rect.style.top = `${y}px`;
       rect.style.width = `${w}px`;
@@ -1219,6 +1234,10 @@ class ConstructionManagerUI {
       const y1 = Math.min(pos.y, startY);
       const w = Math.abs(pos.x - startX);
       const h = Math.abs(pos.y - startY);
+      const x1 = Math.min(e.offsetX, startX);
+      const y1 = Math.min(e.offsetY, startY);
+      const w = Math.abs(e.offsetX - startX);
+      const h = Math.abs(e.offsetY - startY);
       if (w < 8 || h < 8) {
         cleanup();
         return;
@@ -1240,6 +1259,10 @@ class ConstructionManagerUI {
         Math.floor(w * scaleX),
         Math.floor(h * scaleY),
       );
+      const crop = document.createElement('canvas');
+      crop.width = w;
+      crop.height = h;
+      crop.getContext('2d')?.drawImage(frameCanvas, x1, y1, w, h, 0, 0, w, h);
       this.aiState.screenshotDataUrl = crop.toDataURL('image/jpeg', 0.92);
       this.aiState.screenshotName = `capture_${Date.now()}.jpg`;
       cleanup();
@@ -1251,6 +1274,8 @@ class ConstructionManagerUI {
     });
   }
 
+
+  }
 
   isTemplateView(view) {
     return ['tep', 'designSchedule', 'estimate'].includes(view) || String(view || '').startsWith('template:');
