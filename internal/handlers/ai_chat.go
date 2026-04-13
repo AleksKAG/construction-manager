@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"strings"
 	"time"
 
 	"github.com/AleksKAG/construction-manager/internal/repository"
@@ -127,11 +126,7 @@ func GetAIChatStream(repo repository.Repository) gin.HandlerFunc {
 		answer := buildFallbackAIAnswer(project.Name, project.Address, req)
 		if services.QwenEnabled() {
 			systemPrompt := "Ты ИИ-ассистент строительного проекта. Отвечай кратко, структурировано и только на русском языке."
-			userPrompt := fmt.Sprintf("Проект: %s. Адрес: %s. Маршрут: %s. Документ: %s. Вопрос: %s", project.Name, project.Address, req.Context.Route, req.Context.SelectedDoc, req.Message)
-		answer := buildFallbackAIAnswer(project.Name, project.Address, req)
-		if services.QwenEnabled() {
-			systemPrompt := "Ты ИИ-ассистент строительного проекта. Отвечай кратко, структурировано и только на русском языке."
-			userPrompt := fmt.Sprintf("Проект: %s. Адрес: %s. Маршрут: %s. Вопрос: %s", project.Name, project.Address, req.Context.Route, strings.TrimSpace(req.Message))
+			userPrompt := fmt.Sprintf("Проект: %s. Адрес: %s. Маршрут: %s. Документ: %s. Вопрос: %s", project.Name, project.Address, req.Context.Route, req.Context.SelectedDoc, strings.TrimSpace(req.Message))
 			if strings.TrimSpace(req.Screenshot) != "" {
 				userPrompt += " Пользователь приложил снимок экрана (base64), но OCR недоступен: попроси кратко описать важные фрагменты снимка."
 			}
@@ -162,11 +157,6 @@ func buildFallbackAIAnswer(projectName, address string, req aiChatRequest) strin
 		defaultIfEmpty(req.Context.Route, "—"),
 		defaultIfEmpty(req.Context.SelectedDoc, "—"),
 		req.Message,
-	return fmt.Sprintf("Проект: %s (%s).\nМаршрут: %s.\nВопрос: %s\n\n%s\n\nРекомендация: уточните документ (ИРД/П/Р/Смета/Протокол), чтобы дать точный ответ по проектным данным.",
-		projectName,
-		address,
-		defaultIfEmpty(req.Context.Route, "—"),
-		strings.TrimSpace(req.Message),
 		screenshotNote,
 	)
 }
