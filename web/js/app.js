@@ -80,6 +80,7 @@ class ConstructionManagerUI {
       screenshotDataUrl: '',
       screenshotName: '',
     };
+    this.aiClipboardBound = false;
 
     this.bind();
     this.setupResponsiveSidebar();
@@ -979,7 +980,23 @@ class ConstructionManagerUI {
     const host = document.createElement('div');
     host.id = 'aiAssistantRoot';
     document.body.appendChild(host);
+    this.bindAIAssistantClipboard();
     this.renderAIAssistant();
+  }
+
+  bindAIAssistantClipboard() {
+    if (this.aiClipboardBound) return;
+    this.aiClipboardBound = true;
+    document.addEventListener('paste', async (e) => {
+      if (!this.aiState.open) return;
+      const items = Array.from(e.clipboardData?.items || []);
+      const imgItem = items.find((it) => it.type?.startsWith('image/'));
+      if (!imgItem) return;
+      const file = imgItem.getAsFile();
+      if (!file) return;
+      e.preventDefault();
+      await this.attachImageFile(file);
+    });
   }
 
   renderAIAssistant() {
@@ -1016,9 +1033,11 @@ class ConstructionManagerUI {
           ${this.aiState.screenshotDataUrl ? `<div class="ai-attachment">📎 ${this.aiState.screenshotName || 'Снимок экрана'} <button id="aiClearShot" class="mini">Удалить</button></div>` : ''}
           <div class="ai-input-row">
             <input id="aiInput" class="ai-input" placeholder="Спросите по проекту..." value="${this.aiState.input.replaceAll('"', '&quot;')}">
+            <button id="aiUploadBtn" class="mini" title="Прикрепить изображение">📎</button>
             <button id="aiShotBtn" class="mini" title="Снимок экрана">📸</button>
             <button id="aiSendBtn" class="primary" ${this.aiState.loading ? 'disabled' : ''}>➤</button>
           </div>
+          <input type="file" id="aiFileInput" accept="image/*" style="display:none">
         </div>
       </section>
     `;
@@ -1043,6 +1062,13 @@ class ConstructionManagerUI {
       if (e.key === 'Enter') this.sendAIMessage();
     });
     document.getElementById('aiSendBtn')?.addEventListener('click', () => this.sendAIMessage());
+    document.getElementById('aiUploadBtn')?.addEventListener('click', () => document.getElementById('aiFileInput')?.click());
+    document.getElementById('aiFileInput')?.addEventListener('change', async (e) => {
+      const [file] = Array.from(e.target.files || []);
+      if (!file) return;
+      await this.attachImageFile(file);
+      e.target.value = '';
+    });
     document.getElementById('aiShotBtn')?.addEventListener('click', () => this.captureScreenshotArea());
     document.getElementById('aiClearShot')?.addEventListener('click', () => {
       this.aiState.screenshotDataUrl = '';
@@ -1079,6 +1105,7 @@ class ConstructionManagerUI {
         body: JSON.stringify({
           message: text,
           screenshot: this.aiState.screenshotDataUrl || '',
+          screenshot_name: this.aiState.screenshotName || '',
           context: {
             project_id: projectId,
             route: this.currentView,
@@ -1125,6 +1152,29 @@ class ConstructionManagerUI {
       this.aiState.loading = false;
       this.renderAIAssistant();
     }
+  }
+
+  async attachImageFile(file) {
+    if (!file.type?.startsWith('image/')) {
+      alert('Поддерживаются только изображения.');
+      return;
+    }
+    const maxBytes = 8 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      alert('Слишком большой файл. Максимум 8 МБ.');
+      return;
+    }
+
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Не удалось прочитать изображение'));
+      reader.readAsDataURL(file);
+    });
+
+    this.aiState.screenshotDataUrl = String(dataUrl || '');
+    this.aiState.screenshotName = file.name || `image_${Date.now()}.png`;
+    this.renderAIAssistant();
   }
 
   async captureScreenshotArea() {

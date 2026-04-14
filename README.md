@@ -113,15 +113,16 @@ docker compose down
     "question": "Какие риски на 2 недели?"
   }
   ```
-- Если задан `QWEN_API_KEY`, endpoint использует Qwen через OpenAI-compatible `/chat/completions`.
-- Если ключ не задан или Qwen недоступен, endpoint возвращает локально рассчитанную сводку.
+- Если заданы `YANDEX_AI_API_KEY`, `YANDEX_AI_FOLDER_ID`, `YANDEX_AI_PROMPT_ID`, endpoint использует AI Manager от Yandex (`/v1/responses`).
+- Если ключи не заданы или Yandex недоступен, endpoint возвращает локально рассчитанную сводку.
 
-Пример переменных окружения для Qwen:
+Пример переменных окружения для AI Manager Yandex:
 
 ```bash
-QWEN_API_KEY=your_key
-QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
-QWEN_MODEL=qwen-plus
+YANDEX_AI_API_KEY=your_key
+YANDEX_AI_FOLDER_ID=your_folder_id
+YANDEX_AI_PROMPT_ID=your_prompt_id
+YANDEX_AI_BASE_URL=https://ai.api.cloud.yandex.net/v1/responses
 ```
 
 ---

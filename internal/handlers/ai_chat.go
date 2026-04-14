@@ -12,9 +12,10 @@ import (
 )
 
 type aiChatRequest struct {
-	Message    string `json:"message" binding:"required"`
-	Screenshot string `json:"screenshot"`
-	Context    struct {
+	Message        string `json:"message" binding:"required"`
+	Screenshot     string `json:"screenshot"`
+	ScreenshotName string `json:"screenshot_name"`
+	Context        struct {
 		ProjectID   string `json:"project_id"`
 		Route       string `json:"route"`
 		SelectedDoc string `json:"selected_doc"`
@@ -56,14 +57,16 @@ func GetAIChatStream(repo repository.Repository) gin.HandlerFunc {
 		}
 
 		answer := buildFallbackAIAnswer(project.Name, project.Address, req)
-		if services.QwenEnabled() {
+		if services.YandexManagerEnabled() {
 			systemPrompt := "Ты ИИ-ассистент строительного проекта. Отвечай кратко, структурировано и только на русском языке."
 			userPrompt := fmt.Sprintf("Проект: %s. Адрес: %s. Маршрут: %s. Вопрос: %s", project.Name, project.Address, req.Context.Route, strings.TrimSpace(req.Message))
 			if strings.TrimSpace(req.Screenshot) != "" {
-				userPrompt += " Пользователь приложил снимок экрана (base64), но OCR недоступен: попроси кратко описать важные фрагменты снимка."
+				userPrompt += " Пользователь приложил снимок экрана. OCR в сервисе не включен: если данных недостаточно, попроси пользователя коротко описать ключевые фрагменты."
 			}
-			if llmAnswer, qErr := services.AskQwen(c.Request.Context(), systemPrompt, userPrompt); qErr == nil && strings.TrimSpace(llmAnswer) != "" {
+			if llmAnswer, llmErr := services.AskYandexManager(c.Request.Context(), systemPrompt, userPrompt); llmErr == nil && strings.TrimSpace(llmAnswer) != "" {
 				answer = llmAnswer
+			} else if llmErr != nil {
+				answer += "\n\nПримечание: ответ сформирован локально, так как Yandex AI Manager сейчас недоступен (" + llmErr.Error() + ")."
 			}
 		}
 
@@ -80,7 +83,8 @@ func GetAIChatStream(repo repository.Repository) gin.HandlerFunc {
 func buildFallbackAIAnswer(projectName, address string, req aiChatRequest) string {
 	screenshotNote := "Снимок экрана не приложен."
 	if strings.TrimSpace(req.Screenshot) != "" {
-		screenshotNote = "Снимок экрана приложен. OCR/распознавание в этом окружении не включены, поэтому укажите на скриншоте ключевые цифры/фрагменты текстом."
+		fileName := defaultIfEmpty(strings.TrimSpace(req.ScreenshotName), "без имени")
+		screenshotNote = "Снимок экрана приложен (" + fileName + "). OCR/распознавание в этом окружении не включены, поэтому укажите на скриншоте ключевые цифры/фрагменты текстом."
 	}
 
 	return fmt.Sprintf("Проект: %s (%s).\nМаршрут: %s.\nВопрос: %s\n\n%s\n\nРекомендация: уточните документ (ИРД/П/Р/Смета/Протокол), чтобы дать точный ответ по проектным данным.",
