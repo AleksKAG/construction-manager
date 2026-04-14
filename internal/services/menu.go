@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"gorm.io/gorm"
 )
@@ -122,7 +123,47 @@ func EnsureProjectMenuStructure(db *gorm.DB, projectID string) error {
 		}
 	}
 
-	return db.Model(&models.MenuItem{}).
+	if err := db.Model(&models.MenuItem{}).
 		Where("project_id = ? AND parent_id = ? AND title = ?", projectID, designSection.ID, "График проектирования").
-		Updates(map[string]any{"sort_order": 2, "view_key": "designSchedule", "item_type": "view"}).Error
+		Updates(map[string]any{"sort_order": 2, "view_key": "designSchedule", "item_type": "view"}).Error; err != nil {
+		return err
+	}
+
+	var docsNode models.MenuItem
+	if err := db.Where("project_id = ? AND title = ?", projectID, "Документация (Проектирование)").First(&docsNode).Error; err == nil {
+		_ = ensureMenuItem(db, projectID, docsNode.ID, "Стадия П", "docsStageP", "view", 3)
+		_ = ensureMenuItem(db, projectID, docsNode.ID, "Стадия Р", "docsStageR", "view", 5)
+	}
+
+	var adjustNode models.MenuItem
+	if err := db.Where("project_id = ? AND title = ?", projectID, "Корректировка смет").First(&adjustNode).Error; err == nil {
+		_ = ensureMenuItem(db, projectID, adjustNode.ID, "СВОР", "svorMain", "view", 1)
+		_ = ensureMenuItem(db, projectID, adjustNode.ID, "История согласований", "svorHistory", "view", 2)
+		_ = ensureMenuItem(db, projectID, adjustNode.ID, "Сводный дашборд по СВОР", "svorDashboard", "view", 3)
+	}
+
+	return nil
+}
+
+func ensureMenuItem(db *gorm.DB, projectID, parentID, title, viewKey, itemType string, sortOrder int) error {
+	var item models.MenuItem
+	err := db.Where("project_id = ? AND parent_id = ? AND title = ?", projectID, parentID, title).First(&item).Error
+	if err == nil {
+		return db.Model(&item).Updates(map[string]any{
+			"view_key":   viewKey,
+			"item_type":  itemType,
+			"sort_order": sortOrder,
+		}).Error
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return db.Create(&models.MenuItem{
+		ProjectID: projectID,
+		ParentID:  parentID,
+		Title:     title,
+		ViewKey:   viewKey,
+		ItemType:  itemType,
+		SortOrder: sortOrder,
+	}).Error
 }

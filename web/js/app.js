@@ -71,6 +71,12 @@ class ConstructionManagerUI {
     this.dashboardMetrics = {};
     this.templateEditMode = false;
     this.templateRowsCache = [];
+    this.docsPRows = [];
+    this.docsRRows = [];
+    this.svorRows = [];
+    this.svorPagination = { page: 1, page_size: 20, total: 0 };
+    this.svorFilters = { status: '', dateFrom: '', dateTo: '' };
+    this.svorDashboard = null;
     this.aiState = {
       open: false,
       minimized: false,
@@ -307,12 +313,24 @@ class ConstructionManagerUI {
       const hasChildren = Array.isArray(node.children) && node.children.length > 0;
       const expanded = hasChildren && this.expandedMenuNodes.has(nodeKey);
       const marker = hasChildren ? (expanded ? '▼ ' : '▶ ') : '';
-      const attrs = node.view_key ? `data-view-link="${node.view_key}" data-view-title="${node.title}"` : '';
+      const resolvedView = node.view_key || this.resolveMenuViewKey(node.title);
+      const attrs = resolvedView ? `data-view-link="${resolvedView}" data-view-title="${node.title}"` : '';
       const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}"` : '';
       const row = `<div class="tree-row level-${Math.min(level, 4)}" ${attrs} ${toggleAttrs}>${marker}${node.title}</div>`;
       const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1) : '';
       return `${row}${children}`;
     }).join('');
+  }
+
+  resolveMenuViewKey(title) {
+    const map = {
+      'Стадия П': 'docsStageP',
+      'Стадия Р': 'docsStageR',
+      'СВОР': 'svorMain',
+      'История согласований': 'svorHistory',
+      'Сводный дашборд по СВОР': 'svorDashboard',
+    };
+    return map[String(title || '').trim()] || '';
   }
 
   configureHeader() {
@@ -327,6 +345,11 @@ class ConstructionManagerUI {
       designSchedule: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
       tep: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
       estimate: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
+      docsStageP: { primary: 'Обновить', secondary: 'Экспорт XLSX' },
+      docsStageR: { primary: '+ Добавить изменение', secondary: 'Обновить' },
+      svorMain: { primary: '+ Создать СВОР', secondary: 'Экспорт отчета XLSX' },
+      svorHistory: { primary: 'Обновить', secondary: '' },
+      svorDashboard: { primary: 'Обновить', secondary: '' },
       auth: { primary: 'Выдать demo token', secondary: '' },
     };
 
@@ -346,6 +369,11 @@ class ConstructionManagerUI {
     if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График проектирования');
     if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'ТЭП');
     if (this.currentView === 'estimate') return this.renderTemplateScreen('summary_estimate', 'Сметная документация');
+    if (this.currentView === 'docsStageP') return this.renderDocsStageP();
+    if (this.currentView === 'docsStageR') return this.renderDocsStageR();
+    if (this.currentView === 'svorMain') return this.renderSvorMain();
+    if (this.currentView === 'svorHistory') return this.renderSvorHistoryList();
+    if (this.currentView === 'svorDashboard') return this.renderSvorDashboard();
     if (this.currentView === 'auth') return this.renderAuthView();
     if (this.isTemplateView(this.currentView)) {
       const { code, title } = this.resolveTemplateView(this.currentView);
@@ -523,6 +551,154 @@ class ConstructionManagerUI {
     document.querySelectorAll('[data-edit-project]').forEach((btn) => {
       btn.addEventListener('click', () => this.openProjectEditForm(btn.dataset.editProject));
     });
+  }
+
+  formatDate(value) {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+    return d.toISOString().slice(0, 10);
+  }
+
+  statusLabel(status) {
+    const map = {
+      draft: 'Черновик',
+      sent: 'Направлен',
+      smh_remarks: 'Замечания СМХ',
+      rework: 'На доработке',
+      approved: 'Согласован',
+      rejected: 'Отклонен',
+    };
+    return map[status] || status || '—';
+  }
+
+  async renderDocsStageP() {
+    const project = this.currentProject();
+    if (!project) return;
+    const rows = await api(`/projects/${project.id}/docs/p`);
+    const body = rows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.cipher || '—'}</td><td>${r.name || '—'}</td><td>${r.section || '—'}</td></tr>`).join('');
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-12">
+        <h3>Стадия П — ведомость комплектов</h3>
+        <table class="table">
+          <thead><tr><th>№</th><th>Шифр</th><th>Наименование</th><th>Раздел/Блок</th></tr></thead>
+          <tbody>${body || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
+        </table>
+      </article>
+    `;
+  }
+
+  async renderDocsStageR() {
+    const project = this.currentProject();
+    if (!project) return;
+    const rows = await api(`/projects/${project.id}/docs/r`);
+    this.docsRRows = rows;
+    const body = rows.map((entry, i) => {
+      const r = entry.doc || {};
+      return `
+        <tr class="${entry.alert === 'red' ? 'row-alert-red' : entry.alert === 'yellow' ? 'row-alert-yellow' : ''}">
+          <td>${i + 1}</td>
+          <td>${r.cipher_p_ref || '—'}</td>
+          <td>${r.cipher_r || '—'}</td>
+          <td>${r.name || '—'}</td>
+          <td>${this.formatDate(r.issue_date)}</td>
+          <td>${r.current_version || '0'}</td>
+          <td>${this.formatDate(r.current_revision_date)}</td>
+          <td><button class="mini" data-add-rev="${r.id}">Добавить изменение</button></td>
+        </tr>
+      `;
+    }).join('');
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-12">
+        <h3>Стадия Р — ведомость РД</h3>
+        <table class="table">
+          <thead><tr><th>№</th><th>Шифр П</th><th>Шифр Р</th><th>Наименование</th><th>Дата выдачи</th><th>Текущая версия</th><th>Дата последнего ИЗМ</th><th></th></tr></thead>
+          <tbody>${body || '<tr><td colspan="8">Нет данных</td></tr>'}</tbody>
+        </table>
+      </article>
+    `;
+    document.querySelectorAll('[data-add-rev]').forEach((btn) => btn.addEventListener('click', () => this.openAddRevisionModal(btn.dataset.addRev)));
+  }
+
+  async renderSvorMain() {
+    const project = this.currentProject();
+    if (!project) return;
+    const statusQ = this.svorFilters.status ? `&status=${encodeURIComponent(this.svorFilters.status)}` : '';
+    const payload = await api(`/projects/${project.id}/svor?page=${this.svorPagination.page}&page_size=${this.svorPagination.page_size}${statusQ}`);
+    this.svorRows = payload.data || [];
+    this.svorPagination = payload.pagination || this.svorPagination;
+    const body = this.svorRows.map((entry, i) => {
+      const r = entry.record || {};
+      const doc = r.doc_r || {};
+      return `<tr data-svor-row="${r.id}">
+        <td>${(this.svorPagination.page - 1) * this.svorPagination.page_size + i + 1}</td>
+        <td>${doc.cipher_p_ref || '—'}</td>
+        <td>${doc.name || '—'}</td>
+        <td>${doc.cipher_r || '—'}</td>
+        <td>${this.formatDate(doc.issue_date)}</td>
+        <td>${r.rd_version_snapshot || '—'}</td>
+        <td>${this.formatDate(r.rd_revision_date_snapshot)}</td>
+        <td class="editable-cell" data-field="submission_date">${this.formatDate(r.submission_date)}</td>
+        <td class="editable-cell" data-field="contractor_feedback_date">${this.formatDate(r.contractor_feedback_date)}</td>
+        <td class="editable-cell" data-field="rd_adjustment_version">${r.rd_adjustment_version || '—'}</td>
+        <td class="editable-cell" data-field="status">${this.statusLabel(r.status)}</td>
+        <td class="editable-cell" data-field="notes">${r.notes || '—'}</td>
+        <td>${entry.rd_version_changed_after_submission ? '<span class="warn-pill">⚠️ Версия РД изменилась</span>' : ''}</td>
+        <td>
+          <div class="row-actions">
+            <button class="mini" data-svor-action="approve" data-id="${r.id}">✅</button>
+            <button class="mini" data-svor-action="remark" data-id="${r.id}">📝</button>
+            <button class="mini" data-svor-action="sync" data-id="${r.id}">🔄</button>
+            <button class="mini" data-svor-history="${r.id}">История</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-12 svor-scroll">
+        <h3>СВОР — основная таблица</h3>
+        <div class="row-actions" style="margin-bottom:8px">
+          <select id="svorStatusFilter">
+            <option value="">Все статусы</option>
+            <option value="draft">Черновик</option><option value="sent">Направлен</option><option value="smh_remarks">Замечания СМХ</option><option value="rework">На доработке</option><option value="approved">Согласован</option><option value="rejected">Отклонен</option>
+          </select>
+          <button class="mini" id="svorApplyFilter">Фильтр</button>
+          <span class="metric">Всего: ${this.svorPagination.total || 0}</span>
+        </div>
+        <table class="table table-sticky">
+          <thead><tr><th>№</th><th>Стадия П</th><th>Наименование</th><th>Стадия Р</th><th>Дата выдачи РД</th><th>Версия РД</th><th>Дата ИЗМ</th><th>СВОР направлен</th><th>Дата замечаний СМХ</th><th>Версия РД корректировки</th><th>Статус</th><th>Примечание</th><th>⚠️</th><th></th></tr></thead>
+          <tbody>${body || '<tr><td colspan="14">Нет данных</td></tr>'}</tbody>
+        </table>
+      </article>
+    `;
+    document.getElementById('svorStatusFilter').value = this.svorFilters.status || '';
+    document.getElementById('svorApplyFilter')?.addEventListener('click', () => {
+      this.svorFilters.status = document.getElementById('svorStatusFilter').value || '';
+      this.renderSvorMain();
+    });
+    document.querySelectorAll('.editable-cell').forEach((cell) => cell.addEventListener('dblclick', (e) => this.startInlineEdit(e.currentTarget)));
+    document.querySelectorAll('[data-svor-action]').forEach((btn) => btn.addEventListener('click', () => this.handleSvorQuickAction(btn.dataset.id, btn.dataset.svorAction)));
+    document.querySelectorAll('[data-svor-history]').forEach((btn) => btn.addEventListener('click', () => this.openSvorHistoryModal(btn.dataset.svorHistory)));
+  }
+
+  async renderSvorHistoryList() {
+    document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>История СВОР</h3><p>Откройте историю из основной таблицы по кнопке «История».</p></article>`;
+  }
+
+  async renderSvorDashboard() {
+    const project = this.currentProject();
+    if (!project) return;
+    const dash = await api(`/projects/${project.id}/svor/dashboard`);
+    this.svorDashboard = dash;
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-12">
+        <h3>Сводный дашборд по СВОР</h3>
+        <div class="kv"><span>Всего комплектов РД / СВОР:</span><strong>${dash.total_rd || 0} / ${dash.total_svor || 0}</strong></div>
+        <div class="kv"><span>% согласованных:</span><strong>${Number(dash.approved_percent || 0).toFixed(1)}%</strong></div>
+        <div class="kv"><span>% на доработке:</span><strong>${Number(dash.rework_percent || 0).toFixed(1)}%</strong></div>
+        <div class="kv"><span>% замечаний СМХ:</span><strong>${Number(dash.smh_remarks_percent || 0).toFixed(1)}%</strong></div>
+      </article>
+    `;
   }
 
   async renderTemplateScreen(defaultCode, title) {
@@ -752,6 +928,16 @@ class ConstructionManagerUI {
   async handlePrimaryAction() {
     if (this.currentView === 'home') return this.openDashboardForm();
     if (this.currentView === 'projects') return this.openProjectForm();
+    if (this.currentView === 'docsStageP') return this.renderDocsStageP();
+    if (this.currentView === 'docsStageR') {
+      if (!this.docsRRows.length) await this.renderDocsStageR();
+      const first = this.docsRRows[0]?.doc?.id;
+      if (first) return this.openAddRevisionModal(first);
+      return;
+    }
+    if (this.currentView === 'svorMain') return this.openCreateSvorModal();
+    if (this.currentView === 'svorDashboard') return this.renderSvorDashboard();
+    if (this.currentView === 'svorHistory') return this.renderSvorHistoryList();
     if (this.currentView === 'auth') {
       await issueDemoToken('admin');
       return alert('Demo token обновлён.');
@@ -769,6 +955,108 @@ class ConstructionManagerUI {
       const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
       return exportTemplate(this.selectedObjectId, code);
     }
+    if (this.currentView === 'docsStageP') {
+      const token = localStorage.getItem('cm_token');
+      const project = this.currentProject();
+      const url = `/api/v1/projects/${project.id}/docs/p/export.xlsx`;
+      window.open(url + (token ? `?token=${encodeURIComponent(token)}` : ''), '_blank');
+      return;
+    }
+    if (this.currentView === 'docsStageR') return this.renderDocsStageR();
+    if (this.currentView === 'svorMain') {
+      const project = this.currentProject();
+      const q = new URLSearchParams();
+      if (this.svorFilters.status) q.set('status', this.svorFilters.status);
+      if (this.svorFilters.dateFrom) q.set('date_from', this.svorFilters.dateFrom);
+      if (this.svorFilters.dateTo) q.set('date_to', this.svorFilters.dateTo);
+      window.open(`/api/v1/projects/${project.id}/svor/report.xlsx?${q.toString()}`, '_blank');
+    }
+  }
+
+  openAddRevisionModal(docRID) {
+    this.modalMode = 'addDocRRevision';
+    document.getElementById('modalTitle').textContent = 'Добавить изменение РД';
+    document.getElementById('modalBody').innerHTML = `
+      <div class="form-grid">
+        <input type="hidden" id="docRId" value="${docRID}">
+        <label>Номер изм.<input id="revNum" placeholder="Изм.1"></label>
+        <label>Дата<input id="revDate" type="date"></label>
+        <label>Комментарий<textarea id="revNote" rows="3"></textarea></label>
+      </div>
+    `;
+    this.openModal();
+  }
+
+  async openCreateSvorModal() {
+    if (!this.docsRRows.length) {
+      const project = this.currentProject();
+      this.docsRRows = await api(`/projects/${project.id}/docs/r`);
+    }
+    const options = this.docsRRows.map((r) => `<option value="${r.doc?.id}">${r.doc?.cipher_r || ''} — ${r.doc?.name || ''}</option>`).join('');
+    this.modalMode = 'createSvor';
+    document.getElementById('modalTitle').textContent = 'Создать запись СВОР';
+    document.getElementById('modalBody').innerHTML = `
+      <div class="form-grid">
+        <label>Комплект РД<select id="newSvorDocR">${options}</select></label>
+        <label>Дата направления<input id="newSvorSubmissionDate" type="date"></label>
+        <label>Статус<select id="newSvorStatus"><option value="draft">Черновик</option><option value="sent">Направлен</option></select></label>
+        <label>Примечание<textarea id="newSvorNotes" rows="3"></textarea></label>
+      </div>
+    `;
+    this.openModal();
+  }
+
+  async openSvorHistoryModal(svorId) {
+    const project = this.currentProject();
+    const rows = await api(`/projects/${project.id}/svor/${svorId}/history`);
+    this.modalMode = 'readonly';
+    document.getElementById('modalTitle').textContent = 'История согласований СВОР';
+    document.getElementById('modalBody').innerHTML = `
+      <table class="table">
+        <thead><tr><th>Дата</th><th>Кто</th><th>Действие</th><th>Старое</th><th>Новое</th><th>Комментарий</th></tr></thead>
+        <tbody>${rows.map((h) => `<tr><td>${this.formatDate(h.action_date)}</td><td>${h.user_id || '—'}</td><td>${h.action_type || '—'}</td><td>${this.statusLabel(h.old_status)}</td><td>${this.statusLabel(h.new_status)}</td><td>${h.comment || '—'}</td></tr>`).join('')}</tbody>
+      </table>
+    `;
+    this.openModal();
+  }
+
+  startInlineEdit(cell) {
+    const row = cell.closest('tr');
+    const svorId = row?.dataset?.svorRow;
+    const field = cell.dataset.field;
+    if (!svorId || !field) return;
+    const entry = this.svorRows.find((x) => x.record?.id === svorId);
+    const value = entry?.record?.[field] || '';
+    const isDate = field.includes('date');
+    if (field === 'status') {
+      cell.innerHTML = `<select class="inline-editor"><option value="draft">Черновик</option><option value="sent">Направлен</option><option value="smh_remarks">Замечания СМХ</option><option value="rework">На доработке</option><option value="approved">Согласован</option><option value="rejected">Отклонен</option></select>`;
+      const sel = cell.querySelector('select');
+      sel.value = entry?.record?.status || 'draft';
+      sel.addEventListener('change', () => this.patchSvorRecord(svorId, { status: sel.value }, 'inline status update'));
+      return;
+    }
+    cell.innerHTML = `<input class="inline-editor" type="${isDate ? 'date' : 'text'}" value="${String(value || '').slice(0, 10)}">`;
+    const input = cell.querySelector('input');
+    input.focus();
+    input.addEventListener('blur', () => this.patchSvorRecord(svorId, { [field]: input.value }, 'inline update'));
+  }
+
+  async handleSvorQuickAction(svorId, action) {
+    if (action === 'approve') return this.patchSvorRecord(svorId, { status: 'approved' }, 'quick approve');
+    if (action === 'remark') {
+      const note = prompt('Введите замечание');
+      if (!note) return;
+      return this.patchSvorRecord(svorId, { status: 'smh_remarks', feedback_details: note, contractor_feedback_date: new Date().toISOString().slice(0, 10) }, note);
+    }
+    if (action === 'sync') return this.patchSvorRecord(svorId, { sync_version: true }, 'sync rd version');
+  }
+
+  async patchSvorRecord(svorId, patchData, comment = '') {
+    const project = this.currentProject();
+    const entry = this.svorRows.find((x) => x.record?.id === svorId);
+    if (!entry?.record) return;
+    await api(`/projects/${project.id}/svor/${svorId}`, 'PATCH', { ...patchData, comment, lock_version: entry.record.lock_version });
+    await this.renderSvorMain();
   }
 
   openDashboardForm() {
@@ -825,6 +1113,32 @@ class ConstructionManagerUI {
   }
 
   async handleSaveModal() {
+    if (this.modalMode === 'addDocRRevision') {
+      const project = this.currentProject();
+      const docRID = document.getElementById('docRId')?.value;
+      const revision_num = document.getElementById('revNum')?.value?.trim();
+      const revision_date = document.getElementById('revDate')?.value;
+      const change_note = document.getElementById('revNote')?.value?.trim();
+      if (!docRID || !revision_num || !revision_date) return alert('Заполните номер и дату изменения');
+      await api(`/projects/${project.id}/docs/r/${docRID}/revisions`, 'POST', { revision_num, revision_date, change_note });
+      this.closeModal();
+      return this.renderDocsStageR();
+    }
+
+    if (this.modalMode === 'createSvor') {
+      const project = this.currentProject();
+      const doc_r_id = document.getElementById('newSvorDocR')?.value;
+      if (!doc_r_id) return alert('Выберите комплект РД');
+      await api(`/projects/${project.id}/svor`, 'POST', {
+        doc_r_id,
+        submission_date: document.getElementById('newSvorSubmissionDate')?.value || '',
+        status: document.getElementById('newSvorStatus')?.value || 'draft',
+        notes: document.getElementById('newSvorNotes')?.value || '',
+      });
+      this.closeModal();
+      return this.renderSvorMain();
+    }
+
     if (this.modalMode === 'createProject') {
       const data = this.collectProjectForm();
       const err = this.validateProjectForm(data);
@@ -1274,7 +1588,7 @@ class ConstructionManagerUI {
   }
 
   isKnownView(view) {
-    return ['home', 'projects', 'auth', 'tep', 'designSchedule', 'estimate'].includes(view);
+    return ['home', 'projects', 'auth', 'tep', 'designSchedule', 'estimate', 'docsStageP', 'docsStageR', 'svorMain', 'svorHistory', 'svorDashboard'].includes(view);
   }
 
   resolveTemplateView(view) {
