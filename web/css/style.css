@@ -159,3 +159,14 @@ button { font: inherit; }
 .ai-capture-hint { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); color: #fff; background: rgba(0,0,0,.45); padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 .ai-capture-image { max-width: 92vw; max-height: 86vh; object-fit: contain; cursor: crosshair; user-select: none; }
 .ai-capture-rect { position: fixed; border: 2px dashed #1890ff; background: rgba(24, 144, 255, .2); pointer-events: none; display: none; }
+.row-alert-yellow td { background: #fff8db; }
+.row-alert-red td { background: #ffe9e9; }
+.warn-pill { color: #a15d00; font-size: 12px; font-weight: 600; }
+.inline-editor { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+.svor-scroll { overflow-x: auto; }
+.table-sticky th:nth-child(-n+4),
+.table-sticky td:nth-child(-n+4) { position: sticky; background: #fff; z-index: 1; }
+.table-sticky th:nth-child(1), .table-sticky td:nth-child(1) { left: 0; min-width: 56px; }
+.table-sticky th:nth-child(2), .table-sticky td:nth-child(2) { left: 56px; min-width: 120px; }
+.table-sticky th:nth-child(3), .table-sticky td:nth-child(3) { left: 176px; min-width: 220px; }
+.table-sticky th:nth-child(4), .table-sticky td:nth-child(4) { left: 396px; min-width: 120px; }
