@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -132,6 +133,30 @@ func AddDocRRevision(repo repository.Repository) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusCreated, gin.H{"message": "revision created"})
+	}
+}
+
+func ListDocRRevisions(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		docRID := c.Param("docId")
+
+		var doc models.DocStageR
+		if err := repo.RawDB().Where("id = ? AND project_id = ?", docRID, projectID).First(&doc).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "doc_r not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		var rows []models.DocStageRRevision
+		if err := repo.RawDB().Where("doc_r_id = ?", docRID).Order("revision_date desc").Find(&rows).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"doc_r": doc, "revisions": rows})
 	}
 }
 
@@ -386,19 +411,35 @@ func ImportSvor(repo repository.Repository) gin.HandlerFunc {
 		}
 		defer f.Close()
 
+		created := 0
+		skipped := 0
+		errs := []string{}
+
+		filename := strings.ToLower(fileHeader.Filename)
+		if strings.HasSuffix(filename, ".xlsx") {
+			rows, err := parseSimpleXLSX(f)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid xlsx file: %v", err)})
+				return
+			}
+			for i := 1; i < len(rows); i++ {
+				rowNo := i + 1
+				if err := importSvorRow(repo, projectID, rowNo, rows[i], &created, &skipped, &errs); err != nil {
+					errs = append(errs, err.Error())
+				}
+			}
+			c.JSON(http.StatusOK, gin.H{"created": created, "skipped": skipped, "errors": errs, "format": "xlsx"})
+			return
+		}
+
 		reader := csv.NewReader(f)
 		reader.Comma = ';'
 		reader.FieldsPerRecord = -1
-
-		_, err = reader.Read() // header
+		_, err = reader.Read()
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid csv header"})
 			return
 		}
-
-		created := 0
-		skipped := 0
-		errs := []string{}
 		rowNo := 1
 		for {
 			rowNo++
@@ -411,40 +452,58 @@ func ImportSvor(repo repository.Repository) gin.HandlerFunc {
 				skipped++
 				continue
 			}
-			if len(row) < 12 {
-				skipped++
-				continue
+			if err := importSvorRow(repo, projectID, rowNo, row, &created, &skipped, &errs); err != nil {
+				errs = append(errs, err.Error())
 			}
-			cipherR := strings.TrimSpace(row[3])
-			status := strings.TrimSpace(row[11])
-			if status == "" {
-				status = models.SvorStatusDraft
-			}
-			var docR models.DocStageR
-			if err := repo.RawDB().Where("project_id = ? AND cipher_r = ?", projectID, cipherR).First(&docR).Error; err != nil {
-				errs = append(errs, fmt.Sprintf("row %d: doc R not found for cipher %s", rowNo, cipherR))
-				skipped++
-				continue
-			}
-
-			record := models.SvorRecord{
-				ProjectID:              projectID,
-				DocRID:                 docR.ID,
-				Status:                 status,
-				RDVersionSnapshot:      docR.CurrentVersion,
-				RDRevisionDateSnapshot: docR.CurrentRevisionDate,
-				SvorVersion:            "1",
-			}
-			if err := repo.RawDB().Create(&record).Error; err != nil {
-				errs = append(errs, fmt.Sprintf("row %d: %v", rowNo, err))
-				skipped++
-				continue
-			}
-			created++
 		}
 
 		c.JSON(http.StatusOK, gin.H{"created": created, "skipped": skipped, "errors": errs, "format": "csv"})
 	}
+}
+
+func importSvorRow(repo repository.Repository, projectID string, rowNo int, row []string, created, skipped *int, errs *[]string) error {
+	if len(row) < 12 {
+		*skipped = *skipped + 1
+		return nil
+	}
+	cipherR := strings.TrimSpace(row[3])
+	status := strings.TrimSpace(row[11])
+	if status == "" {
+		status = models.SvorStatusDraft
+	}
+	var docR models.DocStageR
+	if err := repo.RawDB().Where("project_id = ? AND cipher_r = ?", projectID, cipherR).First(&docR).Error; err != nil {
+		*errs = append(*errs, fmt.Sprintf("row %d: doc R not found for cipher %s", rowNo, cipherR))
+		*skipped = *skipped + 1
+		return nil
+	}
+
+	record := models.SvorRecord{
+		ProjectID:              projectID,
+		DocRID:                 docR.ID,
+		Status:                 status,
+		RDVersionSnapshot:      docR.CurrentVersion,
+		RDRevisionDateSnapshot: docR.CurrentRevisionDate,
+		SvorVersion:            "1",
+	}
+	if len(row) > 6 {
+		if d, err := time.Parse("2006-01-02", strings.TrimSpace(row[6])); err == nil {
+			record.SubmissionDate = &d
+		}
+	}
+	if len(row) > 9 {
+		record.RDAdjustmentVersion = strings.TrimSpace(row[9])
+	}
+	if len(row) > 10 {
+		record.Notes = strings.TrimSpace(row[10])
+	}
+	if err := repo.RawDB().Create(&record).Error; err != nil {
+		*errs = append(*errs, fmt.Sprintf("row %d: %v", rowNo, err))
+		*skipped = *skipped + 1
+		return nil
+	}
+	*created = *created + 1
+	return nil
 }
 
 func GetSvorDashboard(repo repository.Repository) gin.HandlerFunc {
@@ -487,5 +546,89 @@ func GetSvorDashboard(repo repository.Repository) gin.HandlerFunc {
 			"generated_at":             time.Now().UTC(),
 			"supports_block_filtering": true,
 		})
+	}
+}
+
+func ExportDocsPXLSX(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		var rows []models.DocStageP
+		if err := repo.RawDB().Where("project_id = ?", projectID).Order("cipher asc").Find(&rows).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		tableRows := make([][]string, 0, len(rows))
+		for i, r := range rows {
+			tableRows = append(tableRows, []string{fmt.Sprintf("%d", i+1), r.Cipher, r.Name, r.Section})
+		}
+		content, err := buildSimpleXLSX([]string{"№", "Шифр", "Наименование", "Раздел/Блок"}, tableRows)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		c.Header("Content-Disposition", "attachment; filename="+filepath.Base("stage_p.xlsx"))
+		_, _ = c.Writer.Write(content)
+	}
+}
+
+func ExportSvorReportXLSX(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		statusFilter := strings.TrimSpace(c.Query("status"))
+		dateFrom := strings.TrimSpace(c.Query("date_from"))
+		dateTo := strings.TrimSpace(c.Query("date_to"))
+
+		db := repo.RawDB().Model(&models.SvorRecord{}).Preload("DocR").Where("project_id = ?", projectID)
+		if statusFilter != "" {
+			db = db.Where("status = ?", statusFilter)
+		}
+		if dateFrom != "" {
+			db = db.Where("submission_date >= ?", dateFrom)
+		}
+		if dateTo != "" {
+			db = db.Where("submission_date <= ?", dateTo)
+		}
+
+		var rows []models.SvorRecord
+		if err := db.Order("updated_at desc").Find(&rows).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		tableRows := make([][]string, 0, len(rows))
+		for i, r := range rows {
+			issueDate := ""
+			if r.DocR.IssueDate != nil {
+				issueDate = r.DocR.IssueDate.Format("2006-01-02")
+			}
+			revDate := ""
+			if r.RDRevisionDateSnapshot != nil {
+				revDate = r.RDRevisionDateSnapshot.Format("2006-01-02")
+			}
+			submissionDate := ""
+			if r.SubmissionDate != nil {
+				submissionDate = r.SubmissionDate.Format("2006-01-02")
+			}
+			feedbackDate := ""
+			if r.ContractorFeedbackDate != nil {
+				feedbackDate = r.ContractorFeedbackDate.Format("2006-01-02")
+			}
+			tableRows = append(tableRows, []string{
+				fmt.Sprintf("%d", i+1), r.DocR.CipherPRef, r.DocR.Name, r.DocR.CipherR, issueDate, r.RDVersionSnapshot,
+				revDate, submissionDate, feedbackDate, r.RDAdjustmentVersion, r.Status, r.Notes,
+			})
+		}
+		content, err := buildSimpleXLSX(
+			[]string{"№", "Стадия П", "Наименование", "Стадия Р", "Дата выдачи РД", "Версия РД", "Дата ИЗМ", "СВОР направлен", "Дата замечаний СМХ", "Версия РД корректировки", "Статус", "Примечание"},
+			tableRows,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		c.Header("Content-Disposition", "attachment; filename="+filepath.Base("svor_report.xlsx"))
+		_, _ = c.Writer.Write(content)
 	}
 }

@@ -143,7 +143,9 @@ func main() {
 		api.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
 
 		api.GET("/projects/:id/docs/p", handlers.ListDocsP(repo))
+		api.GET("/projects/:id/docs/p/export.xlsx", handlers.ExportDocsPXLSX(repo))
 		api.GET("/projects/:id/docs/r", handlers.ListDocsR(repo))
+		api.GET("/projects/:id/docs/r/:docId/revisions", handlers.ListDocRRevisions(repo))
 		api.POST("/projects/:id/docs/r/:docId/revisions", handlers.AddDocRRevision(repo))
 
 		api.GET("/projects/:id/svor", handlers.ListSvor(repo))
@@ -152,6 +154,7 @@ func main() {
 		api.GET("/projects/:id/svor/:svorId/history", handlers.GetSvorHistory(repo))
 		api.GET("/projects/:id/svor/dashboard", handlers.GetSvorDashboard(repo))
 		api.POST("/projects/:id/svor/import", handlers.ImportSvor(repo))
+		api.GET("/projects/:id/svor/report.xlsx", handlers.ExportSvorReportXLSX(repo))
 		// Gantt Tasks endpoints - перемещаем перед /objects/:id чтобы избежать конфликта
 		api.GET("/tasks", handlers.ListTasks(repo)) // GET all tasks (optional)
 		api.POST("/tasks", handlers.CreateTask(repo))
