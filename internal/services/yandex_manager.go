@@ -24,6 +24,20 @@ type yandexResponseRequest struct {
 
 type yandexManagerResponse struct {
 	OutputText string `json:"output_text"`
+	Output     []struct {
+		Type    string `json:"type"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"output"`
+	Result struct {
+		Alternatives []struct {
+			Message struct {
+				Text string `json:"text"`
+			} `json:"message"`
+		} `json:"alternatives"`
+	} `json:"result"`
 }
 
 func YandexManagerEnabled() bool {
@@ -80,13 +94,36 @@ func AskYandexManager(ctx context.Context, systemPrompt, userPrompt string) (str
 		return "", fmt.Errorf("yandex manager request failed: %s", strings.TrimSpace(string(body)))
 	}
 
+	answer, err := extractYandexManagerText(body)
+	if err != nil {
+		return "", err
+	}
+	return answer, nil
+}
+
+func extractYandexManagerText(body []byte) (string, error) {
 	var parsed yandexManagerResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(parsed.OutputText) == "" {
-		return "", fmt.Errorf("empty yandex manager response")
+
+	if text := strings.TrimSpace(parsed.OutputText); text != "" {
+		return text, nil
 	}
 
-	return strings.TrimSpace(parsed.OutputText), nil
+	for _, item := range parsed.Output {
+		for _, part := range item.Content {
+			if strings.TrimSpace(part.Text) != "" {
+				return strings.TrimSpace(part.Text), nil
+			}
+		}
+	}
+
+	for _, alt := range parsed.Result.Alternatives {
+		if text := strings.TrimSpace(alt.Message.Text); text != "" {
+			return text, nil
+		}
+	}
+
+	return "", fmt.Errorf("empty yandex manager response")
 }
