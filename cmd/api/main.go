@@ -62,6 +62,11 @@ func main() {
 		&models.TemplateDefinition{},
 		&models.TemplateColumn{},
 		&models.ProjectTemplateRow{},
+		&models.DocStageP{},
+		&models.DocStageR{},
+		&models.DocStageRRevision{},
+		&models.SvorRecord{},
+		&models.SvorHistory{},
 	); err != nil {
 		logger.Fatal("Migration failed: ", err)
 	}
@@ -136,6 +141,17 @@ func main() {
 		api.GET("/tep/:projectId", handlers.GetTEPByProject(repo))
 		api.PATCH("/tep/:id", handlers.PatchTEPRow(repo))
 		api.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
+
+		api.GET("/projects/:id/docs/p", handlers.ListDocsP(repo))
+		api.GET("/projects/:id/docs/r", handlers.ListDocsR(repo))
+		api.POST("/projects/:id/docs/r/:docId/revisions", handlers.AddDocRRevision(repo))
+
+		api.GET("/projects/:id/svor", handlers.ListSvor(repo))
+		api.POST("/projects/:id/svor", handlers.CreateSvor(repo))
+		api.PATCH("/projects/:id/svor/:svorId", handlers.PatchSvor(repo))
+		api.GET("/projects/:id/svor/:svorId/history", handlers.GetSvorHistory(repo))
+		api.GET("/projects/:id/svor/dashboard", handlers.GetSvorDashboard(repo))
+		api.POST("/projects/:id/svor/import", handlers.ImportSvor(repo))
 		// Gantt Tasks endpoints - перемещаем перед /objects/:id чтобы избежать конфликта
 		api.GET("/tasks", handlers.ListTasks(repo)) // GET all tasks (optional)
 		api.POST("/tasks", handlers.CreateTask(repo))
