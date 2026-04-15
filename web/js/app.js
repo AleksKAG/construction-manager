@@ -372,9 +372,13 @@ class ConstructionManagerUI {
       auth: { primary: 'Выдать demo token', secondary: '' },
     };
 
-    const cfg = this.isTemplateView(this.currentView)
-      ? { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' }
-      : (map[this.currentView] || map.home);
+    let cfg = map[this.currentView] || map.home;
+    if (this.isTemplateView(this.currentView)) {
+      const { code } = this.resolveTemplateView(this.currentView);
+      cfg = code === 'input_design_data'
+        ? { primary: '+ Добавить строку', secondary: this.templateEditMode ? 'Завершить редактирование' : 'Редактировать' }
+        : { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' };
+    }
     primary.textContent = cfg.primary;
     if (cfg.secondary) {
       secondary.style.display = 'inline-block';
@@ -1086,6 +1090,10 @@ class ConstructionManagerUI {
   async handleSecondaryAction() {
     if (this.isTemplateView(this.currentView)) {
       const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
+      if (code === 'input_design_data') {
+        this.templateEditMode = !this.templateEditMode;
+        return this.renderContent();
+      }
       return exportTemplate(this.selectedObjectId, code);
     }
     if (this.currentView === 'docsStageP') {
@@ -1777,7 +1785,12 @@ class ConstructionManagerUI {
     if (view === 'smrSchedule') return { code: 'smr_schedule', title: 'График СМР' };
     if (view === 'estimate') return { code: 'summary_estimate', title: 'Сметная документация' };
     if (String(view || '').startsWith('template:')) {
-      const code = String(view).replace('template:', '') || 'tep';
+      const rawCode = String(view).replace('template:', '') || 'tep';
+      const aliases = {
+        ird: 'input_design_data',
+      };
+      const code = aliases[rawCode] || rawCode;
+      if (code === 'input_design_data') return { code, title: 'ИРД — исходные данные для проектирования' };
       return { code, title: `Таблица: ${code}` };
     }
     return { code: 'tep', title: 'ТЭП' };
