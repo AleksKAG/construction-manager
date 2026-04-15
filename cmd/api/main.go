@@ -52,6 +52,8 @@ func main() {
 	if err := db.AutoMigrate(
 		&models.ProjectObject{},
 		&models.GanttTask{},
+		&models.DocumentRegistry{},
+		&models.WorkforceDailyRecord{},
 		&models.User{},
 		&models.Role{},
 		&models.Permission{},
@@ -148,6 +150,11 @@ func main() {
 		api.GET("/projects/:id/docs/r/:docId/revisions", handlers.ListDocRRevisions(repo))
 		api.POST("/projects/:id/docs/r/:docId/revisions", handlers.AddDocRRevision(repo))
 
+		api.GET("/projects/:id/design/:stage/registry", handlers.ListRegistry(repo))
+		api.POST("/projects/:id/design/:stage/registry", handlers.UpsertRegistry(repo))
+
+		api.GET("/projects/:id/smr/workforce", handlers.ListWorkforceByProject(repo))
+		api.POST("/projects/:id/smr/workforce", handlers.CreateWorkforceRecord(repo))
 		api.GET("/projects/:id/svor", handlers.ListSvor(repo))
 		api.POST("/projects/:id/svor", handlers.CreateSvor(repo))
 		api.PATCH("/projects/:id/svor/:svorId", handlers.PatchSvor(repo))

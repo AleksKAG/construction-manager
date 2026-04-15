@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
@@ -200,6 +201,18 @@ func UpdateTask(repo repository.Repository) gin.HandlerFunc {
 		if err := repo.UpdateTask(c.Request.Context(), existing); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+
+		if existing.LinkedRegistryID != nil && *existing.LinkedRegistryID != "" {
+			now := time.Now().UTC()
+			_ = repo.RawDB().WithContext(c.Request.Context()).
+				Model(&models.DocumentRegistry{}).
+				Where("id = ?", *existing.LinkedRegistryID).
+				Updates(map[string]any{
+					"synced_progress": existing.Progress,
+					"synced_status":   existing.Status,
+					"last_synced_at":  now,
+				}).Error
 		}
 
 		c.JSON(http.StatusOK, existing)
