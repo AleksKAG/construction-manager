@@ -71,6 +71,8 @@ class ConstructionManagerUI {
     this.dashboardMetrics = {};
     this.templateEditMode = false;
     this.templateRowsCache = [];
+    this.irdEditingRowId = null;
+    this.irdDraftData = {};
     this.docsPRows = [];
     this.docsRRows = [];
     this.registryRows = [];
@@ -843,13 +845,14 @@ class ConstructionManagerUI {
     }
 
     const code = this.currentTemplateCode || defaultCode;
+    const isIRD = code === 'input_design_data';
     let tpl;
     let rowsPayload;
 
     try {
       [tpl, rowsPayload] = await Promise.all([
         getTemplate(code),
-        listTemplateRows(project.id, code, { page: this.templatePage, page_size: 20, search: this.templateSearch }),
+        listTemplateRows(project.id, code, { page: this.templatePage, page_size: isIRD ? 200 : 20, search: this.templateSearch }),
       ]);
     } catch (error) {
       document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>${title}</h3><p>${error.message}</p></article>`;
@@ -875,12 +878,14 @@ class ConstructionManagerUI {
           <button class="mini" id="prevPage">←</button>
           <button class="mini" id="nextPage">→</button>
         </div>
-        <table class="table">
+        <div class="table-wrap">
+        <table class="table ${isIRD ? 'table-sticky-head' : ''}">
           <thead><tr>${columns.map((c) => `<th>${this.normalizeTemplateColumnTitle(code, c)}</th>`).join('')}<th class="actions-col ${this.templateEditMode ? "" : "hidden"}">Действия</th></tr></thead>
           <tbody>
             ${this.renderTemplateRows(code, rows, columns) || `<tr><td colspan="${columns.length + 1}">Нет данных</td></tr>`}
           </tbody>
         </table>
+        </div>
       </article>
     `;
 
@@ -895,6 +900,9 @@ class ConstructionManagerUI {
     document.querySelectorAll('[data-edit-row]').forEach((btn) => { btn.onclick = () => this.openTemplateForm(tpl, rows.find((r) => String(r.id) === String(btn.dataset.editRow))); });
     document.querySelectorAll('[data-del-row]').forEach((btn) => { btn.onclick = async () => { if (!confirm("Удалить строку?")) return; await deleteTemplateRow(btn.dataset.delRow); if (["tep", "summary_estimate"].includes(code)) await this.refreshDashboardMetrics(); await this.renderTemplateScreen(defaultCode, title); }; });
     document.querySelectorAll("[data-move-row]").forEach((btn) => { btn.onclick = async () => { const [rowId, direction] = String(btn.dataset.moveRow).split(":"); await this.moveTemplateRow(code, rowId, direction); await this.renderTemplateScreen(defaultCode, title); }; });
+    if (isIRD) {
+      this.bindIRDEditEvents(defaultCode, title);
+    }
   }
 
 
@@ -903,7 +911,73 @@ class ConstructionManagerUI {
     if (code === "tep") {
       return this.renderTEPSectionedRows(rows, columns);
     }
+    if (code === 'input_design_data') {
+      return this.renderIRDRows(rows, columns);
+    }
     return rows.map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ""}</td>`).join("")}<td class="actions-col ${this.templateEditMode ? "" : "hidden"}"><div class="row-actions"><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button><button class="mini" data-move-row="${r.id}:up">↑</button><button class="mini" data-move-row="${r.id}:down">↓</button></div></td></tr>`).join("");
+  }
+
+  renderIRDRows(rows, columns) {
+    return rows.map((r) => {
+      const isRowEditing = this.irdEditingRowId != null && String(this.irdEditingRowId) === String(r.id);
+      const cells = columns.map((c) => {
+        const current = isRowEditing ? (this.irdDraftData[c.field_key] ?? '') : ((r.data || {})[c.field_key] ?? '');
+        if (!isRowEditing) return `<td>${current}</td>`;
+        const type = c.data_type === 'number' ? 'number' : c.data_type === 'date' ? 'date' : 'text';
+        return `<td><input class="ird-inline-input" data-ird-field="${c.field_key}" type="${type}" value="${current}"></td>`;
+      }).join('');
+      const actions = !this.templateEditMode
+        ? ''
+        : `<div class="row-actions">
+            ${isRowEditing
+              ? `<button class="mini" data-ird-save="${r.id}">Сохранить</button><button class="mini" data-ird-cancel="${r.id}">Отмена</button>`
+              : `<button class="mini" data-ird-edit="${r.id}">Ред.</button>`
+            }
+            <button class="mini danger" data-del-row="${r.id}">Удал.</button>
+            <button class="mini" data-move-row="${r.id}:up">↑</button>
+            <button class="mini" data-move-row="${r.id}:down">↓</button>
+          </div>`;
+      return `<tr>${cells}<td class="actions-col ${this.templateEditMode ? "" : "hidden"}">${actions}</td></tr>`;
+    }).join("");
+  }
+
+  bindIRDEditEvents(defaultCode, title) {
+    document.querySelectorAll('[data-ird-edit]').forEach((btn) => {
+      btn.onclick = () => this.startIRDEdit(btn.dataset.irdEdit);
+    });
+    document.querySelectorAll('[data-ird-cancel]').forEach((btn) => {
+      btn.onclick = () => this.cancelIRDEdit(defaultCode, title);
+    });
+    document.querySelectorAll('[data-ird-save]').forEach((btn) => {
+      btn.onclick = async () => this.saveIRDEdit(btn.dataset.irdSave, defaultCode, title);
+    });
+    document.querySelectorAll('.ird-inline-input').forEach((input) => {
+      input.addEventListener('input', (event) => {
+        this.irdDraftData[event.target.dataset.irdField] = event.target.value;
+      });
+    });
+  }
+
+  startIRDEdit(rowId) {
+    const row = this.templateRowsCache.find((item) => String(item.id) === String(rowId));
+    if (!row) return;
+    this.irdEditingRowId = row.id;
+    this.irdDraftData = { ...(row.data || {}) };
+    this.renderContent();
+  }
+
+  cancelIRDEdit(defaultCode, title) {
+    this.irdEditingRowId = null;
+    this.irdDraftData = {};
+    this.renderTemplateScreen(defaultCode, title);
+  }
+
+  async saveIRDEdit(rowId, defaultCode, title) {
+    if (!rowId) return;
+    await updateTemplateRow(rowId, this.irdDraftData);
+    this.irdEditingRowId = null;
+    this.irdDraftData = {};
+    await this.renderTemplateScreen(defaultCode, title);
   }
 
   renderTEPSectionedRows(rows, columns) {
