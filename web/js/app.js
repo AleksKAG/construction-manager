@@ -73,6 +73,9 @@ class ConstructionManagerUI {
     this.templateRowsCache = [];
     this.docsPRows = [];
     this.docsRRows = [];
+    this.registryRows = [];
+    this.workforceRows = [];
+    this.workforceTasks = [];
     this.svorRows = [];
     this.svorPagination = { page: 1, page_size: 20, total: 0 };
     this.svorFilters = { status: '', dateFrom: '', dateTo: '' };
@@ -326,6 +329,15 @@ class ConstructionManagerUI {
     const map = {
       'Стадия П': 'docsStageP',
       'Стадия Р': 'docsStageR',
+      'Ведомость комплектов ПД': 'registryP',
+      'Ведомость комплектов РД': 'registryR',
+      'График РД': 'designScheduleR',
+      'График СМР': 'smrSchedule',
+      'Учёт рабочих': 'workforceDaily',
+      'Внутренние': 'protocolInternal',
+      'Проектирование': 'protocolDesign',
+      'Протоколы проектирование': 'protocolDesign',
+      'Протоколы СМР': 'protocolSMR',
       'СВОР': 'svorMain',
       'История согласований': 'svorHistory',
       'Сводный дашборд по СВОР': 'svorDashboard',
@@ -347,6 +359,13 @@ class ConstructionManagerUI {
       estimate: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
       docsStageP: { primary: 'Обновить', secondary: 'Экспорт XLSX' },
       docsStageR: { primary: '+ Добавить изменение', secondary: 'Обновить' },
+      registryP: { primary: '+ Добавить строку', secondary: 'Обновить' },
+      registryR: { primary: '+ Добавить строку', secondary: 'Обновить' },
+      smrSchedule: { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' },
+      workforceDaily: { primary: '+ Добавить запись', secondary: 'Обновить' },
+      protocolInternal: { primary: 'Обновить', secondary: '' },
+      protocolDesign: { primary: 'Обновить', secondary: '' },
+      protocolSMR: { primary: 'Обновить', secondary: '' },
       svorMain: { primary: '+ Создать СВОР', secondary: 'Экспорт отчета XLSX' },
       svorHistory: { primary: 'Обновить', secondary: '' },
       svorDashboard: { primary: 'Обновить', secondary: '' },
@@ -371,6 +390,14 @@ class ConstructionManagerUI {
     if (this.currentView === 'estimate') return this.renderTemplateScreen('summary_estimate', 'Сметная документация');
     if (this.currentView === 'docsStageP') return this.renderDocsStageP();
     if (this.currentView === 'docsStageR') return this.renderDocsStageR();
+    if (this.currentView === 'registryP') return this.renderRegistry('phase-p', 'Ведомость комплектов ПД');
+    if (this.currentView === 'registryR') return this.renderRegistry('phase-r', 'Ведомость комплектов РД');
+    if (this.currentView === 'smrSchedule') return this.renderTemplateScreen('smr_schedule', 'График СМР');
+    if (this.currentView === 'designScheduleR') return this.renderTemplateScreen('design_schedule', 'График РД');
+    if (this.currentView === 'workforceDaily') return this.renderWorkforceDaily();
+    if (this.currentView === 'protocolInternal') return this.renderProtocolStub('Внутренние');
+    if (this.currentView === 'protocolDesign') return this.renderProtocolStub('Проектирование');
+    if (this.currentView === 'protocolSMR') return this.renderProtocolStub('СМР');
     if (this.currentView === 'svorMain') return this.renderSvorMain();
     if (this.currentView === 'svorHistory') return this.renderSvorHistoryList();
     if (this.currentView === 'svorDashboard') return this.renderSvorDashboard();
@@ -618,6 +645,109 @@ class ConstructionManagerUI {
       </article>
     `;
     document.querySelectorAll('[data-add-rev]').forEach((btn) => btn.addEventListener('click', () => this.openAddRevisionModal(btn.dataset.addRev)));
+  }
+
+  async renderRegistry(stage, title) {
+    const project = this.currentProject();
+    if (!project) return;
+    const rows = await api(`/projects/${project.id}/design/${stage}/registry`);
+    this.registryRows = Array.isArray(rows) ? rows : [];
+    const body = this.registryRows.map((r, idx) => {
+      const issueDate = r.issue_date_fact ? String(r.issue_date_fact).slice(0, 10) : '';
+      return `<tr data-registry-id="${r.id}">
+        <td>${idx + 1}</td>
+        <td>${r.volume_number ?? '—'}</td>
+        <td>${r.code || '—'}</td>
+        <td>${r.mark || '—'}</td>
+        <td class="editable-cell" data-registry-field="designation">${r.designation || '—'}</td>
+        <td class="editable-cell" data-registry-field="name">${r.name || '—'}</td>
+        <td class="editable-cell" data-registry-field="contractor">${r.contractor || '—'}</td>
+        <td class="editable-cell" data-registry-field="note">${r.note || '—'}</td>
+        <td class="editable-cell" data-registry-field="issue_date_fact">${issueDate || '—'}</td>
+        <td>${(r.synced_progress || 0).toFixed(1)}%</td>
+        <td>${r.synced_status || '—'}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-12">
+        <h3>${title}</h3>
+        <p class="metric">Двойной клик по ячейке — inline-редактирование, Enter/Ctrl+Enter — сохранить.</p>
+        <table class="table table-sticky">
+          <thead><tr><th>№</th><th>Том</th><th>Шифр</th><th>Марка</th><th>Обозначение</th><th>Наименование</th><th>Исполнитель</th><th>Примечание</th><th>Дата выдачи факт</th><th>% синх.</th><th>Статус</th></tr></thead>
+          <tbody>${body || '<tr><td colspan="11">Нет данных</td></tr>'}</tbody>
+        </table>
+      </article>
+    `;
+    document.querySelectorAll('[data-registry-field]').forEach((cell) => {
+      cell.addEventListener('dblclick', () => this.startRegistryInlineEdit(cell, stage));
+    });
+  }
+
+  async renderWorkforceDaily() {
+    const project = this.currentProject();
+    if (!project) return;
+    const [rows, tasks] = await Promise.all([
+      api(`/projects/${project.id}/smr/workforce`),
+      api(`/tasks/by-object?object_id=${project.id}`),
+    ]);
+    this.workforceRows = Array.isArray(rows) ? rows : [];
+    this.workforceTasks = Array.isArray(tasks) ? tasks : [];
+    const options = this.workforceTasks.map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+    const body = this.workforceRows.map((r, idx) => `<tr>
+      <td>${idx + 1}</td>
+      <td>${String(r.work_date || '').slice(0, 10)}</td>
+      <td>${r.task_id || '—'}</td>
+      <td>${r.planned ?? '—'}</td>
+      <td>${r.actual ?? '—'}</td>
+      <td>${r.reported_by || '—'}</td>
+      <td>${r.comment || '—'}</td>
+    </tr>`).join('');
+
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-12">
+        <h3>Учёт рабочих по задачам СМР</h3>
+        <div class="form-grid two" style="margin-bottom:12px">
+          <label>Задача<select id="workforceTask">${options}</select></label>
+          <label>Дата<input id="workforceDate" type="date"></label>
+          <label>План, чел<input id="workforcePlan" type="number" min="0"></label>
+          <label>Факт, чел<input id="workforceFact" type="number" min="0"></label>
+          <label>Кто сообщил<input id="workforceReportedBy" placeholder="Прораб"></label>
+          <label>Комментарий<input id="workforceComment"></label>
+        </div>
+        <button class="mini" id="saveWorkforceBtn">Сохранить запись</button>
+        <table class="table" style="margin-top:12px">
+          <thead><tr><th>№</th><th>Дата</th><th>Task ID</th><th>План</th><th>Факт</th><th>Кто</th><th>Комментарий</th></tr></thead>
+          <tbody>${body || '<tr><td colspan="7">Нет данных</td></tr>'}</tbody>
+        </table>
+      </article>
+    `;
+
+    document.getElementById('saveWorkforceBtn')?.addEventListener('click', async () => {
+      const task_id = document.getElementById('workforceTask')?.value;
+      const work_date = document.getElementById('workforceDate')?.value;
+      if (!task_id || !work_date) return alert('Заполните задачу и дату');
+      const plannedValue = document.getElementById('workforcePlan')?.value;
+      const actualValue = document.getElementById('workforceFact')?.value;
+      await api(`/projects/${project.id}/smr/workforce`, 'POST', {
+        task_id,
+        work_date,
+        planned: plannedValue === '' ? null : Number(plannedValue),
+        actual: actualValue === '' ? null : Number(actualValue),
+        reported_by: document.getElementById('workforceReportedBy')?.value || '',
+        comment: document.getElementById('workforceComment')?.value || '',
+      });
+      await this.renderWorkforceDaily();
+    });
+  }
+
+  renderProtocolStub(section) {
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-12">
+        <h3>Протоколы — ${section}</h3>
+        <p class="metric">В MVP добавлен каркас раздела. Следующий шаг: шаблоны поручений и автоповестка по просроченным задачам.</p>
+      </article>
+    `;
   }
 
   async renderSvorMain() {
@@ -935,6 +1065,9 @@ class ConstructionManagerUI {
       if (first) return this.openAddRevisionModal(first);
       return;
     }
+    if (this.currentView === 'registryP') return this.renderRegistry('phase-p', 'Ведомость комплектов ПД');
+    if (this.currentView === 'registryR') return this.renderRegistry('phase-r', 'Ведомость комплектов РД');
+    if (this.currentView === 'workforceDaily') return this.renderWorkforceDaily();
     if (this.currentView === 'svorMain') return this.openCreateSvorModal();
     if (this.currentView === 'svorDashboard') return this.renderSvorDashboard();
     if (this.currentView === 'svorHistory') return this.renderSvorHistoryList();
@@ -963,6 +1096,9 @@ class ConstructionManagerUI {
       return;
     }
     if (this.currentView === 'docsStageR') return this.renderDocsStageR();
+    if (this.currentView === 'registryP') return this.renderRegistry('phase-p', 'Ведомость комплектов ПД');
+    if (this.currentView === 'registryR') return this.renderRegistry('phase-r', 'Ведомость комплектов РД');
+    if (this.currentView === 'workforceDaily') return this.renderWorkforceDaily();
     if (this.currentView === 'svorMain') {
       const project = this.currentProject();
       const q = new URLSearchParams();
@@ -1018,6 +1154,44 @@ class ConstructionManagerUI {
       </table>
     `;
     this.openModal();
+  }
+
+  startRegistryInlineEdit(cell, stage) {
+    const row = cell.closest('tr');
+    const rowID = row?.dataset?.registryId;
+    const field = cell.dataset.registryField;
+    if (!rowID || !field) return;
+    const current = String(cell.textContent || '').trim();
+    const type = field.includes('date') ? 'date' : 'text';
+    cell.innerHTML = `<input class="inline-editor" type="${type}" value="${current === '—' ? '' : current}">`;
+    const input = cell.querySelector('input');
+    if (!input) return;
+    input.focus();
+
+    const commit = async () => {
+      const currentRow = this.registryRows.find((r) => String(r.id) === String(rowID));
+      if (!currentRow) return this.renderRegistry(stage, stage === 'phase-p' ? 'Ведомость комплектов ПД' : 'Ведомость комплектов РД');
+      const payload = {
+        id: currentRow.id,
+        designation: currentRow.designation || '',
+        name: currentRow.name || '',
+        contractor: currentRow.contractor || '',
+        note: currentRow.note || '',
+        issue_date_fact: currentRow.issue_date_fact ? String(currentRow.issue_date_fact).slice(0, 10) : '',
+      };
+      payload[field] = input.value.trim();
+      await api(`/projects/${this.selectedObjectId}/design/${stage}/registry`, 'POST', payload);
+      await this.renderRegistry(stage, stage === 'phase-p' ? 'Ведомость комплектов ПД' : 'Ведомость комплектов РД');
+    };
+
+    input.addEventListener('keydown', async (e) => {
+      if (e.key === 'Escape') return this.renderRegistry(stage, stage === 'phase-p' ? 'Ведомость комплектов ПД' : 'Ведомость комплектов РД');
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        await commit();
+      }
+    });
+    input.addEventListener('blur', () => this.renderRegistry(stage, stage === 'phase-p' ? 'Ведомость комплектов ПД' : 'Ведомость комплектов РД'));
   }
 
   startInlineEdit(cell) {
@@ -1584,16 +1758,23 @@ class ConstructionManagerUI {
   }
 
   isTemplateView(view) {
-    return ['tep', 'designSchedule', 'estimate'].includes(view) || String(view || '').startsWith('template:');
+    return ['tep', 'designSchedule', 'designScheduleR', 'estimate', 'smrSchedule'].includes(view) || String(view || '').startsWith('template:');
   }
 
   isKnownView(view) {
-    return ['home', 'projects', 'auth', 'tep', 'designSchedule', 'estimate', 'docsStageP', 'docsStageR', 'svorMain', 'svorHistory', 'svorDashboard'].includes(view);
+    return [
+      'home', 'projects', 'auth', 'tep', 'designSchedule', 'designScheduleR', 'smrSchedule', 'estimate',
+      'docsStageP', 'docsStageR', 'registryP', 'registryR', 'workforceDaily',
+      'protocolInternal', 'protocolDesign', 'protocolSMR',
+      'svorMain', 'svorHistory', 'svorDashboard',
+    ].includes(view);
   }
 
   resolveTemplateView(view) {
     if (view === 'tep') return { code: 'tep', title: 'ТЭП' };
     if (view === 'designSchedule') return { code: 'design_schedule', title: 'График проектирования' };
+    if (view === 'designScheduleR') return { code: 'design_schedule', title: 'График РД' };
+    if (view === 'smrSchedule') return { code: 'smr_schedule', title: 'График СМР' };
     if (view === 'estimate') return { code: 'summary_estimate', title: 'Сметная документация' };
     if (String(view || '').startsWith('template:')) {
       const code = String(view).replace('template:', '') || 'tep';
