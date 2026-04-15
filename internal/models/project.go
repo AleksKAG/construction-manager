@@ -71,14 +71,17 @@ func (p *ProjectObject) BeforeCreate(tx *gorm.DB) error {
 
 // GanttTask — задача для графика
 type GanttTask struct {
-	ID        string  `gorm:"primaryKey;type:text" json:"id"`
-	ObjectID  string  `gorm:"type:text;index" json:"object_id"`
-	Name      string  `gorm:"type:text;not null" json:"name"`
-	StartDate string  `gorm:"type:text" json:"start_date,omitempty"`
-	EndDate   string  `gorm:"type:text" json:"end_date,omitempty"`
-	Duration  int     `gorm:"type:integer" json:"duration,omitempty"`
-	Progress  float64 `gorm:"type:real;default:0" json:"progress,omitempty"`
-	Status    string  `gorm:"type:text;default:'не начато'" json:"status,omitempty"`
+	ID               string  `gorm:"primaryKey;type:text" json:"id"`
+	ObjectID         string  `gorm:"type:text;index" json:"object_id"`
+	Name             string  `gorm:"type:text;not null" json:"name"`
+	StartDate        string  `gorm:"type:text" json:"start_date,omitempty"`
+	EndDate          string  `gorm:"type:text" json:"end_date,omitempty"`
+	Duration         int     `gorm:"type:integer" json:"duration,omitempty"`
+	Progress         float64 `gorm:"type:real;default:0;index:idx_tasks_status_progress,priority:2" json:"progress,omitempty"`
+	Status           string  `gorm:"type:text;default:'не начато';index:idx_tasks_status_progress,priority:1" json:"status,omitempty"`
+	Contractor       string  `gorm:"type:text" json:"contractor,omitempty"`
+	Source           string  `gorm:"type:text;default:'MANUAL'" json:"source,omitempty"`
+	LinkedRegistryID *string `gorm:"type:text;index" json:"linked_registry_id,omitempty"`
 }
 
 func (t *GanttTask) BeforeCreate(tx *gorm.DB) error {
