@@ -58,6 +58,9 @@ button { font: inherit; }
 .table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .table th, .table td { border-bottom: 1px solid var(--line); text-align: left; padding: 8px 6px; }
 .table th { color: var(--muted); font-weight: 600; }
+.table-wrap { width: 100%; overflow: auto; }
+.table-sticky-head thead th { position: sticky; top: 0; background: #fff; z-index: 2; }
+.ird-inline-input { width: 100%; min-width: 130px; }
 .hidden { display: none; }
 .section-row td { background: #f7faff; font-weight: 600; color: #304666; }
 .row-actions { display: flex; gap: 6px; align-items: center; }
