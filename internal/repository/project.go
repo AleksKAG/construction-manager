@@ -173,3 +173,32 @@ func (r *SQLiteRepository) GetUpcomingTasks(ctx context.Context, limit int) ([]m
 		Find(&tasks).Error
 	return tasks, err
 }
+
+// ======================== IRD (ИРД) Methods ========================
+
+func (r *SQLiteRepository) ListIrdDocuments(ctx context.Context, projectID string) ([]models.IrdDocument, error) {
+	var docs []models.IrdDocument
+	err := r.DB.WithContext(ctx).Where("project_id = ?", projectID).Order("doc_type asc, doc_number asc").Find(&docs).Error
+	return docs, err
+}
+
+func (r *SQLiteRepository) CreateIrdDocument(ctx context.Context, doc *models.IrdDocument) error {
+	return r.DB.WithContext(ctx).Create(doc).Error
+}
+
+func (r *SQLiteRepository) GetIrdDocumentByID(ctx context.Context, id string) (*models.IrdDocument, error) {
+	var doc models.IrdDocument
+	err := r.DB.WithContext(ctx).First(&doc, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errors.New("ird document not found")
+	}
+	return &doc, err
+}
+
+func (r *SQLiteRepository) UpdateIrdDocument(ctx context.Context, doc *models.IrdDocument) error {
+	return r.DB.WithContext(ctx).Save(doc).Error
+}
+
+func (r *SQLiteRepository) DeleteIrdDocument(ctx context.Context, id string) error {
+	return r.DB.WithContext(ctx).Delete(&models.IrdDocument{}, "id = ?", id).Error
+}
