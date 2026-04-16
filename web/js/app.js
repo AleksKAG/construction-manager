@@ -1154,8 +1154,8 @@ class ConstructionManagerUI {
       return alert('Demo token обновлён.');
     }
     if (this.isTemplateView(this.currentView)) {
-      const fallback = this.resolveTemplateView(this.currentView).code;
-      this.currentTemplateCode = this.currentTemplateCode || fallback;
+      const resolved = this.resolveTemplateView(this.currentView);
+      this.currentTemplateCode = this.currentTemplateCode || resolved.code;
       const tpl = await getTemplate(this.currentTemplateCode);
       return this.openTemplateForm(tpl, null);
     }
