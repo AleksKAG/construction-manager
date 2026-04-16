@@ -942,28 +942,38 @@ class ConstructionManagerUI {
   }
 
   bindIRDEditEvents(defaultCode, title) {
-    document.querySelectorAll('[data-ird-edit]').forEach((btn) => {
-      btn.onclick = () => this.startIRDEdit(btn.dataset.irdEdit);
-    });
-    document.querySelectorAll('[data-ird-cancel]').forEach((btn) => {
-      btn.onclick = () => this.cancelIRDEdit(defaultCode, title);
-    });
-    document.querySelectorAll('[data-ird-save]').forEach((btn) => {
-      btn.onclick = async () => this.saveIRDEdit(btn.dataset.irdSave, defaultCode, title);
-    });
-    document.querySelectorAll('.ird-inline-input').forEach((input) => {
-      input.addEventListener('input', (event) => {
-        this.irdDraftData[event.target.dataset.irdField] = event.target.value;
-      });
-    });
-  }
+  const container = document.getElementById('contentArea');
+  if (!container) return;
+  
+  container.onclick = (e) => {
+    const btn = e.target.closest('[data-ird-edit], [data-ird-save], [data-ird-cancel], .ird-inline-input');
+    if (!btn) return;
+    
+    if (btn.dataset.irdEdit) {
+      e.preventDefault();
+      this.startIRDEdit(btn.dataset.irdEdit);
+    }
+    if (btn.dataset.irdSave) {
+      e.preventDefault();
+      this.saveIRDEdit(btn.dataset.irdSave, defaultCode, title);
+    }
+    if (btn.dataset.irdCancel) {
+      e.preventDefault();
+      this.cancelIRDEdit(defaultCode, title);
+    }
+    if (btn.classList.contains('ird-inline-input')) {
+      const field = btn.dataset.irdField;
+      this.irdDraftData[field] = btn.value;
+    }
+  };
+}
 
   startIRDEdit(rowId) {
     const row = this.templateRowsCache.find((item) => String(item.id) === String(rowId));
     if (!row) return;
     this.irdEditingRowId = row.id;
     this.irdDraftData = { ...(row.data || {}) };
-    this.renderContent();
+    this.renderContent(this.currentTemplateCode || 'input_design_data', this.currentTemplateName);
   }
 
   cancelIRDEdit(defaultCode, title) {
