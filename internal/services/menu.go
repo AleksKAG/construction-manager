@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"errors"
+	
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"gorm.io/gorm"
 )
@@ -187,9 +187,7 @@ func ensureMenuItem(db *gorm.DB, projectID, parentID, title, viewKey, itemType s
 		item.SortOrder = sortOrder
 		return &item, nil
 	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
+	
 	item = models.MenuItem{
 		ProjectID: projectID,
 		ParentID:  parentID,
