@@ -1136,15 +1136,15 @@ class ConstructionManagerUI {
   async handlePrimaryAction() {
     if (this.currentView === 'home') return this.openDashboardForm();
     if (this.currentView === 'projects') return this.openProjectForm();
-    if (this.currentView === 'docsStageP') return this.renderDocsStageP();
+    if (this.currentView === 'docsStageP') return this.openAddDocPModal();
     if (this.currentView === 'docsStageR') {
       if (!this.docsRRows.length) await this.renderDocsStageR();
       const first = this.docsRRows[0]?.doc?.id;
       if (first) return this.openAddRevisionModal(first);
       return;
     }
-    if (this.currentView === 'registryP') return this.renderRegistry('phase-p', 'Ведомость комплектов ПД');
-    if (this.currentView === 'registryR') return this.renderRegistry('phase-r', 'Ведомость комплектов РД');
+    if (this.currentView === 'registryP') return this.openAddRegistryModal('phase-p', 'Ведомость комплектов ПД');
+    if (this.currentView === 'registryR') return this.openAddRegistryModal('phase-r', 'Ведомость комплектов РД');
     if (this.currentView === 'workforceDaily') return this.renderWorkforceDaily();
     if (this.currentView === 'svorMain') return this.openCreateSvorModal();
     if (this.currentView === 'svorDashboard') return this.renderSvorDashboard();
