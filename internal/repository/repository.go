@@ -12,6 +12,7 @@ type Repository interface {
 	ProjectRepository
 	TaskRepository
 	TemplateRepository
+	IrdRepository
 	DashboardRepository
 	RawDB() *gorm.DB
 }
@@ -43,6 +44,15 @@ type TemplateRepository interface {
 	UpdateTemplateRow(ctx context.Context, row *models.ProjectTemplateRow) error
 	DeleteTemplateRow(ctx context.Context, id string) error
 	ListTemplateDefinitions(ctx context.Context) ([]models.TemplateDefinition, error)
+}
+
+// ======================== IRD (ИРД) ========================
+type IrdRepository interface {
+	ListIrdDocuments(ctx context.Context, projectID string) ([]models.IrdDocument, error)
+	CreateIrdDocument(ctx context.Context, doc *models.IrdDocument) error
+	GetIrdDocumentByID(ctx context.Context, id string) (*models.IrdDocument, error)
+	UpdateIrdDocument(ctx context.Context, doc *models.IrdDocument) error
+	DeleteIrdDocument(ctx context.Context, id string) error
 }
 
 // ======================== Dashboard ========================

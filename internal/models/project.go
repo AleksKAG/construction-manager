@@ -272,3 +272,26 @@ func (r *ProjectTemplateRow) AfterFind(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+// IrdDocument — документ ИРД (ГПЗУ, ТЗ, МТЗ, ТУ)
+type IrdDocument struct {
+	ID          string    `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID   string    `gorm:"type:text;index;not null" json:"project_id"`
+	DocType     string    `gorm:"type:text;not null" json:"doc_type"`
+	DocNumber   string    `gorm:"type:text" json:"doc_number,omitempty"`
+	IssueDate   string    `gorm:"type:text" json:"issue_date,omitempty"`
+	ExpiryDate  string    `gorm:"type:text" json:"expiry_date,omitempty"`
+	Status      string    `gorm:"type:text;default:'active'" json:"status"`
+	Issuer      string    `gorm:"type:text" json:"issuer,omitempty"`
+	Notes       string    `gorm:"type:text" json:"notes,omitempty"`
+	FilePath    string    `gorm:"type:text" json:"file_path,omitempty"`
+	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (d *IrdDocument) BeforeCreate(tx *gorm.DB) error {
+	if d.ID == "" {
+		d.ID = uuid.New().String()
+	}
+	return nil
+}

@@ -69,6 +69,7 @@ func main() {
 		&models.DocStageRRevision{},
 		&models.SvorRecord{},
 		&models.SvorHistory{},
+		&models.IrdDocument{},
 	); err != nil {
 		logger.Fatal("Migration failed: ", err)
 	}
@@ -162,6 +163,14 @@ func main() {
 		api.GET("/projects/:id/svor/dashboard", handlers.GetSvorDashboard(repo))
 		api.POST("/projects/:id/svor/import", handlers.ImportSvor(repo))
 		api.GET("/projects/:id/svor/report.xlsx", handlers.ExportSvorReportXLSX(repo))
+
+		// IRD endpoints
+		api.GET("/objects/:id/ird", handlers.ListIrdDocuments(repo))
+		api.POST("/objects/:id/ird", handlers.CreateIrdDocument(repo))
+		api.GET("/ird/:irdId", handlers.GetIrdDocument(repo))
+		api.PUT("/ird/:irdId", handlers.UpdateIrdDocument(repo))
+		api.DELETE("/ird/:irdId", handlers.DeleteIrdDocument(repo))
+
 		// Gantt Tasks endpoints - перемещаем перед /objects/:id чтобы избежать конфликта
 		api.GET("/tasks", handlers.ListTasks(repo)) // GET all tasks (optional)
 		api.POST("/tasks", handlers.CreateTask(repo))
