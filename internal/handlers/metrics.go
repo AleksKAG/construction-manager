@@ -3,7 +3,7 @@ package handlers
 import (
 	"math"
 	"net/http"
-	"sort"
+	
 	"strconv"
 	"strings"
 
@@ -377,6 +377,4 @@ func round2(v float64) float64 {
 	return math.Round(v*100) / 100
 }
 
-func sortRows(rows []models.ProjectTemplateRow) {
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].RowNumber < rows[j].RowNumber })
-}
+

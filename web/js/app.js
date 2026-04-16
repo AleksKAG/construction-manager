@@ -1864,7 +1864,7 @@ class ConstructionManagerUI {
 
   resolveTemplateView(view) {
     if (view === 'tep') return { code: 'tep', title: 'ТЭП' };
-    if (view === 'designSchedule') return { code: 'design_schedule', title: 'График проектирования' };
+    if (view === 'designSchedule') return { code: 'design_schedule', title: 'График ПД' };
     if (view === 'designScheduleR') return { code: 'design_schedule', title: 'График РД' };
     if (view === 'smrSchedule') return { code: 'smr_schedule', title: 'График СМР' };
     if (view === 'estimate') return { code: 'summary_estimate', title: 'Сметная документация' };

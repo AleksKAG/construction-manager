@@ -133,7 +133,7 @@ func main() {
 			templates.PUT("/template-rows/:rowId", middleware.RequireRoles("editor", "admin"), handlers.UpdateTemplateRow(repo))
 			templates.DELETE("/template-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteTemplateRow(repo))
 			templates.GET("/objects/:id/templates/:code/export.csv", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ExportTemplateRowsXLSX(repo))
-		}
+	    }
 
 		// Objects endpoints
 		api.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
@@ -218,7 +218,9 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Fatal("Server forced to shutdown: ", err)
 	}
-
+if err := services.EnsureIrdTemplate(repo, logger); err != nil {
+    logger.Warn("Failed to seed IRD template: ", err)
+}
 	logger.Info("Server exiting")
 }
 

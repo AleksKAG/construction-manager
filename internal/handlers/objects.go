@@ -233,13 +233,7 @@ func DeleteTask(repo repository.Repository) gin.HandlerFunc {
 }
 
 // Helper function to parse ID from URL parameter
-func parseID(c *gin.Context, paramName string) (string, error) {
-	id := c.Param(paramName)
-	if id == "" {
-		return "", strconv.ErrSyntax
-	}
-	return id, nil
-}
+
 
 func objMin(a, b int) int {
 	if a < b {
