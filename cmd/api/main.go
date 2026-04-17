@@ -86,6 +86,9 @@ func main() {
 	if err := services.EnsureProjectMenus(context.Background(), repo.RawDB()); err != nil {
 		logger.Warn("Failed to load project menus: ", err)
 	}
+	if err := services.EnsureIrdTemplate(repo, logger); err != nil {
+		logger.Warn("Failed to seed IRD template: ", err)
+	}
 
 	// === Router ===
 	r := gin.Default()
@@ -107,7 +110,6 @@ func main() {
 	r.Static("/static/js", "./web/js")
 	r.StaticFile("/", "./web/index.html")
 
-	// Страницы - теперь обрабатываются через StaticFile
 	// API
 	api := r.Group("/api/v1")
 	{
@@ -123,19 +125,33 @@ func main() {
 		api.GET("/menu", handlers.MenuHandler)
 		api.POST("/auth/token", handlers.IssueToken())
 
+		// Группа с JWT — шаблоны и ИРД
 		templates := api.Group("/")
 		templates.Use(middleware.JWTAuthMiddleware())
 		{
 			templates.GET("/templates", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplates(repo))
 			templates.GET("/templates/:code", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetTemplate(repo))
+
+			// ИРД: специальные роуты ПЕРЕХВАТЫВАЮТ input_design_data ДО общих роутов.
+			// Важно: статические сегменты (input_design_data) в Gin имеют приоритет над
+			// параметрическими (:code), поэтому порядок здесь не критичен, но для ясности
+			// оставляем их перед общими.
+			templates.GET("/objects/:id/templates/input_design_data/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListIrdAsTemplateRows(repo))
+			templates.POST("/objects/:id/templates/input_design_data/rows", middleware.RequireRoles("editor", "admin"), handlers.CreateIrdFromTemplateRow(repo))
+
+			// Общие роуты шаблонов (для всех кодов кроме input_design_data)
 			templates.GET("/objects/:id/templates/:code/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplateRows(repo))
 			templates.POST("/objects/:id/templates/:code/rows", middleware.RequireRoles("editor", "admin"), handlers.CreateTemplateRow(repo))
 			templates.PUT("/template-rows/:rowId", middleware.RequireRoles("editor", "admin"), handlers.UpdateTemplateRow(repo))
 			templates.DELETE("/template-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteTemplateRow(repo))
 			templates.GET("/objects/:id/templates/:code/export.csv", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ExportTemplateRowsXLSX(repo))
-	    }
 
-		// Objects endpoints
+			// ИРД: обновление и удаление через адаптер (отдельный префикс /ird-rows/)
+			templates.PUT("/ird-rows/:rowId", middleware.RequireRoles("editor", "admin"), handlers.UpdateIrdFromTemplateRow(repo))
+			templates.DELETE("/ird-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteIrdAsTemplateRow(repo))
+		}
+
+		// Dashboard & Agent
 		api.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
 		api.GET("/dashboard/metrics/:projectId", handlers.GetDashboardMetrics(repo))
 		api.POST("/agent/summary", handlers.GetAgentSummary(repo))
@@ -145,17 +161,22 @@ func main() {
 		api.PATCH("/tep/:id", handlers.PatchTEPRow(repo))
 		api.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
 
+		// Docs Stage P/R
 		api.GET("/projects/:id/docs/p", handlers.ListDocsP(repo))
 		api.GET("/projects/:id/docs/p/export.xlsx", handlers.ExportDocsPXLSX(repo))
 		api.GET("/projects/:id/docs/r", handlers.ListDocsR(repo))
 		api.GET("/projects/:id/docs/r/:docId/revisions", handlers.ListDocRRevisions(repo))
 		api.POST("/projects/:id/docs/r/:docId/revisions", handlers.AddDocRRevision(repo))
 
+		// Registry
 		api.GET("/projects/:id/design/:stage/registry", handlers.ListRegistry(repo))
 		api.POST("/projects/:id/design/:stage/registry", handlers.UpsertRegistry(repo))
 
+		// Workforce
 		api.GET("/projects/:id/smr/workforce", handlers.ListWorkforceByProject(repo))
 		api.POST("/projects/:id/smr/workforce", handlers.CreateWorkforceRecord(repo))
+
+		// СВОР
 		api.GET("/projects/:id/svor", handlers.ListSvor(repo))
 		api.POST("/projects/:id/svor", handlers.CreateSvor(repo))
 		api.PATCH("/projects/:id/svor/:svorId", handlers.PatchSvor(repo))
@@ -164,30 +185,28 @@ func main() {
 		api.POST("/projects/:id/svor/import", handlers.ImportSvor(repo))
 		api.GET("/projects/:id/svor/report.xlsx", handlers.ExportSvorReportXLSX(repo))
 
-		// IRD endpoints
+		// IRD — прямые endpoints (используются если нужен прямой доступ без template-обёртки)
 		api.GET("/objects/:id/ird", handlers.ListIrdDocuments(repo))
 		api.POST("/objects/:id/ird", handlers.CreateIrdDocument(repo))
 		api.GET("/ird/:irdId", handlers.GetIrdDocument(repo))
 		api.PUT("/ird/:irdId", handlers.UpdateIrdDocument(repo))
 		api.DELETE("/ird/:irdId", handlers.DeleteIrdDocument(repo))
 
-		// Gantt Tasks endpoints - перемещаем перед /objects/:id чтобы избежать конфликта
-		api.GET("/tasks", handlers.ListTasks(repo)) // GET all tasks (optional)
+		// Tasks — ПЕРЕД /objects/:id чтобы избежать конфликта роутов
+		api.GET("/tasks", handlers.ListTasks(repo))
 		api.POST("/tasks", handlers.CreateTask(repo))
 		api.GET("/tasks/:id", handlers.GetTask(repo))
 		api.PUT("/tasks/:id", handlers.UpdateTask(repo))
 		api.DELETE("/tasks/:id", handlers.DeleteTask(repo))
+		api.GET("/tasks/by-object", handlers.ListTasksByObject(repo))
 
-		// Objects endpoints должны быть ПОСЛЕ /tasks чтобы избежать конфликта
+		// Objects — ПОСЛЕ /tasks
 		api.GET("/objects", handlers.ListObjects(repo))
 		api.POST("/objects", handlers.CreateObject(repo))
 		api.GET("/objects/:id", handlers.GetObject(repo))
 		api.GET("/objects/:id/menu", handlers.ListProjectMenu(repo))
 		api.PUT("/objects/:id", handlers.UpdateObject(repo))
 		api.DELETE("/objects/:id", handlers.DeleteObject(repo))
-		// Задачи по объекту - используем query параметр вместо path
-		api.GET("/tasks/by-object", handlers.ListTasksByObject(repo))
-
 	}
 
 	// Запуск
@@ -206,7 +225,6 @@ func main() {
 		}
 	}()
 
-	// Ожидание сигнала завершения
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -218,9 +236,6 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Fatal("Server forced to shutdown: ", err)
 	}
-if err := services.EnsureIrdTemplate(repo, logger); err != nil {
-    logger.Warn("Failed to seed IRD template: ", err)
-}
 	logger.Info("Server exiting")
 }
 
