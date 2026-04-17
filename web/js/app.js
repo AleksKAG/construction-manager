@@ -6,6 +6,8 @@ import {
   createTemplateRow,
   updateTemplateRow,
   deleteTemplateRow,
+  updateIrdRow,
+  deleteIrdRow,
   exportTemplate,
 } from './templates.js';
 
@@ -933,7 +935,7 @@ class ConstructionManagerUI {
               ? `<button class="mini" data-ird-save="${r.id}">Сохранить</button><button class="mini" data-ird-cancel="${r.id}">Отмена</button>`
               : `<button class="mini" data-ird-edit="${r.id}">Ред.</button>`
             }
-            <button class="mini danger" data-del-row="${r.id}">Удал.</button>
+            <button class="mini danger" data-del-ird="${r.id}">Удал.</button>
             <button class="mini" data-move-row="${r.id}:up">↑</button>
             <button class="mini" data-move-row="${r.id}:down">↓</button>
           </div>`;
@@ -942,31 +944,37 @@ class ConstructionManagerUI {
   }
 
   bindIRDEditEvents(defaultCode, title) {
-  const container = document.getElementById('contentArea');
-  if (!container) return;
-  
-  container.onclick = (e) => {
-    const btn = e.target.closest('[data-ird-edit], [data-ird-save], [data-ird-cancel], .ird-inline-input');
-    if (!btn) return;
-    
-    if (btn.dataset.irdEdit) {
-      e.preventDefault();
-      this.startIRDEdit(btn.dataset.irdEdit);
-    }
-    if (btn.dataset.irdSave) {
-      e.preventDefault();
-      this.saveIRDEdit(btn.dataset.irdSave, defaultCode, title);
-    }
-    if (btn.dataset.irdCancel) {
-      e.preventDefault();
-      this.cancelIRDEdit(defaultCode, title);
-    }
-    if (btn.classList.contains('ird-inline-input')) {
-      const field = btn.dataset.irdField;
-      this.irdDraftData[field] = btn.value;
-    }
-  };
-}
+    const container = document.getElementById('contentArea');
+    if (!container) return;
+
+    container.onclick = async (e) => {
+      const btn = e.target.closest('[data-ird-edit], [data-ird-save], [data-ird-cancel], [data-del-ird], .ird-inline-input');
+      if (!btn) return;
+
+      if (btn.dataset.irdEdit) {
+        e.preventDefault();
+        this.startIRDEdit(btn.dataset.irdEdit);
+      }
+      if (btn.dataset.irdSave) {
+        e.preventDefault();
+        this.saveIRDEdit(btn.dataset.irdSave, defaultCode, title);
+      }
+      if (btn.dataset.irdCancel) {
+        e.preventDefault();
+        this.cancelIRDEdit(defaultCode, title);
+      }
+      if (btn.dataset.delIrd) {
+        e.preventDefault();
+        if (!confirm('Удалить строку ИРД?')) return;
+        await deleteIrdRow(btn.dataset.delIrd);
+        await this.renderTemplateScreen(defaultCode, title);
+      }
+      if (btn.classList.contains('ird-inline-input')) {
+        const field = btn.dataset.irdField;
+        this.irdDraftData[field] = btn.value;
+      }
+    };
+  }
 
   startIRDEdit(rowId) {
     const row = this.templateRowsCache.find((item) => String(item.id) === String(rowId));
@@ -984,7 +992,7 @@ class ConstructionManagerUI {
 
   async saveIRDEdit(rowId, defaultCode, title) {
     if (!rowId) return;
-    await updateTemplateRow(rowId, this.irdDraftData);
+    await updateIrdRow(rowId, this.irdDraftData);
     this.irdEditingRowId = null;
     this.irdDraftData = {};
     await this.renderTemplateScreen(defaultCode, title);
