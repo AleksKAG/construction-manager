@@ -161,16 +161,25 @@ func main() {
 		api.PATCH("/tep/:id", handlers.PatchTEPRow(repo))
 		api.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
 
-		// Docs Stage P/R
+		// Docs Stage P — полный CRUD
 		api.GET("/projects/:id/docs/p", handlers.ListDocsP(repo))
+		api.POST("/projects/:id/docs/p", handlers.CreateDocP(repo))
+		api.PUT("/projects/:id/docs/p/:docId", handlers.UpdateDocP(repo))
+		api.DELETE("/projects/:id/docs/p/:docId", handlers.DeleteDocP(repo))
 		api.GET("/projects/:id/docs/p/export.xlsx", handlers.ExportDocsPXLSX(repo))
+
+		// Docs Stage R — полный CRUD
 		api.GET("/projects/:id/docs/r", handlers.ListDocsR(repo))
+		api.POST("/projects/:id/docs/r", handlers.CreateDocR(repo))
+		api.PUT("/projects/:id/docs/r/:docId", handlers.UpdateDocR(repo))
+		api.DELETE("/projects/:id/docs/r/:docId", handlers.DeleteDocR(repo))
 		api.GET("/projects/:id/docs/r/:docId/revisions", handlers.ListDocRRevisions(repo))
 		api.POST("/projects/:id/docs/r/:docId/revisions", handlers.AddDocRRevision(repo))
 
 		// Registry
 		api.GET("/projects/:id/design/:stage/registry", handlers.ListRegistry(repo))
 		api.POST("/projects/:id/design/:stage/registry", handlers.UpsertRegistry(repo))
+		api.DELETE("/projects/:id/design/:stage/registry/:rowId", handlers.DeleteRegistry(repo))
 
 		// Workforce
 		api.GET("/projects/:id/smr/workforce", handlers.ListWorkforceByProject(repo))
