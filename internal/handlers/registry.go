@@ -183,3 +183,23 @@ func taskSourceByStage(stage string) string {
 	}
 	return "REGISTRY_P"
 }
+
+// DeleteRegistry — DELETE /projects/:id/design/:stage/registry/:rowId
+func DeleteRegistry(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		stage := normalizeStage(c.Param("stage"))
+		rowID := c.Param("rowId")
+		if stage == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "stage must be phase-p or phase-r"})
+			return
+		}
+		if err := repo.RawDB().
+			Where("id = ? AND project_id = ? AND stage = ?", rowID, projectID, stage).
+			Delete(&models.DocumentRegistry{}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	}
+}
