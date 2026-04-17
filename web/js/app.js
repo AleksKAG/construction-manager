@@ -611,16 +611,69 @@ class ConstructionManagerUI {
     const project = this.currentProject();
     if (!project) return;
     const rows = await api(`/projects/${project.id}/docs/p`);
-    const body = rows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.cipher || '—'}</td><td>${r.name || '—'}</td><td>${r.section || '—'}</td></tr>`).join('');
+    const body = rows.map((r, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${r.cipher || '—'}</td>
+        <td>${r.name || '—'}</td>
+        <td>${r.section || '—'}</td>
+        <td>
+          <div class="row-actions">
+            <button class="mini" data-edit-docp="${r.id}" data-cipher="${(r.cipher||'').replace(/"/g,'&quot;')}" data-name="${(r.name||'').replace(/"/g,'&quot;')}" data-section="${(r.section||'').replace(/"/g,'&quot;')}">✏️</button>
+            <button class="mini danger" data-del-docp="${r.id}">🗑</button>
+          </div>
+        </td>
+      </tr>`).join('');
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
         <h3>Стадия П — ведомость комплектов</h3>
+        <div class="form-grid two" style="margin-bottom:12px;align-items:end">
+          <label>Шифр<input id="docpCipher" placeholder="АР, КЖ, ..." style="margin-top:4px"></label>
+          <label>Наименование<input id="docpName" placeholder="Архитектурные решения" style="margin-top:4px"></label>
+          <label>Раздел/Блок<input id="docpSection" placeholder="Раздел 3" style="margin-top:4px"></label>
+          <div style="padding-top:20px"><button id="addDocPBtn" class="mini primary">+ Добавить</button></div>
+        </div>
         <table class="table">
-          <thead><tr><th>№</th><th>Шифр</th><th>Наименование</th><th>Раздел/Блок</th></tr></thead>
-          <tbody>${body || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
+          <thead><tr><th>№</th><th>Шифр</th><th>Наименование</th><th>Раздел/Блок</th><th></th></tr></thead>
+          <tbody>${body || '<tr><td colspan="5">Нет данных</td></tr>'}</tbody>
         </table>
       </article>
     `;
+    document.getElementById('addDocPBtn')?.addEventListener('click', async () => {
+      const cipher = document.getElementById('docpCipher')?.value.trim();
+      const name = document.getElementById('docpName')?.value.trim();
+      const section = document.getElementById('docpSection')?.value.trim();
+      if (!cipher) return alert('Укажите шифр');
+      if (!name) return alert('Укажите наименование');
+      try {
+        await api(`/projects/${project.id}/docs/p`, 'POST', { cipher, name, section });
+        await this.renderDocsStageP();
+      } catch (e) { alert(e.message || 'Ошибка сохранения'); }
+    });
+    document.querySelectorAll('[data-edit-docp]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.getElementById('docpCipher').value = btn.dataset.cipher || '';
+        document.getElementById('docpName').value = btn.dataset.name || '';
+        document.getElementById('docpSection').value = btn.dataset.section || '';
+        const addBtn = document.getElementById('addDocPBtn');
+        addBtn.textContent = 'Сохранить';
+        addBtn.onclick = async () => {
+          const cipher = document.getElementById('docpCipher')?.value.trim();
+          const name = document.getElementById('docpName')?.value.trim();
+          const section = document.getElementById('docpSection')?.value.trim();
+          if (!cipher || !name) return alert('Заполните шифр и наименование');
+          await api(`/projects/${project.id}/docs/p/${btn.dataset.editDocp}`, 'PUT', { cipher, name, section });
+          await this.renderDocsStageP();
+        };
+      });
+    });
+    document.querySelectorAll('[data-del-docp]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Удалить запись?')) return;
+        await api(`/projects/${project.id}/docs/p/${btn.dataset.delDocp}`, 'DELETE');
+        await this.renderDocsStageP();
+      });
+    });
   }
 
   async renderDocsStageR() {
@@ -639,20 +692,51 @@ class ConstructionManagerUI {
           <td>${this.formatDate(r.issue_date)}</td>
           <td>${r.current_version || '0'}</td>
           <td>${this.formatDate(r.current_revision_date)}</td>
-          <td><button class="mini" data-add-rev="${r.id}">Добавить изменение</button></td>
+          <td>
+            <div class="row-actions">
+              <button class="mini" data-add-rev="${r.id}">+ Изменение</button>
+              <button class="mini danger" data-del-docr="${r.id}">🗑</button>
+            </div>
+          </td>
         </tr>
       `;
     }).join('');
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
         <h3>Стадия Р — ведомость РД</h3>
+        <div class="form-grid two" style="margin-bottom:12px;align-items:end">
+          <label>Шифр Р *<input id="docrCipherR" placeholder="АР.001" style="margin-top:4px"></label>
+          <label>Шифр П (ссылка)<input id="docrCipherP" placeholder="АР" style="margin-top:4px"></label>
+          <label>Наименование *<input id="docrName" placeholder="Архитектурные решения" style="margin-top:4px"></label>
+          <label>Дата выдачи<input id="docrIssueDate" type="date" style="margin-top:4px"></label>
+          <div style="padding-top:20px"><button id="addDocRBtn" class="mini primary">+ Добавить</button></div>
+        </div>
         <table class="table">
-          <thead><tr><th>№</th><th>Шифр П</th><th>Шифр Р</th><th>Наименование</th><th>Дата выдачи</th><th>Текущая версия</th><th>Дата последнего ИЗМ</th><th></th></tr></thead>
+          <thead><tr><th>№</th><th>Шифр П</th><th>Шифр Р</th><th>Наименование</th><th>Дата выдачи</th><th>Версия</th><th>Дата ИЗМ</th><th></th></tr></thead>
           <tbody>${body || '<tr><td colspan="8">Нет данных</td></tr>'}</tbody>
         </table>
       </article>
     `;
+    document.getElementById('addDocRBtn')?.addEventListener('click', async () => {
+      const cipher_r = document.getElementById('docrCipherR')?.value.trim();
+      const cipher_p_ref = document.getElementById('docrCipherP')?.value.trim();
+      const name = document.getElementById('docrName')?.value.trim();
+      const issue_date = document.getElementById('docrIssueDate')?.value;
+      if (!cipher_r) return alert('Укажите шифр Р');
+      if (!name) return alert('Укажите наименование');
+      try {
+        await api(`/projects/${project.id}/docs/r`, 'POST', { cipher_r, cipher_p_ref, name, issue_date });
+        await this.renderDocsStageR();
+      } catch (e) { alert(e.message || 'Ошибка сохранения'); }
+    });
     document.querySelectorAll('[data-add-rev]').forEach((btn) => btn.addEventListener('click', () => this.openAddRevisionModal(btn.dataset.addRev)));
+    document.querySelectorAll('[data-del-docr]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Удалить документ РД?')) return;
+        await api(`/projects/${project.id}/docs/r/${btn.dataset.delDocr}`, 'DELETE');
+        await this.renderDocsStageR();
+      });
+    });
   }
 
   async renderRegistry(stage, title) {
@@ -674,21 +758,59 @@ class ConstructionManagerUI {
         <td class="editable-cell" data-registry-field="issue_date_fact">${issueDate || '—'}</td>
         <td>${(r.synced_progress || 0).toFixed(1)}%</td>
         <td>${r.synced_status || '—'}</td>
+        <td><button class="mini danger" data-del-registry="${r.id}">🗑</button></td>
       </tr>`;
     }).join('');
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
         <h3>${title}</h3>
-        <p class="metric">Двойной клик по ячейке — inline-редактирование, Enter/Ctrl+Enter — сохранить.</p>
+        <div class="form-grid two" style="margin-bottom:12px;align-items:end">
+          <label>Обозначение *<input id="regDesignation" placeholder="АР.001-ПД" style="margin-top:4px"></label>
+          <label>Наименование *<input id="regName" placeholder="Архитектурные решения" style="margin-top:4px"></label>
+          <label>Марка<input id="regMark" placeholder="АР" style="margin-top:4px"></label>
+          <label>Шифр<input id="regCode" placeholder="001" style="margin-top:4px"></label>
+          <label>Исполнитель<input id="regContractor" style="margin-top:4px"></label>
+          <label>Дата выдачи факт<input id="regIssueDate" type="date" style="margin-top:4px"></label>
+          <div style="padding-top:20px"><button id="addRegistryBtn" class="mini primary">+ Добавить строку</button></div>
+        </div>
+        <p class="metric">Двойной клик по ячейке — inline-редактирование, Enter — сохранить.</p>
+        <div class="table-wrap">
         <table class="table table-sticky">
-          <thead><tr><th>№</th><th>Том</th><th>Шифр</th><th>Марка</th><th>Обозначение</th><th>Наименование</th><th>Исполнитель</th><th>Примечание</th><th>Дата выдачи факт</th><th>% синх.</th><th>Статус</th></tr></thead>
-          <tbody>${body || '<tr><td colspan="11">Нет данных</td></tr>'}</tbody>
+          <thead><tr><th>№</th><th>Том</th><th>Шифр</th><th>Марка</th><th>Обозначение</th><th>Наименование</th><th>Исполнитель</th><th>Примечание</th><th>Дата выдачи факт</th><th>% синх.</th><th>Статус</th><th></th></tr></thead>
+          <tbody>${body || '<tr><td colspan="12">Нет данных</td></tr>'}</tbody>
         </table>
+        </div>
       </article>
     `;
+    document.getElementById('addRegistryBtn')?.addEventListener('click', async () => {
+      const designation = document.getElementById('regDesignation')?.value.trim();
+      const name = document.getElementById('regName')?.value.trim();
+      const mark = document.getElementById('regMark')?.value.trim();
+      const code = document.getElementById('regCode')?.value.trim();
+      const contractor = document.getElementById('regContractor')?.value.trim();
+      const issue_date_fact = document.getElementById('regIssueDate')?.value || null;
+      if (!designation) return alert('Укажите обозначение');
+      if (!name) return alert('Укажите наименование');
+      try {
+        await api(`/projects/${project.id}/design/${stage}/registry`, 'POST', {
+          designation, name, mark, code, contractor,
+          issue_date_fact: issue_date_fact || undefined,
+        });
+        await this.renderRegistry(stage, title);
+      } catch (e) { alert(e.message || 'Ошибка сохранения'); }
+    });
     document.querySelectorAll('[data-registry-field]').forEach((cell) => {
       cell.addEventListener('dblclick', () => this.startRegistryInlineEdit(cell, stage));
+    });
+    document.querySelectorAll('[data-del-registry]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Удалить строку ведомости?')) return;
+        try {
+          await api(`/projects/${project.id}/design/${stage}/registry/${btn.dataset.delRegistry}`, 'DELETE');
+          await this.renderRegistry(stage, title);
+        } catch (e) { alert(e.message || 'Ошибка удаления'); }
+      });
     });
   }
 
@@ -981,7 +1103,7 @@ class ConstructionManagerUI {
     if (!row) return;
     this.irdEditingRowId = row.id;
     this.irdDraftData = { ...(row.data || {}) };
-    this.renderContent(this.currentTemplateCode || 'input_design_data', this.currentTemplateName);
+    this.renderTemplateScreen(this.currentTemplateCode || 'input_design_data', this.currentTemplateName || 'ИРД');
   }
 
   cancelIRDEdit(defaultCode, title) {
@@ -1154,15 +1276,10 @@ class ConstructionManagerUI {
   async handlePrimaryAction() {
     if (this.currentView === 'home') return this.openDashboardForm();
     if (this.currentView === 'projects') return this.openProjectForm();
-    if (this.currentView === 'docsStageP') return this.openAddDocPModal();
-    if (this.currentView === 'docsStageR') {
-      if (!this.docsRRows.length) await this.renderDocsStageR();
-      const first = this.docsRRows[0]?.doc?.id;
-      if (first) return this.openAddRevisionModal(first);
-      return;
-    }
-    if (this.currentView === 'registryP') return this.openAddRegistryModal('phase-p', 'Ведомость комплектов ПД');
-    if (this.currentView === 'registryR') return this.openAddRegistryModal('phase-r', 'Ведомость комплектов РД');
+    if (this.currentView === 'docsStageP') return this.renderDocsStageP();
+    if (this.currentView === 'docsStageR') return this.renderDocsStageR();
+    if (this.currentView === 'registryP') return this.renderRegistry('phase-p', 'Ведомость комплектов ПД');
+    if (this.currentView === 'registryR') return this.renderRegistry('phase-r', 'Ведомость комплектов РД');
     if (this.currentView === 'workforceDaily') return this.renderWorkforceDaily();
     if (this.currentView === 'svorMain') return this.openCreateSvorModal();
     if (this.currentView === 'svorDashboard') return this.renderSvorDashboard();
