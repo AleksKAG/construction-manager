@@ -18,12 +18,24 @@ export async function createTemplateRow(projectId, code, data) {
   return api(`/objects/${projectId}/templates/${code}/rows`, 'POST', { data });
 }
 
+// Обновление обычных template-строк (не ИРД)
 export async function updateTemplateRow(rowId, data) {
   return api(`/template-rows/${rowId}`, 'PUT', { data });
 }
 
+// Удаление обычных template-строк (не ИРД)
 export async function deleteTemplateRow(rowId) {
   return api(`/template-rows/${rowId}`, 'DELETE');
+}
+
+// Обновление строки ИРД через адаптер-роут /ird-rows/:rowId
+export async function updateIrdRow(rowId, data) {
+  return api(`/ird-rows/${rowId}`, 'PUT', { data });
+}
+
+// Удаление строки ИРД через адаптер-роут /ird-rows/:rowId
+export async function deleteIrdRow(rowId) {
+  return api(`/ird-rows/${rowId}`, 'DELETE');
 }
 
 export async function exportTemplate(projectId, code) {
