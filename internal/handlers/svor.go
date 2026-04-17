@@ -194,6 +194,191 @@ func ListSvor(repo repository.Repository) gin.HandlerFunc {
 	}
 }
 
+// CreateDocP — POST /projects/:id/docs/p
+func CreateDocP(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		var input struct {
+			Cipher  string `json:"cipher"`
+			Name    string `json:"name"`
+			Section string `json:"section"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(input.Cipher) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cipher is required"})
+			return
+		}
+		if strings.TrimSpace(input.Name) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+			return
+		}
+		doc := &models.DocStageP{
+			ProjectID: projectID,
+			Cipher:    strings.TrimSpace(input.Cipher),
+			Name:      strings.TrimSpace(input.Name),
+			Section:   strings.TrimSpace(input.Section),
+		}
+		if err := repo.RawDB().Create(doc).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, doc)
+	}
+}
+
+// UpdateDocP — PUT /projects/:id/docs/p/:docId
+func UpdateDocP(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		docID := c.Param("docId")
+		var doc models.DocStageP
+		if err := repo.RawDB().Where("id = ? AND project_id = ?", docID, projectID).First(&doc).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "document not found"})
+			return
+		}
+		var input struct {
+			Cipher  string `json:"cipher"`
+			Name    string `json:"name"`
+			Section string `json:"section"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if v := strings.TrimSpace(input.Cipher); v != "" {
+			doc.Cipher = v
+		}
+		if v := strings.TrimSpace(input.Name); v != "" {
+			doc.Name = v
+		}
+		doc.Section = strings.TrimSpace(input.Section)
+		if err := repo.RawDB().Save(&doc).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, doc)
+	}
+}
+
+// DeleteDocP — DELETE /projects/:id/docs/p/:docId
+func DeleteDocP(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		docID := c.Param("docId")
+		if err := repo.RawDB().Where("id = ? AND project_id = ?", docID, projectID).Delete(&models.DocStageP{}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	}
+}
+
+// CreateDocR — POST /projects/:id/docs/r
+func CreateDocR(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		var input struct {
+			CipherPRef string `json:"cipher_p_ref"`
+			CipherR    string `json:"cipher_r"`
+			Name       string `json:"name"`
+			IssueDate  string `json:"issue_date"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(input.CipherR) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cipher_r is required"})
+			return
+		}
+		if strings.TrimSpace(input.Name) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+			return
+		}
+		doc := &models.DocStageR{
+			ProjectID:  projectID,
+			CipherPRef: strings.TrimSpace(input.CipherPRef),
+			CipherR:    strings.TrimSpace(input.CipherR),
+			Name:       strings.TrimSpace(input.Name),
+		}
+		if v := strings.TrimSpace(input.IssueDate); v != "" {
+			t, err := time.Parse("2006-01-02", v)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "issue_date must be YYYY-MM-DD"})
+				return
+			}
+			doc.IssueDate = &t
+		}
+		if err := repo.RawDB().Create(doc).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, doc)
+	}
+}
+
+// UpdateDocR — PUT /projects/:id/docs/r/:docId
+func UpdateDocR(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		docID := c.Param("docId")
+		var doc models.DocStageR
+		if err := repo.RawDB().Where("id = ? AND project_id = ?", docID, projectID).First(&doc).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "document not found"})
+			return
+		}
+		var input struct {
+			CipherPRef string `json:"cipher_p_ref"`
+			CipherR    string `json:"cipher_r"`
+			Name       string `json:"name"`
+			IssueDate  string `json:"issue_date"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if v := strings.TrimSpace(input.CipherPRef); v != "" {
+			doc.CipherPRef = v
+		}
+		if v := strings.TrimSpace(input.CipherR); v != "" {
+			doc.CipherR = v
+		}
+		if v := strings.TrimSpace(input.Name); v != "" {
+			doc.Name = v
+		}
+		if v := strings.TrimSpace(input.IssueDate); v != "" {
+			t, err := time.Parse("2006-01-02", v)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "issue_date must be YYYY-MM-DD"})
+				return
+			}
+			doc.IssueDate = &t
+		}
+		if err := repo.RawDB().Save(&doc).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, doc)
+	}
+}
+
+// DeleteDocR — DELETE /projects/:id/docs/r/:docId
+func DeleteDocR(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		docID := c.Param("docId")
+		if err := repo.RawDB().Where("id = ? AND project_id = ?", docID, projectID).Delete(&models.DocStageR{}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	}
+}
+
+
 func CreateSvor(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
