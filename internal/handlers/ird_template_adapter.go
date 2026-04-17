@@ -111,14 +111,9 @@ func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		docType := strings.ToUpper(strings.TrimSpace(input.Data["doc_type"]))
+		docType := strings.TrimSpace(input.Data["doc_type"])
 		if docType == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "doc_type is required (GPZU, TZ, MTZ, TU)"})
-			return
-		}
-		validTypes := map[string]bool{"GPZU": true, "TZ": true, "MTZ": true, "TU": true}
-		if !validTypes[docType] {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid doc_type, must be one of: GPZU, TZ, MTZ, TU"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "doc_type is required"})
 			return
 		}
 
@@ -218,12 +213,6 @@ func UpdateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 
 		// Обновляем только переданные поля (patch-семантика)
 		if v := strings.TrimSpace(input.Data["doc_type"]); v != "" {
-			v = strings.ToUpper(v)
-			validTypes := map[string]bool{"GPZU": true, "TZ": true, "MTZ": true, "TU": true}
-			if !validTypes[v] {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid doc_type"})
-				return
-			}
 			doc.DocType = v
 		}
 		if v, ok := input.Data["doc_number"]; ok {
