@@ -130,6 +130,9 @@ func main() {
 		templates.Use(middleware.JWTAuthMiddleware())
 		{
 			templates.GET("/templates", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplates(repo))
+			// ИРД: роут на схему шаблона — перехватывает ДО общего /templates/:code
+			// Возвращает колонки прямо из кода, без обращения к БД (работает на чистой базе)
+			templates.GET("/templates/input_design_data", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetIrdTemplate())
 			templates.GET("/templates/:code", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetTemplate(repo))
 
 			// ИРД: специальные роуты ПЕРЕХВАТЫВАЮТ input_design_data ДО общих роутов.
