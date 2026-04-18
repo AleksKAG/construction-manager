@@ -10,8 +10,37 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ListIrdAsTemplateRows — адаптер: возвращает ИРД-документы в формате template-строк,
-// который ожидает фронтенд (поле "data" вместо прямой структуры документа).
+// irdColumns — колонки ИРД, жёстко заданные в коде.
+// Не зависят от БД: шаблон всегда доступен на любой чистой базе.
+var irdColumns = []gin.H{
+	{"field_key": "doc_type", "title": "Тип документа", "data_type": "text", "sort_order": 1},
+	{"field_key": "doc_number", "title": "Номер документа", "data_type": "text", "sort_order": 2},
+	{"field_key": "issuer", "title": "Выдавший орган", "data_type": "text", "sort_order": 3},
+	{"field_key": "issue_date", "title": "Дата выдачи", "data_type": "date", "sort_order": 4},
+	{"field_key": "expiry_date", "title": "Срок действия", "data_type": "date", "sort_order": 5},
+	{"field_key": "status", "title": "Статус", "data_type": "text", "sort_order": 6},
+	{"field_key": "notes", "title": "Примечание", "data_type": "text", "sort_order": 7},
+	{"field_key": "file_path", "title": "Файл/Ссылка", "data_type": "text", "sort_order": 8},
+}
+
+// GetIrdTemplate — GET /api/v1/templates/input_design_data
+// Возвращает описание шаблона ИРД прямо из кода, не обращаясь к БД.
+// Это гарантирует что вкладка ИРД работает на любой чистой базе данных.
+func GetIrdTemplate() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"template": gin.H{
+				"code":        "input_design_data",
+				"name":        "ИРД — исходные данные для проектирования",
+				"description": "ГПЗУ, ТЗ, ТУ, МТЗ и прочие исходные данные",
+			},
+			"columns": irdColumns,
+		})
+	}
+}
+
+// ListIrdAsTemplateRows — GET /api/v1/objects/:id/templates/input_design_data/rows
+// Возвращает ИРД-документы в формате template-строк, который ожидает фронтенд.
 func ListIrdAsTemplateRows(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
@@ -26,50 +55,42 @@ func ListIrdAsTemplateRows(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		// Фильтрация по типу документа и поиску
+		// Фильтрация по поиску
 		search := strings.ToLower(strings.TrimSpace(c.Query("search")))
-		docType := strings.ToUpper(strings.TrimSpace(c.Query("doc_type")))
-
-		if search != "" || docType != "" {
+		if search != "" {
 			filtered := make([]models.IrdDocument, 0, len(docs))
 			for _, d := range docs {
-				if docType != "" && strings.ToUpper(d.DocType) != docType {
-					continue
+				if strings.Contains(strings.ToLower(d.DocType), search) ||
+					strings.Contains(strings.ToLower(d.DocNumber), search) ||
+					strings.Contains(strings.ToLower(d.Issuer), search) ||
+					strings.Contains(strings.ToLower(d.Notes), search) {
+					filtered = append(filtered, d)
 				}
-				if search != "" {
-					if !strings.Contains(strings.ToLower(d.DocNumber), search) &&
-						!strings.Contains(strings.ToLower(d.Issuer), search) &&
-						!strings.Contains(strings.ToLower(d.Notes), search) {
-						continue
-					}
-				}
-				filtered = append(filtered, d)
 			}
 			docs = filtered
 		}
 
-		// Преобразуем IrdDocument → формат ProjectTemplateRow с полем "data"
+		// Преобразуем IrdDocument → { id, data: {...} }
+		// Фронтенд читает (row.data || {})[field_key]
 		rows := make([]gin.H, 0, len(docs))
 		for i, d := range docs {
-			values := map[string]string{
-				"doc_type":    d.DocType,
-				"doc_number":  d.DocNumber,
-				"issue_date":  d.IssueDate,
-				"expiry_date": d.ExpiryDate,
-				"status":      d.Status,
-				"issuer":      d.Issuer,
-				"notes":       d.Notes,
-				"file_path":   d.FilePath,
-			}
 			rows = append(rows, gin.H{
 				"id":            d.ID,
 				"project_id":    d.ProjectID,
 				"template_code": "input_design_data",
 				"row_number":    i + 1,
-				"data":          values, // фронтенд читает (row.data || {})[field_key]
-				"created_by":    "system",
-				"created_at":    d.CreatedAt.Format(time.RFC3339),
-				"updated_at":    d.UpdatedAt.Format(time.RFC3339),
+				"data": map[string]string{
+					"doc_type":    d.DocType,
+					"doc_number":  d.DocNumber,
+					"issue_date":  d.IssueDate,
+					"expiry_date": d.ExpiryDate,
+					"status":      d.Status,
+					"issuer":      d.Issuer,
+					"notes":       d.Notes,
+					"file_path":   d.FilePath,
+				},
+				"created_at": d.CreatedAt.Format(time.RFC3339),
+				"updated_at": d.UpdatedAt.Format(time.RFC3339),
 			})
 		}
 
@@ -93,8 +114,8 @@ func ListIrdAsTemplateRows(repo repository.Repository) gin.HandlerFunc {
 	}
 }
 
-// CreateIrdFromTemplateRow — создаёт ИРД-документ из данных в формате template-строки.
-// Фронтенд отправляет { "data": { "doc_type": "...", ... } }
+// CreateIrdFromTemplateRow — POST /api/v1/objects/:id/templates/input_design_data/rows
+// Создаёт ИРД-документ. Фронтенд шлёт { "data": { "doc_type": "...", ... } }
 func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
@@ -121,27 +142,18 @@ func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 		if status == "" {
 			status = "active"
 		}
-		validStatuses := map[string]bool{"draft": true, "active": true, "expired": true, "revoked": true}
-		if !validStatuses[status] {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status, must be one of: draft, active, expired, revoked"})
-			return
-		}
 
 		issueDate := strings.TrimSpace(input.Data["issue_date"])
 		expiryDate := strings.TrimSpace(input.Data["expiry_date"])
 		if issueDate != "" {
 			if _, err := time.Parse("2006-01-02", issueDate); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid issue_date format, use YYYY-MM-DD"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": "issue_date: используйте формат YYYY-MM-DD"})
 				return
 			}
 		}
 		if expiryDate != "" {
 			if _, err := time.Parse("2006-01-02", expiryDate); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid expiry_date format, use YYYY-MM-DD"})
-				return
-			}
-			if issueDate != "" && expiryDate < issueDate {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "expiry_date must be after issue_date"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": "expiry_date: используйте формат YYYY-MM-DD"})
 				return
 			}
 		}
@@ -163,32 +175,29 @@ func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		values := map[string]string{
-			"doc_type":    doc.DocType,
-			"doc_number":  doc.DocNumber,
-			"issue_date":  doc.IssueDate,
-			"expiry_date": doc.ExpiryDate,
-			"status":      doc.Status,
-			"issuer":      doc.Issuer,
-			"notes":       doc.Notes,
-			"file_path":   doc.FilePath,
-		}
 		c.JSON(http.StatusCreated, gin.H{
 			"id":            doc.ID,
 			"project_id":    doc.ProjectID,
 			"template_code": "input_design_data",
 			"row_number":    1,
-			"data":          values,
-			"created_by":    "system",
-			"created_at":    doc.CreatedAt.Format(time.RFC3339),
-			"updated_at":    doc.UpdatedAt.Format(time.RFC3339),
+			"data": map[string]string{
+				"doc_type":    doc.DocType,
+				"doc_number":  doc.DocNumber,
+				"issue_date":  doc.IssueDate,
+				"expiry_date": doc.ExpiryDate,
+				"status":      doc.Status,
+				"issuer":      doc.Issuer,
+				"notes":       doc.Notes,
+				"file_path":   doc.FilePath,
+			},
+			"created_at": doc.CreatedAt.Format(time.RFC3339),
+			"updated_at": doc.UpdatedAt.Format(time.RFC3339),
 		})
 	}
 }
 
-// UpdateIrdFromTemplateRow — обновляет ИРД-документ.
-// Роут: PUT /api/v1/ird-rows/:rowId
-// Фронтенд отправляет { "data": { "doc_type": "...", ... } }
+// UpdateIrdFromTemplateRow — PUT /api/v1/ird-rows/:rowId
+// Обновляет ИРД-документ. Фронтенд шлёт { "data": { ... } }
 func UpdateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rowID := c.Param("rowId")
@@ -211,41 +220,32 @@ func UpdateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		// Обновляем только переданные поля (patch-семантика)
+		// Обновляем только переданные поля
 		if v := strings.TrimSpace(input.Data["doc_type"]); v != "" {
 			doc.DocType = v
 		}
 		if v, ok := input.Data["doc_number"]; ok {
 			doc.DocNumber = strings.TrimSpace(v)
 		}
+		if v, ok := input.Data["issuer"]; ok {
+			doc.Issuer = strings.TrimSpace(v)
+		}
 		if v := strings.TrimSpace(input.Data["issue_date"]); v != "" {
 			if _, err := time.Parse("2006-01-02", v); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid issue_date format, use YYYY-MM-DD"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": "issue_date: используйте формат YYYY-MM-DD"})
 				return
 			}
 			doc.IssueDate = v
 		}
 		if v := strings.TrimSpace(input.Data["expiry_date"]); v != "" {
 			if _, err := time.Parse("2006-01-02", v); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid expiry_date format, use YYYY-MM-DD"})
-				return
-			}
-			if doc.IssueDate != "" && v < doc.IssueDate {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "expiry_date must be after issue_date"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": "expiry_date: используйте формат YYYY-MM-DD"})
 				return
 			}
 			doc.ExpiryDate = v
 		}
 		if v := strings.TrimSpace(input.Data["status"]); v != "" {
-			validStatuses := map[string]bool{"draft": true, "active": true, "expired": true, "revoked": true}
-			if !validStatuses[v] {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
-				return
-			}
 			doc.Status = v
-		}
-		if v, ok := input.Data["issuer"]; ok {
-			doc.Issuer = strings.TrimSpace(v)
 		}
 		if v, ok := input.Data["notes"]; ok {
 			doc.Notes = strings.TrimSpace(v)
@@ -259,29 +259,27 @@ func UpdateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		values := map[string]string{
-			"doc_type":    doc.DocType,
-			"doc_number":  doc.DocNumber,
-			"issue_date":  doc.IssueDate,
-			"expiry_date": doc.ExpiryDate,
-			"status":      doc.Status,
-			"issuer":      doc.Issuer,
-			"notes":       doc.Notes,
-			"file_path":   doc.FilePath,
-		}
 		c.JSON(http.StatusOK, gin.H{
 			"id":            doc.ID,
 			"project_id":    doc.ProjectID,
 			"template_code": "input_design_data",
 			"row_number":    1,
-			"data":          values,
-			"updated_at":    doc.UpdatedAt.Format(time.RFC3339),
+			"data": map[string]string{
+				"doc_type":    doc.DocType,
+				"doc_number":  doc.DocNumber,
+				"issue_date":  doc.IssueDate,
+				"expiry_date": doc.ExpiryDate,
+				"status":      doc.Status,
+				"issuer":      doc.Issuer,
+				"notes":       doc.Notes,
+				"file_path":   doc.FilePath,
+			},
+			"updated_at": doc.UpdatedAt.Format(time.RFC3339),
 		})
 	}
 }
 
-// DeleteIrdAsTemplateRow — удаляет ИРД-документ.
-// Роут: DELETE /api/v1/ird-rows/:rowId
+// DeleteIrdAsTemplateRow — DELETE /api/v1/ird-rows/:rowId
 func DeleteIrdAsTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rowID := c.Param("rowId")
