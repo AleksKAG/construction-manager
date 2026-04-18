@@ -292,7 +292,7 @@ class ConstructionManagerUI {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         const rawView = item.dataset.viewLink;
-        const view = this.isKnownView(rawView) ? rawView : `template:${rawView}`;
+        const view = this.isKnownView(rawView) || rawView.startsWith('template:') ? rawView : `template:${rawView}`;
         this.switchView(view, item.dataset.viewTitle);
       });
     });
@@ -345,6 +345,8 @@ class ConstructionManagerUI {
       'СВОР': 'svorMain',
       'История согласований': 'svorHistory',
       'Сводный дашборд по СВОР': 'svorDashboard',
+      'ИРД': 'template:ird',
+      'Исходные данные для проектирования': 'template:ird',
     };
     return map[String(title || '').trim()] || '';
   }
