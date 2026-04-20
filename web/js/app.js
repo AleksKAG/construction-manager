@@ -782,10 +782,15 @@ class ConstructionManagerUI {
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
         <h3>${title}</h3>
-        <div class="row-actions" style="margin-bottom:12px">
-          <button id="addRegistryBtn" class="mini primary">+ Добавить</button>
-          <button id="importRegistryBtn" class="mini">Импорт CSV</button>
-          <button id="exportRegistryBtn" class="mini">Экспорт CSV</button>
+        <div class="row-actions table-toolbar" style="margin-bottom:12px">
+          <div class="actions-dropdown" data-actions-menu="registryActions">
+            <button id="registryActionsBtn" class="mini">⚙ Действия</button>
+            <div class="actions-dropdown-menu">
+              <button id="addRegistryBtn" class="mini primary">+ Добавить</button>
+              <button id="importRegistryBtn" class="mini">Импорт CSV</button>
+              <button id="exportRegistryBtn" class="mini">Экспорт CSV</button>
+            </div>
+          </div>
         </div>
         <p class="metric">Двойной клик по ячейке — inline-редактирование, Enter — сохранить.</p>
         <div class="table-wrap">
@@ -796,6 +801,7 @@ class ConstructionManagerUI {
         </div>
       </article>
     `;
+    this.bindActionsDropdown('registryActions');
     document.getElementById('addRegistryBtn')?.addEventListener('click', () => this.openRegistryForm(stage, title));
     document.getElementById('importRegistryBtn')?.addEventListener('click', () => this.startRegistryImport(stage, title));
     document.getElementById('exportRegistryBtn')?.addEventListener('click', () => this.exportRegistryCSV(stage, title));
@@ -995,10 +1001,15 @@ class ConstructionManagerUI {
       <article class="card col-12">
         <h3>${code === "tep" ? `ТЭП объекта: ${project.name}` : `${title}: ${this.currentTemplateName}`}</h3>
         <div class="row-actions" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;">
-          <button class="mini primary" id="addTemplateRowBtn">+ Добавить</button>
-          <button class="mini" id="editTemplateRowsBtn">Редактировать: ${this.templateEditMode ? "вкл" : "выкл"}</button>
-          <button class="mini" id="exportTemplateBtn">Экспорт CSV</button>
-          <button class="mini" id="importTemplateBtn">Импорт CSV</button>
+          <div class="actions-dropdown" data-actions-menu="templateActions">
+            <button class="mini" id="templateActionsBtn">⚙ Действия</button>
+            <div class="actions-dropdown-menu">
+              <button class="mini primary" id="addTemplateRowBtn">+ Добавить</button>
+              <button class="mini" id="editTemplateRowsBtn">Редактировать: ${this.templateEditMode ? "вкл" : "выкл"}</button>
+              <button class="mini" id="exportTemplateBtn">Экспорт CSV</button>
+              <button class="mini" id="importTemplateBtn">Импорт CSV</button>
+            </div>
+          </div>
           <input id="templateSearch" placeholder="Поиск" value="${this.templateSearch}">
           <button class="mini" id="templateSearchBtn">Найти</button>
           <span class="metric">Стр. ${pager.page}, всего ${pager.total}</span>
@@ -1016,6 +1027,7 @@ class ConstructionManagerUI {
       </article>
     `;
 
+    this.bindActionsDropdown('templateActions');
     document.getElementById('templateSearchBtn').onclick = () => {
       this.templateSearch = document.getElementById('templateSearch').value.trim();
       this.templatePage = 1;
@@ -1033,6 +1045,32 @@ class ConstructionManagerUI {
     if (isIRD) {
       this.bindIRDEditEvents(defaultCode, title);
     }
+  }
+
+  bindActionsDropdown(menuName) {
+    const dropdown = document.querySelector(`[data-actions-menu="${menuName}"]`);
+    if (!dropdown) return;
+    const trigger = dropdown.querySelector('button');
+    if (!trigger) return;
+    trigger.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const shouldOpen = !dropdown.classList.contains('open');
+      document.querySelectorAll('.actions-dropdown.open').forEach((item) => item.classList.remove('open'));
+      if (shouldOpen) dropdown.classList.add('open');
+    });
+
+    dropdown.querySelectorAll('.actions-dropdown-menu .mini').forEach((btn) => {
+      btn.addEventListener('click', () => dropdown.classList.remove('open'));
+    });
+
+    const closeOnOutsideClick = (e) => {
+      if (!dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+        document.removeEventListener('click', closeOnOutsideClick);
+      }
+    };
+    document.addEventListener('click', closeOnOutsideClick);
   }
 
   async syncScheduleRowsWithRegistry(projectId, rowsPayload) {

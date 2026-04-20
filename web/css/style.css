@@ -66,6 +66,24 @@ button { font: inherit; }
 .row-actions { display: flex; gap: 6px; align-items: center; }
 .mini { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-size: 12px; }
 .mini.danger { border-color: #f2b8b5; color: #b42318; background: #fff5f4; }
+.actions-dropdown { position: relative; display: inline-flex; }
+.actions-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 190px;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .14);
+}
+.actions-dropdown.open .actions-dropdown-menu { display: flex; }
+.actions-dropdown-menu .mini { width: 100%; text-align: left; }
 
 .dashboard-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .status-line { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
