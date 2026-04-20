@@ -78,6 +78,8 @@ class ConstructionManagerUI {
     this.docsPRows = [];
     this.docsRRows = [];
     this.registryRows = [];
+    this.registryStage = null;
+    this.registryTitle = '';
     this.workforceRows = [];
     this.workforceTasks = [];
     this.svorRows = [];
@@ -93,6 +95,7 @@ class ConstructionManagerUI {
       screenshotDataUrl: '',
       screenshotName: '',
     };
+    this.importDraft = null;
     this.aiClipboardBound = false;
 
     this.bind();
@@ -293,7 +296,7 @@ class ConstructionManagerUI {
         e.stopPropagation();
         const rawView = item.dataset.viewLink;
         const view = this.isKnownView(rawView) || rawView.startsWith('template:') ? rawView : `template:${rawView}`;
-        this.switchView(view, item.dataset.viewTitle);
+        this.switchView(view, item.dataset.viewTitle, { collapseMobile: item.dataset.hasChildren !== 'true' });
       });
     });
 
@@ -310,8 +313,18 @@ class ConstructionManagerUI {
   }
 
   renderProjectSubmenu(projectId) {
-    const menu = this.projectMenus[projectId] || [];
+    const menu = this.sanitizeProjectMenu(this.projectMenus[projectId] || []);
     return this.renderMenuNodes(projectId, menu || [], 1);
+  }
+
+  sanitizeProjectMenu(nodes = []) {
+    const cloned = (nodes || []).map((n) => ({ ...n, children: this.sanitizeProjectMenu(n.children || []) }));
+    const designNode = cloned.find((node) => String(node.title || '').trim() === 'Проектирование');
+    if (!designNode || !Array.isArray(designNode.children)) return cloned;
+    const hasStageP = designNode.children.some((child) => String(child.title || '').trim() === 'Стадия П');
+    if (!hasStageP) return cloned;
+    designNode.children = designNode.children.filter((child) => !['ТЭП', 'График проектирования'].includes(String(child.title || '').trim()));
+    return cloned;
   }
 
   renderMenuNodes(projectId, nodes, level = 1) {
@@ -321,7 +334,7 @@ class ConstructionManagerUI {
       const expanded = hasChildren && this.expandedMenuNodes.has(nodeKey);
       const marker = hasChildren ? (expanded ? '▼ ' : '▶ ') : '';
       const resolvedView = node.view_key || this.resolveMenuViewKey(node.title);
-      const attrs = resolvedView ? `data-view-link="${resolvedView}" data-view-title="${node.title}"` : '';
+      const attrs = resolvedView ? `data-view-link="${resolvedView}" data-view-title="${node.title}" data-has-children="${hasChildren ? 'true' : 'false'}"` : '';
       const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}"` : '';
       const row = `<div class="tree-row level-${Math.min(level, 4)}" ${attrs} ${toggleAttrs}>${marker}${node.title}</div>`;
       const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1) : '';
@@ -746,6 +759,8 @@ class ConstructionManagerUI {
     if (!project) return;
     const rows = await api(`/projects/${project.id}/design/${stage}/registry`);
     this.registryRows = Array.isArray(rows) ? rows : [];
+    this.registryStage = stage;
+    this.registryTitle = title;
     const body = this.registryRows.map((r, idx) => {
       const issueDate = r.issue_date_fact ? String(r.issue_date_fact).slice(0, 10) : '';
       return `<tr data-registry-id="${r.id}">
@@ -767,14 +782,10 @@ class ConstructionManagerUI {
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
         <h3>${title}</h3>
-        <div class="form-grid two" style="margin-bottom:12px;align-items:end">
-          <label>Обозначение *<input id="regDesignation" placeholder="АР.001-ПД" style="margin-top:4px"></label>
-          <label>Наименование *<input id="regName" placeholder="Архитектурные решения" style="margin-top:4px"></label>
-          <label>Марка<input id="regMark" placeholder="АР" style="margin-top:4px"></label>
-          <label>Шифр<input id="regCode" placeholder="001" style="margin-top:4px"></label>
-          <label>Исполнитель<input id="regContractor" style="margin-top:4px"></label>
-          <label>Дата выдачи факт<input id="regIssueDate" type="date" style="margin-top:4px"></label>
-          <div style="padding-top:20px"><button id="addRegistryBtn" class="mini primary">+ Добавить строку</button></div>
+        <div class="row-actions" style="margin-bottom:12px">
+          <button id="addRegistryBtn" class="mini primary">+ Добавить</button>
+          <button id="importRegistryBtn" class="mini">Импорт CSV</button>
+          <button id="exportRegistryBtn" class="mini">Экспорт CSV</button>
         </div>
         <p class="metric">Двойной клик по ячейке — inline-редактирование, Enter — сохранить.</p>
         <div class="table-wrap">
@@ -785,23 +796,9 @@ class ConstructionManagerUI {
         </div>
       </article>
     `;
-    document.getElementById('addRegistryBtn')?.addEventListener('click', async () => {
-      const designation = document.getElementById('regDesignation')?.value.trim();
-      const name = document.getElementById('regName')?.value.trim();
-      const mark = document.getElementById('regMark')?.value.trim();
-      const code = document.getElementById('regCode')?.value.trim();
-      const contractor = document.getElementById('regContractor')?.value.trim();
-      const issue_date_fact = document.getElementById('regIssueDate')?.value || null;
-      if (!designation) return alert('Укажите обозначение');
-      if (!name) return alert('Укажите наименование');
-      try {
-        await api(`/projects/${project.id}/design/${stage}/registry`, 'POST', {
-          designation, name, mark, code, contractor,
-          issue_date_fact: issue_date_fact || undefined,
-        });
-        await this.renderRegistry(stage, title);
-      } catch (e) { alert(e.message || 'Ошибка сохранения'); }
-    });
+    document.getElementById('addRegistryBtn')?.addEventListener('click', () => this.openRegistryForm(stage, title));
+    document.getElementById('importRegistryBtn')?.addEventListener('click', () => this.startRegistryImport(stage, title));
+    document.getElementById('exportRegistryBtn')?.addEventListener('click', () => this.exportRegistryCSV(stage, title));
     document.querySelectorAll('[data-registry-field]').forEach((cell) => {
       cell.addEventListener('dblclick', () => this.startRegistryInlineEdit(cell, stage));
     });
@@ -987,6 +984,7 @@ class ConstructionManagerUI {
 
     const columns = tpl.columns || [];
     rowsPayload = await this.ensureDefaultTemplateRows(project.id, code, rowsPayload);
+    if (code === 'design_schedule') rowsPayload = await this.syncScheduleRowsWithRegistry(project.id, rowsPayload);
     const rows = rowsPayload.data || [];
     const pager = rowsPayload.pagination || { page: 1, total: rows.length, page_size: 20 };
 
@@ -997,10 +995,13 @@ class ConstructionManagerUI {
       <article class="card col-12">
         <h3>${code === "tep" ? `ТЭП объекта: ${project.name}` : `${title}: ${this.currentTemplateName}`}</h3>
         <div class="row-actions" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;">
+          <button class="mini primary" id="addTemplateRowBtn">+ Добавить</button>
+          <button class="mini" id="editTemplateRowsBtn">Редактировать: ${this.templateEditMode ? "вкл" : "выкл"}</button>
+          <button class="mini" id="exportTemplateBtn">Экспорт CSV</button>
+          <button class="mini" id="importTemplateBtn">Импорт CSV</button>
           <input id="templateSearch" placeholder="Поиск" value="${this.templateSearch}">
           <button class="mini" id="templateSearchBtn">Найти</button>
           <span class="metric">Стр. ${pager.page}, всего ${pager.total}</span>
-          <button class="mini" id="toggleEditMode">✏️ Режим редактирования: ${this.templateEditMode ? "вкл" : "выкл"}</button>
           <button class="mini" id="prevPage">←</button>
           <button class="mini" id="nextPage">→</button>
         </div>
@@ -1022,13 +1023,47 @@ class ConstructionManagerUI {
     };
     document.getElementById('prevPage').onclick = () => { this.templatePage = Math.max(1, this.templatePage - 1); this.renderTemplateScreen(defaultCode, title); };
     document.getElementById('nextPage').onclick = () => { if (pager.page * pager.page_size < pager.total) this.templatePage += 1; this.renderTemplateScreen(defaultCode, title); };
-    document.getElementById('toggleEditMode').onclick = () => { this.templateEditMode = !this.templateEditMode; this.renderTemplateScreen(defaultCode, title); };
+    document.getElementById('addTemplateRowBtn').onclick = () => this.openTemplateForm(tpl, null);
+    document.getElementById('editTemplateRowsBtn').onclick = () => { this.templateEditMode = !this.templateEditMode; this.renderTemplateScreen(defaultCode, title); };
+    document.getElementById('exportTemplateBtn').onclick = () => exportTemplate(project.id, code);
+    document.getElementById('importTemplateBtn').onclick = () => this.startTemplateImport();
     document.querySelectorAll('[data-edit-row]').forEach((btn) => { btn.onclick = () => this.openTemplateForm(tpl, rows.find((r) => String(r.id) === String(btn.dataset.editRow))); });
     document.querySelectorAll('[data-del-row]').forEach((btn) => { btn.onclick = async () => { if (!confirm("Удалить строку?")) return; await deleteTemplateRow(btn.dataset.delRow); if (["tep", "summary_estimate"].includes(code)) await this.refreshDashboardMetrics(); await this.renderTemplateScreen(defaultCode, title); }; });
     document.querySelectorAll("[data-move-row]").forEach((btn) => { btn.onclick = async () => { const [rowId, direction] = String(btn.dataset.moveRow).split(":"); await this.moveTemplateRow(code, rowId, direction); await this.renderTemplateScreen(defaultCode, title); }; });
     if (isIRD) {
       this.bindIRDEditEvents(defaultCode, title);
     }
+  }
+
+  async syncScheduleRowsWithRegistry(projectId, rowsPayload) {
+    const stage = this.currentView === 'designScheduleR' ? 'phase-r' : 'phase-p';
+    let registry = [];
+    try {
+      const payload = await api(`/projects/${projectId}/design/${stage}/registry`);
+      registry = Array.isArray(payload) ? payload : [];
+    } catch (_) {
+      return rowsPayload;
+    }
+    if (!registry.length) return rowsPayload;
+    const existing = [...(rowsPayload.data || [])].sort((a, b) => (a.row_number || 0) - (b.row_number || 0));
+    for (let i = 0; i < registry.length; i += 1) {
+      const item = registry[i];
+      const base = {
+        volume_no: item.volume_number || String(i + 1),
+        code: item.designation || item.code || '',
+        name: item.name || '',
+        executor: item.contractor || '',
+      };
+      if (existing[i]) {
+        const current = existing[i].data || {};
+        if (current.volume_no !== base.volume_no || current.code !== base.code || current.name !== base.name || current.executor !== base.executor) {
+          await updateTemplateRow(existing[i].id, { ...current, ...base });
+        }
+      } else {
+        await createTemplateRow(projectId, 'design_schedule', base);
+      }
+    }
+    return listTemplateRows(projectId, 'design_schedule', { page: this.templatePage, page_size: 20, search: this.templateSearch });
   }
 
 
@@ -1273,6 +1308,171 @@ class ConstructionManagerUI {
     const duplicate = this.objects.find((o) => o.name.toLowerCase() === data.name.toLowerCase() && (!isEdit || String(o.id) !== String(this.state.editProjectId)));
     if (duplicate) return 'Проект с таким наименованием уже существует';
     return null;
+  }
+
+  openRegistryForm(stage, title) {
+    this.modalMode = 'registryAdd';
+    document.getElementById('modalTitle').textContent = `${title}: добавить строку`;
+    document.getElementById('modalBody').innerHTML = `
+      <div class="form-grid two">
+        <label>Обозначение *<input id="regDesignation" placeholder="АР.001-ПД" style="margin-top:4px"></label>
+        <label>Наименование *<input id="regName" placeholder="Архитектурные решения" style="margin-top:4px"></label>
+        <label>Марка<input id="regMark" placeholder="АР" style="margin-top:4px"></label>
+        <label>Шифр<input id="regCode" placeholder="001" style="margin-top:4px"></label>
+        <label>Исполнитель<input id="regContractor" style="margin-top:4px"></label>
+        <label>Дата выдачи факт<input id="regIssueDate" type="date" style="margin-top:4px"></label>
+      </div>
+    `;
+    this.importDraft = { kind: 'registry-add', stage, title };
+    this.openModal();
+  }
+
+  parseCSV(text) {
+    const rows = [];
+    let current = '';
+    let row = [];
+    let inQuotes = false;
+    const pushCell = () => { row.push(current.trim()); current = ''; };
+    const pushRow = () => {
+      if (row.some((c) => c !== '')) rows.push(row);
+      row = [];
+    };
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      if (ch === '"') {
+        if (inQuotes && text[i + 1] === '"') {
+          current += '"';
+          i += 1;
+        } else inQuotes = !inQuotes;
+      } else if (ch === ',' && !inQuotes) pushCell();
+      else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+        if (ch === '\r' && text[i + 1] === '\n') i += 1;
+        pushCell();
+        pushRow();
+      } else current += ch;
+    }
+    pushCell();
+    pushRow();
+    return rows;
+  }
+
+  async pickFile(accept = '.csv') {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = accept;
+      input.onchange = () => resolve(input.files?.[0] || null);
+      input.click();
+    });
+  }
+
+  async startTemplateImport() {
+    const project = this.currentProject();
+    if (!project) return;
+    const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
+    const tpl = await getTemplate(code);
+    const file = await this.pickFile('.csv');
+    if (!file) return;
+    const parsed = this.parseCSV(await file.text());
+    if (parsed.length < 2) return alert('Файл пустой или нет строк для импорта');
+    const headers = parsed[0].map((h) => String(h || '').toLowerCase());
+    const columns = tpl.columns || [];
+    const rows = parsed.slice(1).map((line) => {
+      const data = {};
+      columns.forEach((col) => {
+        const idx = headers.findIndex((h) => h === String(col.field_key || '').toLowerCase() || h === String(col.title || '').toLowerCase());
+        if (idx >= 0) data[col.field_key] = line[idx] ?? '';
+      });
+      return data;
+    }).filter((entry) => Object.values(entry).some((v) => String(v || '').trim() !== ''));
+    if (!rows.length) return alert('Не удалось распознать строки по заголовкам CSV');
+    this.importDraft = { kind: 'template-import', code, title: this.currentTemplateName || code, rows };
+    this.modalMode = 'importPreview';
+    const fields = columns.map((c) => c.field_key);
+    document.getElementById('modalTitle').textContent = `Импорт (${this.currentTemplateName || code}) — предпросмотр`;
+    document.getElementById('modalBody').innerHTML = this.renderImportPreviewTable(fields, rows, 'tpl');
+    document.getElementById('saveEntity').textContent = 'Сохранить импорт';
+    this.openModal();
+  }
+
+  async startRegistryImport(stage, title) {
+    const file = await this.pickFile('.csv');
+    if (!file) return;
+    const parsed = this.parseCSV(await file.text());
+    if (parsed.length < 2) return alert('Файл пустой или нет строк для импорта');
+    const headers = parsed[0].map((h) => String(h || '').toLowerCase());
+    const map = {
+      volume_number: ['№', 'том', 'volume_number'],
+      designation: ['обозначение', 'designation'],
+      name: ['наименование', 'name'],
+      contractor: ['исполнитель', 'contractor'],
+      mark: ['марка', 'mark'],
+      code: ['шифр', 'code'],
+      note: ['примечание', 'note'],
+      issue_date_fact: ['дата выдачи факт', 'issue_date_fact'],
+    };
+    const fields = Object.keys(map);
+    const rows = parsed.slice(1).map((line) => {
+      const data = {};
+      fields.forEach((field) => {
+        const idx = headers.findIndex((h) => map[field].includes(h));
+        if (idx >= 0) data[field] = line[idx] ?? '';
+      });
+      return data;
+    }).filter((entry) => String(entry.designation || '').trim() && String(entry.name || '').trim());
+    if (!rows.length) return alert('Не удалось распознать обязательные поля (Обозначение, Наименование)');
+    this.importDraft = { kind: 'registry-import', stage, title, rows };
+    this.modalMode = 'importPreview';
+    document.getElementById('modalTitle').textContent = `${title}: импорт — предпросмотр`;
+    document.getElementById('modalBody').innerHTML = this.renderImportPreviewTable(fields, rows, 'registry');
+    document.getElementById('saveEntity').textContent = 'Сохранить импорт';
+    this.openModal();
+  }
+
+  renderImportPreviewTable(fields, rows, mode) {
+    return `
+      <p class="metric">Данные можно поправить перед сохранением. При «Отмена» база не меняется.</p>
+      <div class="table-wrap">
+      <table class="table">
+        <thead><tr>${fields.map((f) => `<th>${f}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${rows.map((row, idx) => `<tr>${fields.map((field) => `<td><input data-import-mode="${mode}" data-import-row="${idx}" data-import-field="${field}" value="${(row[field] ?? '').toString().replace(/"/g, '&quot;')}"></td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+      </div>
+    `;
+  }
+
+  collectImportDraftEdits() {
+    if (!this.importDraft?.rows) return;
+    document.querySelectorAll('[data-import-row][data-import-field]').forEach((el) => {
+      const idx = Number(el.dataset.importRow);
+      const field = el.dataset.importField;
+      if (!Number.isNaN(idx) && this.importDraft.rows[idx]) this.importDraft.rows[idx][field] = el.value;
+    });
+  }
+
+  exportRegistryCSV(stage, title) {
+    const rows = this.registryRows || [];
+    const headers = ['№', 'Том', 'Шифр', 'Марка', 'Обозначение', 'Наименование', 'Исполнитель', 'Примечание', 'Дата выдачи факт'];
+    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [
+      headers.join(','),
+      ...rows.map((r, idx) => [
+        idx + 1, r.volume_number || '', r.code || '', r.mark || '',
+        r.designation || '', r.name || '', r.contractor || '', r.note || '',
+        r.issue_date_fact ? String(r.issue_date_fact).slice(0, 10) : '',
+      ].map(escape).join(',')),
+    ];
+    const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${stage}_${(title || 'registry').replace(/\s+/g, '_')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   async handlePrimaryAction() {
@@ -1617,6 +1817,51 @@ class ConstructionManagerUI {
       return;
     }
 
+    if (this.modalMode === 'registryAdd') {
+      const stage = this.importDraft?.stage;
+      const title = this.importDraft?.title || (stage === 'phase-p' ? 'Ведомость комплектов ПД' : 'Ведомость комплектов РД');
+      const project = this.currentProject();
+      const designation = document.getElementById('regDesignation')?.value.trim();
+      const name = document.getElementById('regName')?.value.trim();
+      const mark = document.getElementById('regMark')?.value.trim();
+      const code = document.getElementById('regCode')?.value.trim();
+      const contractor = document.getElementById('regContractor')?.value.trim();
+      const issue_date_fact = document.getElementById('regIssueDate')?.value || undefined;
+      if (!designation) return alert('Укажите обозначение');
+      if (!name) return alert('Укажите наименование');
+      await api(`/projects/${project.id}/design/${stage}/registry`, 'POST', { designation, name, mark, code, contractor, issue_date_fact });
+      this.closeModal();
+      return this.renderRegistry(stage, title);
+    }
+
+    if (this.modalMode === 'importPreview') {
+      this.collectImportDraftEdits();
+      const project = this.currentProject();
+      if (!this.importDraft || !project) return;
+      if (this.importDraft.kind === 'template-import') {
+        for (const row of this.importDraft.rows) await createTemplateRow(project.id, this.importDraft.code, row);
+        this.closeModal();
+        return this.renderTemplateScreen(this.importDraft.code, this.importDraft.title);
+      }
+      if (this.importDraft.kind === 'registry-import') {
+        for (const row of this.importDraft.rows) {
+          if (!String(row.designation || '').trim() || !String(row.name || '').trim()) continue;
+          await api(`/projects/${project.id}/design/${this.importDraft.stage}/registry`, 'POST', {
+            designation: row.designation,
+            name: row.name,
+            contractor: row.contractor,
+            code: row.code,
+            mark: row.mark,
+            note: row.note,
+            volume_number: row.volume_number,
+            issue_date_fact: row.issue_date_fact || undefined,
+          });
+        }
+        this.closeModal();
+        return this.renderRegistry(this.importDraft.stage, this.importDraft.title);
+      }
+    }
+
     if (this.modalMode === 'createRow' || this.modalMode === 'editRow') {
       try {
         const data = {};
@@ -1640,7 +1885,8 @@ class ConstructionManagerUI {
     this.closeModal();
   }
 
-  switchView(view, title) {
+  switchView(view, title, options = {}) {
+    const { collapseMobile = true } = options;
     this.currentView = view;
     this.currentTemplateCode = null;
     this.currentTemplateName = null;
@@ -1650,7 +1896,7 @@ class ConstructionManagerUI {
     document.getElementById('pageTitle').textContent = title;
     document.querySelectorAll('.menu-item[data-view]').forEach((btn) => btn.classList.toggle('active', btn.dataset.view === view));
     this.renderContent();
-    if (!this.state.isDesktop) this.toggleSidebar(false);
+    if (!this.state.isDesktop && collapseMobile) this.toggleSidebar(false);
   }
 
   renderAuthView() {
@@ -1673,6 +1919,7 @@ class ConstructionManagerUI {
     this.modalMode = null;
     this.editRowId = null;
     this.state.modalDirty = false;
+    this.importDraft = null;
     this.state.editProjectId = null;
     this.state.projectFormSnapshot = '';
     const saveBtn = document.getElementById('saveEntity');
