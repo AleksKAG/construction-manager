@@ -203,3 +203,133 @@ func DeleteRegistry(repo repository.Repository) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 	}
 }
+
+func ImportRegistryBatch(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		stage := normalizeStage(c.Param("stage"))
+		if stage == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "stage must be phase-p or phase-r"})
+			return
+		}
+
+		var input struct {
+			Mode string                  `json:"mode"`
+			Rows []upsertRegistryPayload `json:"rows"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if len(input.Rows) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "rows is required"})
+			return
+		}
+
+		mode := strings.ToLower(strings.TrimSpace(input.Mode))
+		if mode == "" {
+			mode = "add"
+		}
+		if mode != "add" && mode != "upsert" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "mode must be add or upsert"})
+			return
+		}
+
+		type rowError struct {
+			Index   int    `json:"index"`
+			Message string `json:"message"`
+		}
+		errorsList := make([]rowError, 0)
+		created, updated, skipped := 0, 0, 0
+		existingRows := make([]models.DocumentRegistry, 0)
+		if err := repo.RawDB().WithContext(c.Request.Context()).
+			Where("project_id = ? AND stage = ?", projectID, stage).
+			Find(&existingRows).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		existingByDesignation := make(map[string]models.DocumentRegistry, len(existingRows))
+		for _, row := range existingRows {
+			existingByDesignation[strings.ToLower(strings.TrimSpace(row.Designation))] = row
+		}
+
+		for idx, row := range input.Rows {
+			designation := strings.TrimSpace(row.Designation)
+			name := strings.TrimSpace(row.Name)
+			if designation == "" {
+				errorsList = append(errorsList, rowError{Index: idx + 1, Message: "designation is required"})
+				continue
+			}
+			if name == "" {
+				errorsList = append(errorsList, rowError{Index: idx + 1, Message: "name is required"})
+				continue
+			}
+
+			key := strings.ToLower(designation)
+			existing, hasExisting := existingByDesignation[key]
+			if mode == "add" && hasExisting {
+				skipped++
+				continue
+			}
+
+			payload := row
+			if mode == "upsert" && hasExisting {
+				payload.ID = &existing.ID
+			}
+
+			var issueDate *time.Time
+			if payload.IssueDateFact != nil && strings.TrimSpace(*payload.IssueDateFact) != "" {
+				t, err := time.Parse("2006-01-02", strings.TrimSpace(*payload.IssueDateFact))
+				if err != nil {
+					errorsList = append(errorsList, rowError{Index: idx + 1, Message: "issue_date_fact must be YYYY-MM-DD"})
+					continue
+				}
+				issueDate = &t
+			}
+
+			record := models.DocumentRegistry{
+				ProjectID:     projectID,
+				Stage:         stage,
+				VolumeNumber:  payload.VolumeNumber,
+				Code:          payload.Code,
+				Mark:          payload.Mark,
+				Designation:   designation,
+				Name:          name,
+				Contractor:    payload.Contractor,
+				Note:          payload.Note,
+				IssueDateFact: issueDate,
+			}
+
+			if mode == "upsert" && hasExisting {
+				record.ID = existing.ID
+				record.LinkedTaskID = existing.LinkedTaskID
+				record.LastSyncedAt = existing.LastSyncedAt
+				record.RevisionCount = existing.RevisionCount
+				if issueDate != nil {
+					record.RevisionCount = 1
+				}
+				if err := repo.RawDB().WithContext(c.Request.Context()).Save(&record).Error; err != nil {
+					errorsList = append(errorsList, rowError{Index: idx + 1, Message: err.Error()})
+					continue
+				}
+				updated++
+				existingByDesignation[key] = record
+				continue
+			}
+
+			if err := repo.RawDB().WithContext(c.Request.Context()).Create(&record).Error; err != nil {
+				errorsList = append(errorsList, rowError{Index: idx + 1, Message: err.Error()})
+				continue
+			}
+			created++
+			existingByDesignation[key] = record
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"created": created,
+			"updated": updated,
+			"skipped": skipped,
+			"errors":  errorsList,
+		})
+	}
+}
