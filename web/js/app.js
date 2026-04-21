@@ -71,7 +71,8 @@ class ConstructionManagerUI {
     this.projectsTimer = null;
     this.touchStartX = null;
     this.dashboardMetrics = {};
-    this.templateEditMode = false;
+    this.templateEditModes = {};
+    this.registryEditModes = { 'phase-p': false, 'phase-r': false };
     this.templateRowsCache = [];
     this.irdEditingRowId = null;
     this.irdDraftData = {};
@@ -324,6 +325,10 @@ class ConstructionManagerUI {
     const hasStageP = designNode.children.some((child) => String(child.title || '').trim() === 'Стадия П');
     if (!hasStageP) return cloned;
     designNode.children = designNode.children.filter((child) => !['ТЭП', 'График проектирования'].includes(String(child.title || '').trim()));
+    const expertiseNode = designNode.children.find((child) => String(child.title || '').trim() === 'Экспертиза');
+    if (expertiseNode && Array.isArray(expertiseNode.children)) {
+      expertiseNode.children = expertiseNode.children.filter((child) => String(child.title || '').trim() !== 'Заключение Р');
+    }
     return cloned;
   }
 
@@ -334,7 +339,7 @@ class ConstructionManagerUI {
       const expanded = hasChildren && this.expandedMenuNodes.has(nodeKey);
       const marker = hasChildren ? (expanded ? '▼ ' : '▶ ') : '';
       const resolvedView = node.view_key || this.resolveMenuViewKey(node.title);
-      const attrs = resolvedView ? `data-view-link="${resolvedView}" data-view-title="${node.title}" data-has-children="${hasChildren ? 'true' : 'false'}"` : '';
+      const attrs = (resolvedView && !hasChildren) ? `data-view-link="${resolvedView}" data-view-title="${node.title}" data-has-children="false"` : '';
       const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}"` : '';
       const row = `<div class="tree-row level-${Math.min(level, 4)}" ${attrs} ${toggleAttrs}>${marker}${node.title}</div>`;
       const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1) : '';
@@ -344,10 +349,9 @@ class ConstructionManagerUI {
 
   resolveMenuViewKey(title) {
     const map = {
-      'Стадия П': 'docsStageP',
-      'Стадия Р': 'docsStageR',
       'Ведомость комплектов ПД': 'registryP',
       'Ведомость комплектов РД': 'registryR',
+      'График ПД': 'designSchedule',
       'График РД': 'designScheduleR',
       'График СМР': 'smrSchedule',
       'Учёт рабочих': 'workforceDaily',
@@ -358,8 +362,12 @@ class ConstructionManagerUI {
       'СВОР': 'svorMain',
       'История согласований': 'svorHistory',
       'Сводный дашборд по СВОР': 'svorDashboard',
-      'ИРД': 'template:ird',
-      'Исходные данные для проектирования': 'template:ird',
+      'ИРД (архив)': 'docsArchiveIrd',
+      'Изыскания (архив)': 'docsArchiveSurvey',
+      'Стадия П (архив)': 'docsArchiveStageP',
+      'Экспертиза (архив)': 'docsArchiveExpertise',
+      'Стадия Р (архив)': 'docsArchiveStageR',
+      'Шаблоны документов': 'docsTemplates',
     };
     return map[String(title || '').trim()] || '';
   }
@@ -395,7 +403,7 @@ class ConstructionManagerUI {
     if (this.isTemplateView(this.currentView)) {
       const { code } = this.resolveTemplateView(this.currentView);
       cfg = code === 'input_design_data'
-        ? { primary: '+ Добавить строку', secondary: this.templateEditMode ? 'Завершить редактирование' : 'Редактировать' }
+        ? { primary: '+ Добавить строку', secondary: this.templateEditModes[this.currentView || code] ? 'Завершить редактирование' : 'Редактировать' }
         : { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' };
     }
     primary.textContent = cfg.primary;
@@ -421,6 +429,12 @@ class ConstructionManagerUI {
     if (this.currentView === 'protocolInternal') return this.renderProtocolStub('Внутренние');
     if (this.currentView === 'protocolDesign') return this.renderProtocolStub('Проектирование');
     if (this.currentView === 'protocolSMR') return this.renderProtocolStub('СМР');
+    if (this.currentView === 'docsArchiveIrd') return this.renderDocsArchiveStub('ИРД', 'Архив оригиналов документов: МТЗ, ТЗ, ТУ, письма и исходно-разрешительная документация.');
+    if (this.currentView === 'docsArchiveSurvey') return this.renderDocsArchiveStub('Изыскания', 'Раздел для отчетов по инженерным изысканиям, заключений и приложений.');
+    if (this.currentView === 'docsArchiveStageP') return this.renderDocsArchiveStub('Стадия П', 'Согласованная документация после экспертизы: номер заключения, дата, состав томов.');
+    if (this.currentView === 'docsArchiveExpertise') return this.renderDocsArchiveStub('Экспертиза', 'Документация до/после экспертизы, замечания и ответы, история корректировок.');
+    if (this.currentView === 'docsArchiveStageR') return this.renderDocsArchiveStub('Стадия Р', 'Документация на проверку и комплект РД, переданный в производство работ.');
+    if (this.currentView === 'docsTemplates') return this.renderDocsArchiveStub('Шаблоны документов', 'Шаблоны писем, реестров, сопроводительных и типовых форм по проекту.');
     if (this.currentView === 'svorMain') return this.renderSvorMain();
     if (this.currentView === 'svorHistory') return this.renderSvorHistoryList();
     if (this.currentView === 'svorDashboard') return this.renderSvorDashboard();
@@ -761,6 +775,7 @@ class ConstructionManagerUI {
     this.registryRows = Array.isArray(rows) ? rows : [];
     this.registryStage = stage;
     this.registryTitle = title;
+    const isEditMode = !!this.registryEditModes[stage];
     const body = this.registryRows.map((r, idx) => {
       const issueDate = r.issue_date_fact ? String(r.issue_date_fact).slice(0, 10) : '';
       return `<tr data-registry-id="${r.id}">
@@ -772,42 +787,43 @@ class ConstructionManagerUI {
         <td class="editable-cell" data-registry-field="name">${r.name || '—'}</td>
         <td class="editable-cell" data-registry-field="contractor">${r.contractor || '—'}</td>
         <td class="editable-cell" data-registry-field="note">${r.note || '—'}</td>
-        <td class="editable-cell" data-registry-field="issue_date_fact">${issueDate || '—'}</td>
-        <td>${(r.synced_progress || 0).toFixed(1)}%</td>
-        <td>${r.synced_status || '—'}</td>
-        <td><button class="mini danger" data-del-registry="${r.id}">🗑</button></td>
+        <td class="${isEditMode ? '' : 'hidden'}"><button class="mini danger" data-del-registry="${r.id}">🗑</button></td>
       </tr>`;
     }).join('');
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
         <h3>${title}</h3>
-        <div class="row-actions table-toolbar" style="margin-bottom:12px">
+        <div class="row-actions table-toolbar" style="margin-bottom:12px;justify-content:flex-end">
           <div class="actions-dropdown" data-actions-menu="registryActions">
             <button id="registryActionsBtn" class="mini">⚙ Действия</button>
             <div class="actions-dropdown-menu">
               <button id="addRegistryBtn" class="mini primary">+ Добавить</button>
+              <button id="editRegistryBtn" class="mini">Редактировать: ${isEditMode ? 'вкл' : 'выкл'}</button>
               <button id="importRegistryBtn" class="mini">Импорт CSV</button>
               <button id="exportRegistryBtn" class="mini">Экспорт CSV</button>
             </div>
           </div>
         </div>
-        <p class="metric">Двойной клик по ячейке — inline-редактирование, Enter — сохранить.</p>
+        <p class="metric">Редактирование включается через меню «Действия» и применяется только к текущей таблице.</p>
         <div class="table-wrap">
         <table class="table table-sticky">
-          <thead><tr><th>№</th><th>Том</th><th>Шифр</th><th>Марка</th><th>Обозначение</th><th>Наименование</th><th>Исполнитель</th><th>Примечание</th><th>Дата выдачи факт</th><th>% синх.</th><th>Статус</th><th></th></tr></thead>
-          <tbody>${body || '<tr><td colspan="12">Нет данных</td></tr>'}</tbody>
+          <thead><tr><th>№</th><th>Том</th><th>Шифр</th><th>Марка</th><th>Обозначение</th><th>Наименование</th><th>Исполнитель</th><th>Примечание</th><th class="${isEditMode ? '' : 'hidden'}"></th></tr></thead>
+          <tbody>${body || '<tr><td colspan="9">Нет данных</td></tr>'}</tbody>
         </table>
         </div>
       </article>
     `;
     this.bindActionsDropdown('registryActions');
     document.getElementById('addRegistryBtn')?.addEventListener('click', () => this.openRegistryForm(stage, title));
+    document.getElementById('editRegistryBtn')?.addEventListener('click', () => { this.registryEditModes[stage] = !this.registryEditModes[stage]; this.renderRegistry(stage, title); });
     document.getElementById('importRegistryBtn')?.addEventListener('click', () => this.startRegistryImport(stage, title));
     document.getElementById('exportRegistryBtn')?.addEventListener('click', () => this.exportRegistryCSV(stage, title));
-    document.querySelectorAll('[data-registry-field]').forEach((cell) => {
-      cell.addEventListener('dblclick', () => this.startRegistryInlineEdit(cell, stage));
-    });
+    if (isEditMode) {
+      document.querySelectorAll('[data-registry-field]').forEach((cell) => {
+        cell.addEventListener('dblclick', () => this.startRegistryInlineEdit(cell, stage));
+      });
+    }
     document.querySelectorAll('[data-del-registry]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         if (!confirm('Удалить строку ведомости?')) return;
@@ -881,6 +897,16 @@ class ConstructionManagerUI {
       <article class="card col-12">
         <h3>Протоколы — ${section}</h3>
         <p class="metric">В MVP добавлен каркас раздела. Следующий шаг: шаблоны поручений и автоповестка по просроченным задачам.</p>
+      </article>
+    `;
+  }
+
+
+  renderDocsArchiveStub(section, text) {
+    document.getElementById('contentArea').innerHTML = `
+      <article class="card col-12">
+        <h3>Документация (Проектирование) — ${section}</h3>
+        <p class="notice">${text}</p>
       </article>
     `;
   }
@@ -973,7 +999,8 @@ class ConstructionManagerUI {
       return;
     }
 
-    const code = this.currentTemplateCode || defaultCode;
+    const shouldKeepTemplateCode = this.currentTemplateCode && this.isTemplateView(this.currentView);
+    const code = shouldKeepTemplateCode ? this.currentTemplateCode : defaultCode;
     const isIRD = code === 'input_design_data';
     let tpl;
     let rowsPayload;
@@ -1005,7 +1032,7 @@ class ConstructionManagerUI {
             <button class="mini" id="templateActionsBtn">⚙ Действия</button>
             <div class="actions-dropdown-menu">
               <button class="mini primary" id="addTemplateRowBtn">+ Добавить</button>
-              <button class="mini" id="editTemplateRowsBtn">Редактировать: ${this.templateEditMode ? "вкл" : "выкл"}</button>
+              <button class="mini" id="editTemplateRowsBtn">Редактировать: ${this.templateEditModes[this.currentView || code] ? "вкл" : "выкл"}</button>
               <button class="mini" id="exportTemplateBtn">Экспорт CSV</button>
               <button class="mini" id="importTemplateBtn">Импорт CSV</button>
             </div>
@@ -1018,7 +1045,7 @@ class ConstructionManagerUI {
         </div>
         <div class="table-wrap">
         <table class="table ${isIRD ? 'table-sticky-head' : ''}">
-          <thead><tr>${columns.map((c) => `<th>${this.normalizeTemplateColumnTitle(code, c)}</th>`).join('')}<th class="actions-col ${this.templateEditMode ? "" : "hidden"}">Действия</th></tr></thead>
+          <thead><tr>${columns.map((c) => `<th>${this.normalizeTemplateColumnTitle(code, c)}</th>`).join('')}<th class="actions-col ${this.templateEditModes[this.currentView || code] ? "" : "hidden"}">Действия</th></tr></thead>
           <tbody>
             ${this.renderTemplateRows(code, rows, columns) || `<tr><td colspan="${columns.length + 1}">Нет данных</td></tr>`}
           </tbody>
@@ -1036,7 +1063,7 @@ class ConstructionManagerUI {
     document.getElementById('prevPage').onclick = () => { this.templatePage = Math.max(1, this.templatePage - 1); this.renderTemplateScreen(defaultCode, title); };
     document.getElementById('nextPage').onclick = () => { if (pager.page * pager.page_size < pager.total) this.templatePage += 1; this.renderTemplateScreen(defaultCode, title); };
     document.getElementById('addTemplateRowBtn').onclick = () => this.openTemplateForm(tpl, null);
-    document.getElementById('editTemplateRowsBtn').onclick = () => { this.templateEditMode = !this.templateEditMode; this.renderTemplateScreen(defaultCode, title); };
+    document.getElementById('editTemplateRowsBtn').onclick = () => { const key = this.currentView || code; this.templateEditModes[key] = !this.templateEditModes[key]; this.renderTemplateScreen(defaultCode, title); };
     document.getElementById('exportTemplateBtn').onclick = () => exportTemplate(project.id, code);
     document.getElementById('importTemplateBtn').onclick = () => this.startTemplateImport();
     document.querySelectorAll('[data-edit-row]').forEach((btn) => { btn.onclick = () => this.openTemplateForm(tpl, rows.find((r) => String(r.id) === String(btn.dataset.editRow))); });
@@ -1113,7 +1140,7 @@ class ConstructionManagerUI {
     if (code === 'input_design_data') {
       return this.renderIRDRows(rows, columns);
     }
-    return rows.map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ""}</td>`).join("")}<td class="actions-col ${this.templateEditMode ? "" : "hidden"}"><div class="row-actions"><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button><button class="mini" data-move-row="${r.id}:up">↑</button><button class="mini" data-move-row="${r.id}:down">↓</button></div></td></tr>`).join("");
+    return rows.map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ""}</td>`).join("")}<td class="actions-col ${this.templateEditModes[this.currentView || code] ? "" : "hidden"}"><div class="row-actions"><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button><button class="mini" data-move-row="${r.id}:up">↑</button><button class="mini" data-move-row="${r.id}:down">↓</button></div></td></tr>`).join("");
   }
 
   renderIRDRows(rows, columns) {
@@ -1125,7 +1152,7 @@ class ConstructionManagerUI {
         const type = c.data_type === 'number' ? 'number' : c.data_type === 'date' ? 'date' : 'text';
         return `<td><input class="ird-inline-input" data-ird-field="${c.field_key}" type="${type}" value="${current}"></td>`;
       }).join('');
-      const actions = !this.templateEditMode
+      const actions = !this.templateEditModes[this.currentView || code]
         ? ''
         : `<div class="row-actions">
             ${isRowEditing
@@ -1136,7 +1163,7 @@ class ConstructionManagerUI {
             <button class="mini" data-move-row="${r.id}:up">↑</button>
             <button class="mini" data-move-row="${r.id}:down">↓</button>
           </div>`;
-      return `<tr>${cells}<td class="actions-col ${this.templateEditMode ? "" : "hidden"}">${actions}</td></tr>`;
+      return `<tr>${cells}<td class="actions-col ${this.templateEditModes[this.currentView || code] ? "" : "hidden"}">${actions}</td></tr>`;
     }).join("");
   }
 
@@ -1217,7 +1244,7 @@ class ConstructionManagerUI {
     const grouped = [[], [], [], []];
     rows.forEach((row) => grouped[classify(row)].push(row));
     return groups.map((g, i) => {
-      const body = grouped[i].map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ""}</td>`).join("")}<td class="actions-col ${this.templateEditMode ? "" : "hidden"}"><div class="row-actions"><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button><button class="mini" data-move-row="${r.id}:up">↑</button><button class="mini" data-move-row="${r.id}:down">↓</button></div></td></tr>`).join("");
+      const body = grouped[i].map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ""}</td>`).join("")}<td class="actions-col ${this.templateEditModes[this.currentView || code] ? "" : "hidden"}"><div class="row-actions"><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button><button class="mini" data-move-row="${r.id}:up">↑</button><button class="mini" data-move-row="${r.id}:down">↓</button></div></td></tr>`).join("");
       const sectionRow = `<tr class="section-row"><td colspan="${columns.length + 1}">${g.title}</td></tr>`;
       return sectionRow + (body || `<tr><td colspan="${columns.length + 1}" class="metric">Пусто</td></tr>`);
     }).join("");
@@ -1648,7 +1675,8 @@ class ConstructionManagerUI {
     if (this.isTemplateView(this.currentView)) {
       const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
       if (code === 'input_design_data') {
-        this.templateEditMode = !this.templateEditMode;
+        const key = this.currentView || code;
+        this.templateEditModes[key] = !this.templateEditModes[key];
         return this.renderContent();
       }
       return exportTemplate(this.selectedObjectId, code);
@@ -2384,6 +2412,7 @@ class ConstructionManagerUI {
       'home', 'projects', 'auth', 'tep', 'designSchedule', 'designScheduleR', 'smrSchedule', 'estimate',
       'docsStageP', 'docsStageR', 'registryP', 'registryR', 'workforceDaily',
       'protocolInternal', 'protocolDesign', 'protocolSMR',
+      'docsArchiveIrd', 'docsArchiveSurvey', 'docsArchiveStageP', 'docsArchiveExpertise', 'docsArchiveStageR', 'docsTemplates',
       'svorMain', 'svorHistory', 'svorDashboard',
     ].includes(view);
   }

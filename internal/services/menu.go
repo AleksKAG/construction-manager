@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	
+
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"gorm.io/gorm"
 )
@@ -133,6 +133,10 @@ func EnsureProjectMenuStructure(db *gorm.DB, projectID string) error {
 	if err != nil {
 		return err
 	}
+	designDocs, err := ensureMenuItem(db, projectID, designSection.ID, "Документация (Проектирование)", "", "section", 91)
+	if err != nil {
+		return err
+	}
 
 	_, _ = ensureMenuItem(db, projectID, stageP.ID, "ИРД", "template:ird", "view", 1)
 	_, _ = ensureMenuItem(db, projectID, stageP.ID, "ТЭП", "tep", "view", 2)
@@ -145,7 +149,14 @@ func EnsureProjectMenuStructure(db *gorm.DB, projectID string) error {
 
 	_, _ = ensureMenuItem(db, projectID, expertise.ID, "Заключение П", "template:expertise_p", "view", 1)
 	_, _ = ensureMenuItem(db, projectID, expertise.ID, "Замечания/Ответы", "template:expertise_remarks", "view", 2)
-	_, _ = ensureMenuItem(db, projectID, expertise.ID, "Заключение Р", "template:expertise_r", "view", 3)
+	_ = db.Where("project_id = ? AND parent_id = ? AND title = ?", projectID, expertise.ID, "Заключение Р").Delete(&models.MenuItem{}).Error
+
+	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "ИРД (архив)", "docsArchiveIrd", "view", 1)
+	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Изыскания (архив)", "docsArchiveSurvey", "view", 2)
+	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Стадия П (архив)", "docsArchiveStageP", "view", 3)
+	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Экспертиза (архив)", "docsArchiveExpertise", "view", 4)
+	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Стадия Р (архив)", "docsArchiveStageR", "view", 5)
+	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Шаблоны документов", "docsTemplates", "view", 6)
 
 	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "ССР", "template:estimate_ssr", "view", 1)
 	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "Главы", "template:estimate_chapters", "view", 2)
@@ -166,7 +177,6 @@ func EnsureProjectMenuStructure(db *gorm.DB, projectID string) error {
 
 	// Backward compatibility with already existing shortcuts.
 	_, _ = ensureMenuItem(db, projectID, designSection.ID, "График проектирования", "designSchedule", "view", 90)
-	_, _ = ensureMenuItem(db, projectID, designSection.ID, "Документация (Проектирование)", "", "section", 91)
 
 	return nil
 }
@@ -187,7 +197,7 @@ func ensureMenuItem(db *gorm.DB, projectID, parentID, title, viewKey, itemType s
 		item.SortOrder = sortOrder
 		return &item, nil
 	}
-	
+
 	item = models.MenuItem{
 		ProjectID: projectID,
 		ParentID:  parentID,
