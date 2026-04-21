@@ -1424,11 +1424,20 @@ class ConstructionManagerUI {
       return data;
     }).filter((entry) => Object.values(entry).some((v) => String(v || '').trim() !== ''));
     if (!rows.length) return alert('Не удалось распознать строки по заголовкам CSV');
-    this.importDraft = { kind: 'template-import', code, title: this.currentTemplateName || code, rows };
-    this.modalMode = 'importPreview';
     const fields = columns.map((c) => c.field_key);
+    this.importDraft = {
+      kind: 'template-import',
+      code,
+      title: this.currentTemplateName || code,
+      rows,
+      mode: 'add',
+      fields,
+      keyField: this.detectImportKeyField(fields),
+    };
+    this.modalMode = 'importPreview';
     document.getElementById('modalTitle').textContent = `Импорт (${this.currentTemplateName || code}) — предпросмотр`;
     document.getElementById('modalBody').innerHTML = this.renderImportPreviewTable(fields, rows, 'tpl');
+    this.bindImportPreviewControls();
     document.getElementById('saveEntity').textContent = 'Сохранить импорт';
     this.openModal();
   }
@@ -1459,17 +1468,33 @@ class ConstructionManagerUI {
       return data;
     }).filter((entry) => String(entry.designation || '').trim() && String(entry.name || '').trim());
     if (!rows.length) return alert('Не удалось распознать обязательные поля (Обозначение, Наименование)');
-    this.importDraft = { kind: 'registry-import', stage, title, rows };
+    this.importDraft = { kind: 'registry-import', stage, title, rows, mode: 'add' };
     this.modalMode = 'importPreview';
     document.getElementById('modalTitle').textContent = `${title}: импорт — предпросмотр`;
     document.getElementById('modalBody').innerHTML = this.renderImportPreviewTable(fields, rows, 'registry');
+    this.bindImportPreviewControls();
     document.getElementById('saveEntity').textContent = 'Сохранить импорт';
     this.openModal();
   }
 
   renderImportPreviewTable(fields, rows, mode) {
+    const importMode = this.importDraft?.mode || 'add';
+    const keyField = this.importDraft?.keyField || '';
     return `
       <p class="metric">Данные можно поправить перед сохранением. При «Отмена» база не меняется.</p>
+      <div class="form-grid two" style="margin-bottom:12px">
+        <label>Режим импорта
+          <select id="importModeSelect" style="margin-top:4px">
+            <option value="add" ${importMode === 'add' ? 'selected' : ''}>Только добавить новые</option>
+            <option value="upsert" ${importMode === 'upsert' ? 'selected' : ''}>Добавить + обновить существующие</option>
+          </select>
+        </label>
+        ${mode === 'tpl' ? `<label>Ключ обновления
+          <select id="importKeyFieldSelect" style="margin-top:4px">
+            ${fields.map((field) => `<option value="${field}" ${field === keyField ? 'selected' : ''}>${field}</option>`).join('')}
+          </select>
+        </label>` : '<div></div>'}
+      </div>
       <div class="table-wrap">
       <table class="table">
         <thead><tr>${fields.map((f) => `<th>${f}</th>`).join('')}</tr></thead>
@@ -1479,6 +1504,89 @@ class ConstructionManagerUI {
       </table>
       </div>
     `;
+  }
+
+  bindImportPreviewControls() {
+    const modeEl = document.getElementById('importModeSelect');
+    if (modeEl) {
+      modeEl.addEventListener('change', () => {
+        if (this.importDraft) this.importDraft.mode = modeEl.value;
+      });
+    }
+    const keyEl = document.getElementById('importKeyFieldSelect');
+    if (keyEl) {
+      keyEl.addEventListener('change', () => {
+        if (this.importDraft) this.importDraft.keyField = keyEl.value;
+      });
+    }
+  }
+
+  detectImportKeyField(fields = []) {
+    const preferred = ['designation', 'code', 'cipher', 'num', 'number', 'id'];
+    const lowered = fields.map((f) => String(f || '').toLowerCase());
+    const found = preferred.find((key) => lowered.includes(key));
+    if (found) return fields[lowered.indexOf(found)];
+    return fields[0] || '';
+  }
+
+  parseImportInt(value) {
+    if (value === null || value === undefined) return undefined;
+    const normalized = String(value).trim().replace(',', '.');
+    if (!normalized) return undefined;
+    const parsed = Number.parseInt(normalized, 10);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+
+  showImportResultModal(title, stats) {
+    this.modalMode = 'importResult';
+    const errors = Array.isArray(stats?.errors) ? stats.errors : [];
+    const rows = errors.map((err) => `
+      <tr>
+        <td>${err.index ?? ''}</td>
+        <td>${(err.message || '').toString().replace(/</g, '&lt;')}</td>
+      </tr>
+    `).join('');
+    document.getElementById('modalTitle').textContent = `Результат импорта: ${title}`;
+    document.getElementById('modalBody').innerHTML = `
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">Создано</div><div class="kpi-value">${stats.created || 0}</div></div>
+        <div class="kpi"><div class="kpi-label">Обновлено</div><div class="kpi-value">${stats.updated || 0}</div></div>
+        <div class="kpi"><div class="kpi-label">Пропущено</div><div class="kpi-value">${stats.skipped || 0}</div></div>
+        <div class="kpi"><div class="kpi-label">Ошибок</div><div class="kpi-value">${errors.length}</div></div>
+      </div>
+      ${errors.length ? `
+      <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <h4 style="margin:0">Ошибки импорта</h4>
+        <button class="mini" id="downloadImportErrorsBtn">Скачать ошибки CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Строка</th><th>Ошибка</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      ` : '<p class="metric" style="margin-top:12px">Импорт завершён без ошибок.</p>'}
+    `;
+    const saveBtn = document.getElementById('saveEntity');
+    if (saveBtn) saveBtn.style.display = 'none';
+    document.getElementById('cancelModal').textContent = 'Закрыть';
+    this.openModal();
+    document.getElementById('downloadImportErrorsBtn')?.addEventListener('click', () => {
+      const header = ['row_index', 'message'];
+      const lines = [
+        header.join(','),
+        ...errors.map((err) => [`"${String(err.index ?? '').replace(/"/g, '""')}"`, `"${String(err.message ?? '').replace(/"/g, '""')}"`].join(',')),
+      ];
+      const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `import_errors_${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
   }
 
   collectImportDraftEdits() {
@@ -1877,26 +1985,29 @@ class ConstructionManagerUI {
       const project = this.currentProject();
       if (!this.importDraft || !project) return;
       if (this.importDraft.kind === 'template-import') {
-        for (const row of this.importDraft.rows) await createTemplateRow(project.id, this.importDraft.code, row);
+        const mode = this.importDraft.mode || 'add';
+        const keyField = this.importDraft.keyField || this.detectImportKeyField(this.importDraft.fields || []);
+        const stats = await api(`/objects/${project.id}/templates/${this.importDraft.code}/import`, 'POST', {
+          mode,
+          key_field: keyField,
+          rows: this.importDraft.rows,
+        });
         this.closeModal();
-        return this.renderTemplateScreen(this.importDraft.code, this.importDraft.title);
+        await this.renderTemplateScreen(this.importDraft.code, this.importDraft.title);
+        this.showImportResultModal(this.importDraft.title, stats);
+        return;
       }
       if (this.importDraft.kind === 'registry-import') {
-        for (const row of this.importDraft.rows) {
-          if (!String(row.designation || '').trim() || !String(row.name || '').trim()) continue;
-          await api(`/projects/${project.id}/design/${this.importDraft.stage}/registry`, 'POST', {
-            designation: row.designation,
-            name: row.name,
-            contractor: row.contractor,
-            code: row.code,
-            mark: row.mark,
-            note: row.note,
-            volume_number: row.volume_number,
-            issue_date_fact: row.issue_date_fact || undefined,
-          });
-        }
+        const mode = this.importDraft.mode || 'add';
+        const rows = this.importDraft.rows.map((row) => ({
+          ...row,
+          volume_number: this.parseImportInt(row.volume_number),
+        }));
+        const stats = await api(`/projects/${project.id}/design/${this.importDraft.stage}/registry/import`, 'POST', { mode, rows });
         this.closeModal();
-        return this.renderRegistry(this.importDraft.stage, this.importDraft.title);
+        await this.renderRegistry(this.importDraft.stage, this.importDraft.title);
+        this.showImportResultModal(this.importDraft.title, stats);
+        return;
       }
     }
 
@@ -1962,9 +2073,12 @@ class ConstructionManagerUI {
     this.state.projectFormSnapshot = '';
     const saveBtn = document.getElementById('saveEntity');
     if (saveBtn) {
+      saveBtn.style.display = '';
       saveBtn.disabled = false;
       saveBtn.textContent = 'Сохранить';
     }
+    const cancelBtn = document.getElementById('cancelModal');
+    if (cancelBtn) cancelBtn.textContent = 'Отмена';
   }
 
   initAIAssistantWidget() {

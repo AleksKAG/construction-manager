@@ -145,6 +145,7 @@ func main() {
 			// Общие роуты шаблонов (для всех кодов кроме input_design_data)
 			templates.GET("/objects/:id/templates/:code/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplateRows(repo))
 			templates.POST("/objects/:id/templates/:code/rows", middleware.RequireRoles("editor", "admin"), handlers.CreateTemplateRow(repo))
+			templates.POST("/objects/:id/templates/:code/import", middleware.RequireRoles("editor", "admin"), handlers.ImportTemplateRowsBatch(repo))
 			templates.PUT("/template-rows/:rowId", middleware.RequireRoles("editor", "admin"), handlers.UpdateTemplateRow(repo))
 			templates.DELETE("/template-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteTemplateRow(repo))
 			templates.GET("/objects/:id/templates/:code/export.csv", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ExportTemplateRowsXLSX(repo))
@@ -182,6 +183,7 @@ func main() {
 		// Registry
 		api.GET("/projects/:id/design/:stage/registry", handlers.ListRegistry(repo))
 		api.POST("/projects/:id/design/:stage/registry", handlers.UpsertRegistry(repo))
+		api.POST("/projects/:id/design/:stage/registry/import", handlers.ImportRegistryBatch(repo))
 		api.DELETE("/projects/:id/design/:stage/registry/:rowId", handlers.DeleteRegistry(repo))
 
 		// Workforce

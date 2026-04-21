@@ -195,6 +195,121 @@ func DeleteTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	}
 }
 
+func ImportTemplateRowsBatch(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		code := c.Param("code")
+
+		var input struct {
+			Mode     string                   `json:"mode"`
+			KeyField string                   `json:"key_field"`
+			Rows     []map[string]interface{} `json:"rows"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if len(input.Rows) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "rows is required"})
+			return
+		}
+
+		_, columns, err := repo.GetTemplateByCode(c.Request.Context(), code)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "template not found"})
+			return
+		}
+
+		mode := strings.ToLower(strings.TrimSpace(input.Mode))
+		if mode == "" {
+			mode = "add"
+		}
+		if mode != "add" && mode != "upsert" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "mode must be add or upsert"})
+			return
+		}
+
+		keyField := strings.TrimSpace(input.KeyField)
+		if keyField == "" && len(columns) > 0 {
+			keyField = columns[0].FieldKey
+		}
+
+		type rowError struct {
+			Index   int    `json:"index"`
+			Message string `json:"message"`
+		}
+		result := gin.H{
+			"created": 0,
+			"updated": 0,
+			"skipped": 0,
+			"errors":  []rowError{},
+		}
+		errorsList := make([]rowError, 0)
+
+		existingRows, err := repo.ListTemplateRows(c.Request.Context(), projectID, code)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		existingByKey := map[string]models.ProjectTemplateRow{}
+		for _, row := range existingRows {
+			key := normalizeImportKeyServer(row.ValuesMap[keyField])
+			if key != "" {
+				existingByKey[key] = row
+			}
+		}
+
+		for idx, rawRow := range input.Rows {
+			data := make(map[string]string, len(rawRow))
+			for k, v := range rawRow {
+				data[k] = strings.TrimSpace(fmt.Sprint(v))
+			}
+
+			if err := validateTemplateData(columns, data); err != nil {
+				errorsList = append(errorsList, rowError{Index: idx + 1, Message: err.Error()})
+				continue
+			}
+
+			rowKey := normalizeImportKeyServer(data[keyField])
+			existing, hasExisting := existingByKey[rowKey]
+
+			if mode == "add" && hasExisting && rowKey != "" {
+				result["skipped"] = result["skipped"].(int) + 1
+				continue
+			}
+
+			if mode == "upsert" && hasExisting && rowKey != "" {
+				existing.ValuesMap = data
+				if err := repo.UpdateTemplateRow(c.Request.Context(), &existing); err != nil {
+					errorsList = append(errorsList, rowError{Index: idx + 1, Message: err.Error()})
+					continue
+				}
+				result["updated"] = result["updated"].(int) + 1
+				continue
+			}
+
+			row := &models.ProjectTemplateRow{
+				ProjectID:     projectID,
+				TemplateCode:  code,
+				RowNumber:     len(existingRows) + result["created"].(int) + 1,
+				ValuesMap:     data,
+				CreatedByUser: "system",
+			}
+			if err := repo.CreateTemplateRow(c.Request.Context(), row); err != nil {
+				errorsList = append(errorsList, rowError{Index: idx + 1, Message: err.Error()})
+				continue
+			}
+			result["created"] = result["created"].(int) + 1
+			if rowKey != "" {
+				existingByKey[rowKey] = *row
+			}
+		}
+
+		result["errors"] = errorsList
+		c.JSON(http.StatusOK, result)
+	}
+}
+
 func ExportTemplateRowsXLSX(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
@@ -257,6 +372,10 @@ func validateTemplateData(columns []models.TemplateColumn, data map[string]strin
 		}
 	}
 	return nil
+}
+
+func normalizeImportKeyServer(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func matchesRowSearch(row models.ProjectTemplateRow, search string) bool {
