@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -292,5 +293,135 @@ func DeleteIrdAsTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	}
+}
+
+// ImportIrdTemplateRows — POST /api/v1/objects/:id/templates/input_design_data/import
+func ImportIrdTemplateRows(repo repository.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Param("id")
+		if projectID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "project_id is required"})
+			return
+		}
+		var input struct {
+			Mode string                   `json:"mode"`
+			Rows []map[string]interface{} `json:"rows"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if len(input.Rows) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "rows is required"})
+			return
+		}
+		mode := strings.ToLower(strings.TrimSpace(input.Mode))
+		if mode == "" {
+			mode = "upsert"
+		}
+		if mode != "add" && mode != "upsert" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "mode must be add or upsert"})
+			return
+		}
+
+		type rowError struct {
+			Index   int    `json:"index"`
+			Message string `json:"message"`
+		}
+		errorsList := make([]rowError, 0)
+		created, updated, skipped := 0, 0, 0
+
+		existingDocs, err := repo.ListIrdDocuments(c.Request.Context(), projectID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		existingByKey := map[string]models.IrdDocument{}
+		for _, doc := range existingDocs {
+			key := strings.ToLower(strings.TrimSpace(doc.DocType + "|" + doc.DocNumber))
+			if key != "|" {
+				existingByKey[key] = doc
+			}
+		}
+
+		for idx, raw := range input.Rows {
+			data := map[string]string{}
+			for k, v := range raw {
+				data[k] = strings.TrimSpace(fmt.Sprint(v))
+			}
+			docType := strings.TrimSpace(data["doc_type"])
+			if docType == "" {
+				errorsList = append(errorsList, rowError{Index: idx + 1, Message: "doc_type is required"})
+				continue
+			}
+			issueDate := strings.TrimSpace(data["issue_date"])
+			expiryDate := strings.TrimSpace(data["expiry_date"])
+			if issueDate != "" {
+				if _, err := time.Parse("2006-01-02", issueDate); err != nil {
+					errorsList = append(errorsList, rowError{Index: idx + 1, Message: "issue_date: используйте формат YYYY-MM-DD"})
+					continue
+				}
+			}
+			if expiryDate != "" {
+				if _, err := time.Parse("2006-01-02", expiryDate); err != nil {
+					errorsList = append(errorsList, rowError{Index: idx + 1, Message: "expiry_date: используйте формат YYYY-MM-DD"})
+					continue
+				}
+			}
+			status := strings.TrimSpace(data["status"])
+			if status == "" {
+				status = "active"
+			}
+			key := strings.ToLower(strings.TrimSpace(docType + "|" + strings.TrimSpace(data["doc_number"])))
+			existing, hasExisting := existingByKey[key]
+			if mode == "add" && hasExisting && key != "|" {
+				skipped++
+				continue
+			}
+			if mode == "upsert" && hasExisting && key != "|" {
+				existing.DocType = docType
+				existing.DocNumber = strings.TrimSpace(data["doc_number"])
+				existing.Issuer = strings.TrimSpace(data["issuer"])
+				existing.IssueDate = issueDate
+				existing.ExpiryDate = expiryDate
+				existing.Status = status
+				existing.Notes = strings.TrimSpace(data["notes"])
+				existing.FilePath = strings.TrimSpace(data["file_path"])
+				if err := repo.UpdateIrdDocument(c.Request.Context(), &existing); err != nil {
+					errorsList = append(errorsList, rowError{Index: idx + 1, Message: err.Error()})
+					continue
+				}
+				updated++
+				existingByKey[key] = existing
+				continue
+			}
+			doc := &models.IrdDocument{
+				ProjectID:  projectID,
+				DocType:    docType,
+				DocNumber:  strings.TrimSpace(data["doc_number"]),
+				Issuer:     strings.TrimSpace(data["issuer"]),
+				IssueDate:  issueDate,
+				ExpiryDate: expiryDate,
+				Status:     status,
+				Notes:      strings.TrimSpace(data["notes"]),
+				FilePath:   strings.TrimSpace(data["file_path"]),
+			}
+			if err := repo.CreateIrdDocument(c.Request.Context(), doc); err != nil {
+				errorsList = append(errorsList, rowError{Index: idx + 1, Message: err.Error()})
+				continue
+			}
+			created++
+			if key != "|" {
+				existingByKey[key] = *doc
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"created": created,
+			"updated": updated,
+			"skipped": skipped,
+			"errors":  errorsList,
+		})
 	}
 }
