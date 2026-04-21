@@ -66,12 +66,12 @@ button { font: inherit; }
 .row-actions { display: flex; gap: 6px; align-items: center; }
 .mini { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-size: 12px; }
 .mini.danger { border-color: #f2b8b5; color: #b42318; background: #fff5f4; }
-.actions-dropdown { position: relative; display: inline-flex; }
+.actions-dropdown { position: relative; display: inline-flex; margin-left: auto; }
 .actions-dropdown-menu {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 20;
+  z-index: 55;
   min-width: 190px;
   display: none;
   flex-direction: column;

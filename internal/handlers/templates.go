@@ -56,6 +56,46 @@ func ListTemplateRows(repo repository.Repository) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		if code == "input_design_data" {
+			docs, err := repo.ListIrdDocuments(c.Request.Context(), projectID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			rows = make([]models.ProjectTemplateRow, 0, len(docs))
+			for _, d := range docs {
+				rows = append(rows, models.ProjectTemplateRow{
+					ValuesMap: map[string]string{
+						"doc_type":    d.DocType,
+						"doc_number":  d.DocNumber,
+						"issuer":      d.Issuer,
+						"issue_date":  d.IssueDate,
+						"expiry_date": d.ExpiryDate,
+						"notes":       d.Notes,
+					},
+				})
+			}
+		}
+		if code == "input_design_data" {
+			docs, err := repo.ListIrdDocuments(c.Request.Context(), projectID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			rows = make([]models.ProjectTemplateRow, 0, len(docs))
+			for _, d := range docs {
+				rows = append(rows, models.ProjectTemplateRow{
+					ValuesMap: map[string]string{
+						"doc_type":    d.DocType,
+						"doc_number":  d.DocNumber,
+						"issuer":      d.Issuer,
+						"issue_date":  d.IssueDate,
+						"expiry_date": d.ExpiryDate,
+						"notes":       d.Notes,
+					},
+				})
+			}
+		}
 
 		search := strings.ToLower(strings.TrimSpace(c.Query("search")))
 		filtered := make([]models.ProjectTemplateRow, 0, len(rows))
@@ -323,6 +363,26 @@ func ExportTemplateRowsXLSX(repo repository.Repository) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+		if code == "input_design_data" {
+			docs, err := repo.ListIrdDocuments(c.Request.Context(), projectID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			rows = make([]models.ProjectTemplateRow, 0, len(docs))
+			for _, d := range docs {
+				rows = append(rows, models.ProjectTemplateRow{
+					ValuesMap: map[string]string{
+						"doc_type":    d.DocType,
+						"doc_number":  d.DocNumber,
+						"issuer":      d.Issuer,
+						"issue_date":  d.IssueDate,
+						"expiry_date": d.ExpiryDate,
+						"notes":       d.Notes,
+					},
+				})
+			}
 		}
 
 		filename := fmt.Sprintf("%s_%s.csv", code, projectID)
