@@ -141,6 +141,7 @@ func main() {
 			// оставляем их перед общими.
 			templates.GET("/objects/:id/templates/input_design_data/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListIrdAsTemplateRows(repo))
 			templates.POST("/objects/:id/templates/input_design_data/rows", middleware.RequireRoles("editor", "admin"), handlers.CreateIrdFromTemplateRow(repo))
+			templates.POST("/objects/:id/templates/input_design_data/import", middleware.RequireRoles("editor", "admin"), handlers.ImportIrdTemplateRows(repo))
 
 			// Общие роуты шаблонов (для всех кодов кроме input_design_data)
 			templates.GET("/objects/:id/templates/:code/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplateRows(repo))
