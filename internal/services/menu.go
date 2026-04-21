@@ -151,12 +151,19 @@ func EnsureProjectMenuStructure(db *gorm.DB, projectID string) error {
 	_, _ = ensureMenuItem(db, projectID, expertise.ID, "Замечания/Ответы", "template:expertise_remarks", "view", 2)
 	_ = db.Where("project_id = ? AND parent_id = ? AND title = ?", projectID, expertise.ID, "Заключение Р").Delete(&models.MenuItem{}).Error
 
-	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "ИРД (архив)", "docsArchiveIrd", "view", 1)
-	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Изыскания (архив)", "docsArchiveSurvey", "view", 2)
-	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Стадия П (архив)", "docsArchiveStageP", "view", 3)
-	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Экспертиза (архив)", "docsArchiveExpertise", "view", 4)
-	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Стадия Р (архив)", "docsArchiveStageR", "view", 5)
-	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Шаблоны документов", "docsTemplates", "view", 6)
+	_, _ = ensureMenuItem(db, projectID, designDocs.ID, "Шаблоны документов", "docsTemplates", "view", 1)
+	_ = db.Where("project_id = ? AND parent_id = ? AND title IN ?", projectID, designDocs.ID, []string{
+		"ИРД",
+		"Изыскания",
+		"Стадия П",
+		"Экспертиза",
+		"Стадия Р",
+		"ИРД (архив)",
+		"Изыскания (архив)",
+		"Стадия П (архив)",
+		"Экспертиза (архив)",
+		"Стадия Р (архив)",
+	}).Delete(&models.MenuItem{}).Error
 
 	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "ССР", "template:estimate_ssr", "view", 1)
 	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "Главы", "template:estimate_chapters", "view", 2)

@@ -324,7 +324,19 @@ class ConstructionManagerUI {
     if (!designNode || !Array.isArray(designNode.children)) return cloned;
     const hasStageP = designNode.children.some((child) => String(child.title || '').trim() === 'Стадия П');
     if (!hasStageP) return cloned;
-    designNode.children = designNode.children.filter((child) => !['ТЭП', 'График проектирования'].includes(String(child.title || '').trim()));
+    const hiddenDocsArchiveItems = new Set(['ИРД', 'Изыскания', 'Стадия П', 'Экспертиза', 'Стадия Р']);
+    designNode.children = designNode.children
+      .filter((child) => !['ТЭП', 'График проектирования'].includes(String(child.title || '').trim()))
+      .map((child) => {
+        const normalized = String(child.title || '').trim();
+        if (normalized.endsWith('(архив)')) {
+          const clean = normalized.replace(/\s*\(архив\)\s*$/i, '').trim();
+          if (hiddenDocsArchiveItems.has(clean)) return null;
+          return { ...child, title: clean };
+        }
+        return child;
+      })
+      .filter(Boolean);
     const expertiseNode = designNode.children.find((child) => String(child.title || '').trim() === 'Экспертиза');
     if (expertiseNode && Array.isArray(expertiseNode.children)) {
       expertiseNode.children = expertiseNode.children.filter((child) => String(child.title || '').trim() !== 'Заключение Р');
@@ -362,6 +374,11 @@ class ConstructionManagerUI {
       'СВОР': 'svorMain',
       'История согласований': 'svorHistory',
       'Сводный дашборд по СВОР': 'svorDashboard',
+      'ИРД': 'docsArchiveIrd',
+      'Изыскания': 'docsArchiveSurvey',
+      'Стадия П': 'docsArchiveStageP',
+      'Экспертиза': 'docsArchiveExpertise',
+      'Стадия Р': 'docsArchiveStageR',
       'ИРД (архив)': 'docsArchiveIrd',
       'Изыскания (архив)': 'docsArchiveSurvey',
       'Стадия П (архив)': 'docsArchiveStageP',
@@ -416,7 +433,7 @@ class ConstructionManagerUI {
   async renderContent() {
     this.configureHeader();
     if (this.currentView === 'projects') return this.renderProjects();
-    if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График проектирования');
+    if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График ПД');
     if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'ТЭП');
     if (this.currentView === 'estimate') return this.renderTemplateScreen('summary_estimate', 'Сметная документация');
     if (this.currentView === 'docsStageP') return this.renderDocsStageP();
@@ -999,8 +1016,8 @@ class ConstructionManagerUI {
       return;
     }
 
-    const shouldKeepTemplateCode = this.currentTemplateCode && this.isTemplateView(this.currentView);
-    const code = shouldKeepTemplateCode ? this.currentTemplateCode : defaultCode;
+    const resolvedCode = this.resolveTemplateView(this.currentView).code;
+    const code = resolvedCode || defaultCode;
     const isIRD = code === 'input_design_data';
     let tpl;
     let rowsPayload;
@@ -1022,7 +1039,10 @@ class ConstructionManagerUI {
     const pager = rowsPayload.pagination || { page: 1, total: rows.length, page_size: 20 };
 
     this.currentTemplateCode = code;
-    this.currentTemplateName = tpl.template?.name || title;
+    const templateName = tpl.template?.name || title;
+    this.currentTemplateName = (this.currentView === 'designScheduleR')
+      ? 'График разработки рабочей документации'
+      : templateName;
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
@@ -1392,7 +1412,19 @@ class ConstructionManagerUI {
     this.openModal();
   }
 
+  normalizeImportToken(value) {
+    return String(value || '')
+      .replace(/^\uFEFF/, '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  }
+
   parseCSV(text) {
+    const firstLine = String(text || '').split(/\r?\n/, 1)[0] || '';
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const delimiter = semicolonCount > commaCount ? ';' : ',';
     const rows = [];
     let current = '';
     let row = [];
@@ -1409,7 +1441,7 @@ class ConstructionManagerUI {
           current += '"';
           i += 1;
         } else inQuotes = !inQuotes;
-      } else if (ch === ',' && !inQuotes) pushCell();
+      } else if (ch === delimiter && !inQuotes) pushCell();
       else if ((ch === '\n' || ch === '\r') && !inQuotes) {
         if (ch === '\r' && text[i + 1] === '\n') i += 1;
         pushCell();
@@ -1440,12 +1472,13 @@ class ConstructionManagerUI {
     if (!file) return;
     const parsed = this.parseCSV(await file.text());
     if (parsed.length < 2) return alert('Файл пустой или нет строк для импорта');
-    const headers = parsed[0].map((h) => String(h || '').toLowerCase());
+    const headers = parsed[0].map((h) => this.normalizeImportToken(h));
     const columns = tpl.columns || [];
     const rows = parsed.slice(1).map((line) => {
       const data = {};
       columns.forEach((col) => {
-        const idx = headers.findIndex((h) => h === String(col.field_key || '').toLowerCase() || h === String(col.title || '').toLowerCase());
+        const idx = headers.findIndex((h) =>
+          h === this.normalizeImportToken(col.field_key || '') || h === this.normalizeImportToken(col.title || ''));
         if (idx >= 0) data[col.field_key] = line[idx] ?? '';
       });
       return data;
@@ -1474,9 +1507,9 @@ class ConstructionManagerUI {
     if (!file) return;
     const parsed = this.parseCSV(await file.text());
     if (parsed.length < 2) return alert('Файл пустой или нет строк для импорта');
-    const headers = parsed[0].map((h) => String(h || '').toLowerCase());
+    const headers = parsed[0].map((h) => this.normalizeImportToken(h));
     const map = {
-      volume_number: ['№', 'том', 'volume_number'],
+      volume_number: ['№', 'номер', 'том', 'volume_number'],
       designation: ['обозначение', 'designation'],
       name: ['наименование', 'name'],
       contractor: ['исполнитель', 'contractor'],
@@ -1489,7 +1522,8 @@ class ConstructionManagerUI {
     const rows = parsed.slice(1).map((line) => {
       const data = {};
       fields.forEach((field) => {
-        const idx = headers.findIndex((h) => map[field].includes(h));
+        const aliases = map[field].map((token) => this.normalizeImportToken(token));
+        const idx = headers.findIndex((h) => aliases.includes(h));
         if (idx >= 0) data[field] = line[idx] ?? '';
       });
       return data;

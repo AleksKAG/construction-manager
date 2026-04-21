@@ -3,7 +3,9 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/AleksKAG/construction-manager/internal/repository"
 	"github.com/gin-gonic/gin"
@@ -12,6 +14,34 @@ import (
 type agentSummaryRequest struct {
 	ProjectID string `json:"project_id"`
 	Question  string `json:"question"`
+}
+
+type modelsTaskView struct {
+	Name    string
+	EndDate string
+}
+
+func parseDateForSort(value string) time.Time {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return time.Time{}
+	}
+	layouts := []string{"2006-01-02", time.RFC3339, "02.01.2006"}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return parsed
+		}
+	}
+	return time.Time{}
+}
+
+func isOverdue(endDate string) bool {
+	d := parseDateForSort(endDate)
+	if d.IsZero() {
+		return false
+	}
+	now := time.Now().UTC()
+	return d.Before(time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC))
 }
 
 func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
@@ -61,6 +91,61 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 		fact = round2(fact)
 		deviation := round2(fact - plan)
 
+		activeStatusMap := map[string]string{
+			"design":       "активный",
+			"construction": "на паузе",
+			"planning":     "черновик",
+			"complete":     "завершён",
+		}
+		projectStatus := activeStatusMap[strings.TrimSpace(strings.ToLower(project.Status))]
+		if projectStatus == "" {
+			projectStatus = strings.TrimSpace(project.Status)
+			if projectStatus == "" {
+				projectStatus = "не указан"
+			}
+		}
+
+		completedTasks := make([]modelsTaskView, 0, len(tasks))
+		criticalMoments := make([]string, 0, 3)
+		for _, task := range tasks {
+			status := strings.ToLower(strings.TrimSpace(task.Status))
+			progressVal := task.Progress
+			if progressVal > 1 {
+				progressVal = progressVal / 100
+			}
+			if status == "done" || status == "completed" || status == "завершено" || status == "выполнено" || progressVal >= 0.99 {
+				completedTasks = append(completedTasks, modelsTaskView{Name: task.Name, EndDate: strings.TrimSpace(task.EndDate)})
+				continue
+			}
+			if strings.TrimSpace(task.EndDate) != "" && isOverdue(task.EndDate) {
+				criticalMoments = append(criticalMoments, fmt.Sprintf("Просрочка: %s (срок %s)", task.Name, task.EndDate))
+			}
+		}
+		sort.Slice(completedTasks, func(i, j int) bool {
+			return parseDateForSort(completedTasks[i].EndDate).After(parseDateForSort(completedTasks[j].EndDate))
+		})
+		lastDone := make([]string, 0, 3)
+		for i := 0; i < len(completedTasks) && i < 3; i += 1 {
+			item := completedTasks[i]
+			if item.EndDate != "" {
+				lastDone = append(lastDone, fmt.Sprintf("%s (%s)", item.Name, item.EndDate))
+			} else {
+				lastDone = append(lastDone, item.Name)
+			}
+		}
+		if len(lastDone) == 0 {
+			lastDone = append(lastDone, "нет завершённых задач")
+		}
+		if deviation < -10 {
+			criticalMoments = append(criticalMoments, fmt.Sprintf("Отставание от плана: %.2f п.п.", -deviation))
+		}
+		if fact < 40 {
+			criticalMoments = append(criticalMoments, "Низкий факт выполнения (<40%).")
+		}
+		if len(criticalMoments) == 0 {
+			criticalMoments = append(criticalMoments, "Критических отклонений не выявлено.")
+		}
+
 		actions := make([]string, 0, 3)
 		if fact < 50 {
 			actions = append(actions, "Провести оперативный штаб и пересчитать критический путь по графику.")
@@ -76,8 +161,9 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 		}
 
 		summary := fmt.Sprintf(
-			"Проект: %s\nАдрес: %s\nПлощадь: %.2f м²\nБюджет/стоимость: %.2f руб.\nПлан: %.2f%%\nФакт: %.2f%%\nОтклонение: %.2f п.п.\nЗадач в проекте: %d",
+			"Проект: %s\nСтатус: %s\nАдрес: %s\nПлощадь: %.2f м²\nБюджет/стоимость: %.2f руб.\nПлан: %.2f%%\nФакт: %.2f%%\nОтклонение: %.2f п.п.\nЗадач в проекте: %d\nПоследние выполненные задачи: %s\nКритические моменты: %s",
 			project.Name,
+			projectStatus,
 			project.Address,
 			area,
 			cost,
@@ -85,6 +171,8 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 			fact,
 			deviation,
 			len(tasks),
+			strings.Join(lastDone, "; "),
+			strings.Join(criticalMoments, "; "),
 		)
 		if q := strings.TrimSpace(input.Question); q != "" {
 			summary = fmt.Sprintf("%s\n\nФокус вопроса: %s", summary, q)
