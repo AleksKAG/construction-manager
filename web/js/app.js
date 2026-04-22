@@ -813,9 +813,9 @@ class ConstructionManagerUI {
         <h3>${title}</h3>
         <div class="row-actions table-toolbar" style="margin-bottom:12px;justify-content:flex-end">
           <div class="actions-dropdown" data-actions-menu="registryActions">
-            <button id="registryActionsBtn" class="mini">⚙ Действия</button>
+            <button id="registryActionsBtn" class="mini" title="Открыть меню действий" aria-label="Открыть меню действий">⚙ Действия</button>
             <div class="actions-dropdown-menu">
-              <button id="addRegistryBtn" class="mini primary">+ Добавить строку</button>
+              <button id="addRegistryBtn" class="mini primary">Добавить строку</button>
               <button id="editRegistryBtn" class="mini">Редактировать: ${isEditMode ? 'вкл' : 'выкл'}</button>
               <button id="importRegistryBtn" class="mini">Импорт CSV</button>
               <button id="exportRegistryBtn" class="mini">Экспорт CSV</button>
@@ -1049,9 +1049,9 @@ class ConstructionManagerUI {
         <h3>${code === "tep" ? `ТЭП объекта: ${project.name}` : `${title}: ${this.currentTemplateName}`}</h3>
         <div class="row-actions" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;">
           <div class="actions-dropdown" data-actions-menu="templateActions">
-            <button class="mini" id="templateActionsBtn">⚙ Действия</button>
+            <button class="mini" id="templateActionsBtn" title="Открыть меню действий" aria-label="Открыть меню действий">⚙ Действия</button>
             <div class="actions-dropdown-menu">
-              <button class="mini primary" id="addTemplateRowBtn">+ Добавить строку</button>
+              <button class="mini primary" id="addTemplateRowBtn">Добавить строку</button>
               <button class="mini" id="editTemplateRowsBtn">Редактировать: ${this.templateEditModes[this.currentView || code] ? "вкл" : "выкл"}</button>
               <button class="mini" id="exportTemplateBtn">Экспорт CSV</button>
               <button class="mini" id="importTemplateBtn">Импорт CSV</button>
@@ -2046,7 +2046,8 @@ class ConstructionManagerUI {
     if (this.modalMode === 'agentSummary') {
       const saveBtn = document.getElementById('saveEntity');
       const answerEl = document.getElementById('agentAnswer');
-      const activeProjects = this.objects.filter((o) => String(o.status || '').toLowerCase() === 'design' || String(o.status || '').toLowerCase() === 'active');
+      const activeStatuses = new Set(['active', 'design', 'construction']);
+      const activeProjects = this.objects.filter((o) => activeStatuses.has(String(o.status || '').toLowerCase()));
       if (!activeProjects.length) {
         answerEl.textContent = 'Нет активных проектов для формирования сводки.';
         return;
