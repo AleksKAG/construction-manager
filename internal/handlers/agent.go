@@ -92,10 +92,13 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 		deviation := round2(fact - plan)
 
 		activeStatusMap := map[string]string{
+			"active":       "активный",
 			"design":       "активный",
-			"construction": "на паузе",
+			"construction": "активный",
 			"planning":     "черновик",
+			"on_hold":      "на паузе",
 			"complete":     "завершён",
+			"completed":    "завершён",
 		}
 		projectStatus := activeStatusMap[strings.TrimSpace(strings.ToLower(project.Status))]
 		if projectStatus == "" {
