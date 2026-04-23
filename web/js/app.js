@@ -1051,7 +1051,7 @@ class ConstructionManagerUI {
           <div class="actions-dropdown" data-actions-menu="templateActions">
             <button class="mini" id="templateActionsBtn" title="Открыть меню действий" aria-label="Открыть меню действий">⚙ Действия</button>
             <div class="actions-dropdown-menu">
-              <button class="mini primary" id="addTemplateRowBtn">Добавить строку</button>
+              <button class="mini" id="addTemplateRowBtn">Добавить строку</button>
               <button class="mini" id="editTemplateRowsBtn">Редактировать: ${this.templateEditModes[this.currentView || code] ? "вкл" : "выкл"}</button>
               <button class="mini" id="exportTemplateBtn">Экспорт CSV</button>
               <button class="mini" id="importTemplateBtn">Импорт CSV</button>
