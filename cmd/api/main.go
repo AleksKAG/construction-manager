@@ -76,7 +76,7 @@ func main() {
 	logger.Info("Migrations done")
 
 	// Репозиторий + sample data
-	repo := repository.NewSQLiteRepository(db)
+	repo := repository.NewGormRepository(db)
 	if err := services.LoadSampleData(repo, logger); err != nil {
 		logger.Warn("Failed to load sample data: ", err)
 	}

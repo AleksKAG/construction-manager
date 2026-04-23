@@ -5,7 +5,7 @@
 ## Текущее состояние (на 15.04.2026)
 
 ### Что уже реализовано
-- Backend на Go (`Gin` + `GORM` + `SQLite`).
+- Backend на Go (`Gin` + `GORM` + `SQLite`, в процессе миграции на PostgreSQL).
 - Базовые сущности: проекты, задачи графика, роли/пользователи, шаблоны и строки шаблонов.
 - API для CRUD проектов и задач.
 - API для шаблонов (`template definitions`, `columns`, `project rows`).
@@ -28,7 +28,7 @@ construction-manager/
 ├── internal/
 │   ├── handlers/                # HTTP handlers
 │   ├── models/                  # GORM-модели
-│   ├── repository/              # интерфейс репозитория + SQLite реализация
+│   ├── repository/              # интерфейс репозитория + GORM реализация
 │   └── services/                # бизнес-логика и инициализация данных
 ├── web/                         # frontend (HTML/CSS/JS)
 ├── Dockerfile
@@ -141,6 +141,8 @@ YANDEX_AI_BASE_URL=https://ai.api.cloud.yandex.net/v1/responses
 - SQLite подходит для небольших нагрузок и одного инстанса.
 - Для нескольких реплик и высокой нагрузки лучше перейти на PostgreSQL.
 - Добавьте мониторинг, ротацию логов и бэкапы volume.
+
+Подробный пошаговый план и команды миграции: `docs/POSTGRES_MIGRATION_PLAN.md`.
 
 ## TEP шаблоны и миграция (добавлено)
 
