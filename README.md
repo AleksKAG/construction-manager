@@ -54,6 +54,14 @@ cp .env.example .env
 - `DATABASE_URL=postgres://postgres:postgres@localhost:5432/construction_manager?sslmode=disable`
 - `RUN_DB_MIGRATIONS=true` (для контейнерного старта: автоматическое применение `schema/*.sql`)
 
+Альтернатива для managed PostgreSQL (если удобнее хранить поля отдельно, без ручной сборки DSN):
+- `POSTGRESQL_HOST=5.42.122.236`
+- `POSTGRESQL_PORT=5432`
+- `POSTGRESQL_USER=gen_user`
+- `POSTGRESQL_PASSWORD=********`
+- `POSTGRESQL_DBNAME=default_db`
+- `POSTGRESQL_SSLMODE=require` (по умолчанию именно `require`, если не задан)
+
 ### 3) Старт API + UI
 ```bash
 go run ./cmd/api
@@ -82,6 +90,13 @@ docker compose down
 
 > Обновлено для миграции на PostgreSQL: `docker-compose.yml` теперь поднимает отдельный контейнер `postgres` и экспортирует `DATABASE_URL` в API-контейнер.
 > `entrypoint.sh` ждёт готовность PostgreSQL и накатывает SQL-миграции из `schema/*.sql` перед стартом API.
+
+### Troubleshooting PostgreSQL startup
+
+- Ошибка вида `connection to server on socket "/run/postgresql/.s.PGSQL.5432" failed` обычно означает, что в `DATABASE_URL` не указан `host` (или DSN разобрался некорректно из-за спецсимволов в логине/пароле).  
+  Используйте URL формата `postgres://user:pass@host:5432/dbname?sslmode=...` и URL-encoding для спецсимволов (например, `%40` для `@`).
+- Если API запускается **в контейнере** через `docker-compose`, не используйте `localhost` как хост БД — нужен `postgres` (имя сервиса).
+- Для PostgreSQL 17+ метрики `checkpoints_timed/checkpoints_req` перенесены из `pg_stat_bgwriter` в `pg_stat_checkpointer`, поэтому старый SQL-мониторинг нужно обновить.
 
 ---
 
