@@ -8,7 +8,6 @@ import {
   deleteTemplateRow,
   updateIrdRow,
   deleteIrdRow,
-  exportTemplate,
 } from './templates.js';
 
 const DEFAULT_TEP_ROWS = [
@@ -98,6 +97,7 @@ class ConstructionManagerUI {
     };
     this.importDraft = null;
     this.aiClipboardBound = false;
+    this.renderNonce = 0;
 
     this.bind();
     this.setupResponsiveSidebar();
@@ -431,6 +431,7 @@ class ConstructionManagerUI {
   }
 
   async renderContent() {
+    this.renderNonce += 1;
     this.configureHeader();
     if (this.currentView === 'projects') return this.renderProjects();
     if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График ПД');
@@ -804,7 +805,12 @@ class ConstructionManagerUI {
         <td class="editable-cell" data-registry-field="name">${r.name || '—'}</td>
         <td class="editable-cell" data-registry-field="contractor">${r.contractor || '—'}</td>
         <td class="editable-cell" data-registry-field="note">${r.note || '—'}</td>
-        <td class="${isEditMode ? '' : 'hidden'}"><button class="mini danger" data-del-registry="${r.id}">🗑</button></td>
+        <td class="${isEditMode ? '' : 'hidden'}">
+          <div class="row-actions">
+            <button class="mini" data-edit-registry="${r.id}">✏️</button>
+            <button class="mini danger" data-del-registry="${r.id}">🗑</button>
+          </div>
+        </td>
       </tr>`;
     }).join('');
 
@@ -817,8 +823,8 @@ class ConstructionManagerUI {
             <div class="actions-dropdown-menu">
               <button id="addRegistryBtn" class="mini">Добавить строку</button>
               <button id="editRegistryBtn" class="mini">Редактировать: ${isEditMode ? 'вкл' : 'выкл'}</button>
-              <button id="importRegistryBtn" class="mini">Импорт CSV</button>
-              <button id="exportRegistryBtn" class="mini">Экспорт CSV</button>
+              <button id="importRegistryBtn" class="mini">Импорт CSV/XLSX</button>
+              <button id="exportRegistryBtn" class="mini">Экспорт XLSX</button>
             </div>
           </div>
         </div>
@@ -835,10 +841,17 @@ class ConstructionManagerUI {
     document.getElementById('addRegistryBtn')?.addEventListener('click', () => this.openRegistryForm(stage, title));
     document.getElementById('editRegistryBtn')?.addEventListener('click', () => { this.registryEditModes[stage] = !this.registryEditModes[stage]; this.renderRegistry(stage, title); });
     document.getElementById('importRegistryBtn')?.addEventListener('click', () => this.startRegistryImport(stage, title));
-    document.getElementById('exportRegistryBtn')?.addEventListener('click', () => this.exportRegistryCSV(stage, title));
+    document.getElementById('exportRegistryBtn')?.addEventListener('click', () => this.exportRegistryXLSX(stage, title));
     if (isEditMode) {
       document.querySelectorAll('[data-registry-field]').forEach((cell) => {
         cell.addEventListener('dblclick', () => this.startRegistryInlineEdit(cell, stage));
+      });
+      document.querySelectorAll('[data-edit-registry]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const row = this.registryRows.find((r) => String(r.id) === String(btn.dataset.editRegistry));
+          if (!row) return;
+          this.openRegistryForm(stage, title, row);
+        });
       });
     }
     document.querySelectorAll('[data-del-registry]').forEach((btn) => {
@@ -1010,6 +1023,8 @@ class ConstructionManagerUI {
   }
 
   async renderTemplateScreen(defaultCode, title) {
+    const renderNonce = this.renderNonce;
+    const expectedView = this.currentView;
     const project = this.currentProject();
     if (!project) {
       document.getElementById('contentArea').innerHTML = '<article class="card col-12"><h3>Нет проектов</h3><p>Добавьте проект, чтобы работать с таблицами.</p></article>';
@@ -1027,6 +1042,7 @@ class ConstructionManagerUI {
         getTemplate(code),
         listTemplateRows(project.id, code, { page: this.templatePage, page_size: isIRD ? 200 : 20, search: this.templateSearch }),
       ]);
+      if (renderNonce !== this.renderNonce || expectedView !== this.currentView) return;
     } catch (error) {
       document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>${title}</h3><p>${error.message}</p></article>`;
       return;
@@ -1053,8 +1069,8 @@ class ConstructionManagerUI {
             <div class="actions-dropdown-menu">
               <button class="mini" id="addTemplateRowBtn">Добавить строку</button>
               <button class="mini" id="editTemplateRowsBtn">Редактировать: ${this.templateEditModes[this.currentView || code] ? "вкл" : "выкл"}</button>
-              <button class="mini" id="exportTemplateBtn">Экспорт CSV</button>
-              <button class="mini" id="importTemplateBtn">Импорт CSV</button>
+              <button class="mini" id="exportTemplateBtn">Экспорт XLSX</button>
+              <button class="mini" id="importTemplateBtn">Импорт CSV/XLSX</button>
             </div>
           </div>
           <input id="templateSearch" placeholder="Поиск" value="${this.templateSearch}">
@@ -1085,8 +1101,8 @@ class ConstructionManagerUI {
     document.getElementById('addTemplateRowBtn').onclick = () => this.openTemplateForm(tpl, null);
     document.getElementById('editTemplateRowsBtn').onclick = () => { const key = this.currentView || code; this.templateEditModes[key] = !this.templateEditModes[key]; this.renderTemplateScreen(defaultCode, title); };
     document.getElementById('exportTemplateBtn').onclick = () => {
-      if (code === 'design_schedule') return this.exportCurrentScheduleCSV();
-      return exportTemplate(project.id, code);
+      if (code === 'design_schedule') return this.exportCurrentScheduleXLSX();
+      return this.exportTemplateXLSX(project.id, code);
     };
     document.getElementById('importTemplateBtn').onclick = () => this.startTemplateImport();
     document.querySelectorAll('[data-edit-row]').forEach((btn) => { btn.onclick = () => this.openTemplateForm(tpl, rows.find((r) => String(r.id) === String(btn.dataset.editRow))); });
@@ -1415,20 +1431,20 @@ class ConstructionManagerUI {
     return null;
   }
 
-  openRegistryForm(stage, title) {
+  openRegistryForm(stage, title, row = null) {
     this.modalMode = 'registryAdd';
-    document.getElementById('modalTitle').textContent = `${title}: добавить строку`;
+    document.getElementById('modalTitle').textContent = row ? `${title}: редактировать строку` : `${title}: добавить строку`;
     document.getElementById('modalBody').innerHTML = `
       <div class="form-grid two">
-        <label>Обозначение *<input id="regDesignation" placeholder="АР.001-ПД" style="margin-top:4px"></label>
-        <label>Наименование *<input id="regName" placeholder="Архитектурные решения" style="margin-top:4px"></label>
-        <label>Марка<input id="regMark" placeholder="АР" style="margin-top:4px"></label>
-        <label>Шифр<input id="regCode" placeholder="001" style="margin-top:4px"></label>
-        <label>Исполнитель<input id="regContractor" style="margin-top:4px"></label>
-        <label>Дата выдачи факт<input id="regIssueDate" type="date" style="margin-top:4px"></label>
+        <label>Обозначение *<input id="regDesignation" value="${(row?.designation || '').replace(/"/g, '&quot;')}" placeholder="АР.001-ПД" style="margin-top:4px"></label>
+        <label>Наименование *<input id="regName" value="${(row?.name || '').replace(/"/g, '&quot;')}" placeholder="Архитектурные решения" style="margin-top:4px"></label>
+        <label>Марка<input id="regMark" value="${(row?.mark || '').replace(/"/g, '&quot;')}" placeholder="АР" style="margin-top:4px"></label>
+        <label>Шифр<input id="regCode" value="${(row?.code || '').replace(/"/g, '&quot;')}" placeholder="001" style="margin-top:4px"></label>
+        <label>Исполнитель<input id="regContractor" value="${(row?.contractor || '').replace(/"/g, '&quot;')}" style="margin-top:4px"></label>
+        <label>Дата выдачи факт<input id="regIssueDate" type="date" value="${row?.issue_date_fact ? String(row.issue_date_fact).slice(0, 10) : ''}" style="margin-top:4px"></label>
       </div>
     `;
-    this.importDraft = { kind: 'registry-add', stage, title };
+    this.importDraft = { kind: row ? 'registry-edit' : 'registry-add', stage, title, rowId: row?.id };
     this.openModal();
   }
 
@@ -1483,14 +1499,29 @@ class ConstructionManagerUI {
     });
   }
 
+  async parseSpreadsheetRows(file) {
+    const name = String(file?.name || '').toLowerCase();
+    if (name.endsWith('.csv')) return this.parseCSV(await file.text());
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      if (!window.XLSX) throw new Error('Библиотека XLSX не загружена');
+      const buffer = await file.arrayBuffer();
+      const workbook = window.XLSX.read(buffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) return [];
+      const sheet = workbook.Sheets[sheetName];
+      return window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+    }
+    throw new Error('Поддерживаются только файлы CSV/XLSX');
+  }
+
   async startTemplateImport() {
     const project = this.currentProject();
     if (!project) return;
     const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
     const tpl = await getTemplate(code);
-    const file = await this.pickFile('.csv');
+    const file = await this.pickFile('.csv,.xlsx,.xls');
     if (!file) return;
-    const parsed = this.parseCSV(await file.text());
+    const parsed = await this.parseSpreadsheetRows(file);
     if (parsed.length < 2) return alert('Файл пустой или нет строк для импорта');
     const headers = parsed[0].map((h) => this.normalizeImportToken(h));
     const columns = tpl.columns || [];
@@ -1527,15 +1558,15 @@ class ConstructionManagerUI {
   }
 
   async startRegistryImport(stage, title) {
-    const file = await this.pickFile('.csv');
+    const file = await this.pickFile('.csv,.xlsx,.xls');
     if (!file) return;
-    const parsed = this.parseCSV(await file.text());
+    const parsed = await this.parseSpreadsheetRows(file);
     if (parsed.length < 2) return alert('Файл пустой или нет строк для импорта');
     const headers = parsed[0].map((h) => this.normalizeImportToken(h));
     const map = {
       volume_number: ['№', 'номер', 'том', '№ тома', 'volume_number'],
-      designation: ['обозначение', 'designation'],
-      name: ['наименование', 'name'],
+      designation: ['обозначение', 'обозначение *', 'designation'],
+      name: ['наименование', 'наименование *', 'name'],
       contractor: ['исполнитель', 'contractor'],
       mark: ['марка', 'mark'],
       code: ['шифр', 'code'],
@@ -1706,24 +1737,40 @@ class ConstructionManagerUI {
     URL.revokeObjectURL(url);
   }
 
-  exportCurrentScheduleCSV() {
+  exportRowsToXLSX(fileName, headers, rows) {
+    if (!window.XLSX) return alert('Библиотека XLSX не загружена');
+    const sheet = window.XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const book = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(book, sheet, 'Данные');
+    window.XLSX.writeFile(book, fileName);
+  }
+
+  exportRegistryXLSX(stage, title) {
+    const rows = this.registryRows || [];
+    const headers = ['№', 'Том', 'Шифр', 'Марка', 'Обозначение', 'Наименование', 'Исполнитель', 'Примечание', 'Дата выдачи факт'];
+    const body = rows.map((r, idx) => [
+      idx + 1, r.volume_number || '', r.code || '', r.mark || '',
+      r.designation || '', r.name || '', r.contractor || '', r.note || '',
+      r.issue_date_fact ? String(r.issue_date_fact).slice(0, 10) : '',
+    ]);
+    this.exportRowsToXLSX(`${stage}_${(title || 'registry').replace(/\s+/g, '_')}.xlsx`, headers, body);
+  }
+
+  exportCurrentScheduleXLSX() {
     const rows = this.templateRowsCache || [];
     const headers = ['№ тома', 'Обозначение', 'Наименование', 'Исполнитель', 'Дата начала базовая', 'Дата выдачи базовая', 'Дней разработки база', 'Дата начала факт', 'Дата выдачи факт', 'Дней разработки факт', '% завершения'];
     const fields = ['volume_no', 'code', 'name', 'executor', 'baseline_start', 'baseline_end', 'baseline_days', 'fact_start', 'fact_end', 'fact_days', 'progress'];
-    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const lines = [
-      headers.join(','),
-      ...rows.map((row) => fields.map((field) => escape((row.data || {})[field] || '')).join(',')),
-    ];
-    const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${this.currentView === 'designScheduleR' ? 'graph_rd' : 'graph_pd'}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    const body = rows.map((row) => fields.map((field) => (row.data || {})[field] || ''));
+    this.exportRowsToXLSX(`${this.currentView === 'designScheduleR' ? 'graph_rd' : 'graph_pd'}.xlsx`, headers, body);
+  }
+
+  async exportTemplateXLSX(projectId, code) {
+    const payload = await listTemplateRows(projectId, code, { page: 1, page_size: 5000, search: '' });
+    const tpl = await getTemplate(code);
+    const columns = tpl.columns || [];
+    const headers = columns.map((c) => this.normalizeTemplateColumnTitle(code, c));
+    const rows = (payload.data || []).map((r) => columns.map((c) => (r.data || {})[c.field_key] ?? ''));
+    this.exportRowsToXLSX(`${code}_${projectId}.xlsx`, headers, rows);
   }
 
   async handlePrimaryAction() {
@@ -1752,13 +1799,13 @@ class ConstructionManagerUI {
   async handleSecondaryAction() {
     if (this.isTemplateView(this.currentView)) {
       const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
-      if (code === 'design_schedule') return this.exportCurrentScheduleCSV();
+      if (code === 'design_schedule') return this.exportCurrentScheduleXLSX();
       if (code === 'input_design_data') {
         const key = this.currentView || code;
         this.templateEditModes[key] = !this.templateEditModes[key];
         return this.renderContent();
       }
-      return exportTemplate(this.selectedObjectId, code);
+      return this.exportTemplateXLSX(this.selectedObjectId, code);
     }
     if (this.currentView === 'docsStageP') {
       const token = localStorage.getItem('cm_token');
@@ -1768,8 +1815,14 @@ class ConstructionManagerUI {
       return;
     }
     if (this.currentView === 'docsStageR') return this.renderDocsStageR();
-    if (this.currentView === 'registryP') return this.renderRegistry('phase-p', 'Ведомость комплектов ПД');
-    if (this.currentView === 'registryR') return this.renderRegistry('phase-r', 'Ведомость комплектов РД');
+    if (this.currentView === 'registryP') {
+      this.registryEditModes['phase-p'] = !this.registryEditModes['phase-p'];
+      return this.renderRegistry('phase-p', 'Ведомость комплектов ПД');
+    }
+    if (this.currentView === 'registryR') {
+      this.registryEditModes['phase-r'] = !this.registryEditModes['phase-r'];
+      return this.renderRegistry('phase-r', 'Ведомость комплектов РД');
+    }
     if (this.currentView === 'workforceDaily') return this.renderWorkforceDaily();
     if (this.currentView === 'svorMain') {
       const project = this.currentProject();
@@ -2082,7 +2135,15 @@ class ConstructionManagerUI {
       const issue_date_fact = document.getElementById('regIssueDate')?.value || undefined;
       if (!designation) return alert('Укажите обозначение');
       if (!name) return alert('Укажите наименование');
-      await api(`/projects/${project.id}/design/${stage}/registry`, 'POST', { designation, name, mark, code, contractor, issue_date_fact });
+      await api(`/projects/${project.id}/design/${stage}/registry`, 'POST', {
+        id: this.importDraft?.kind === 'registry-edit' ? this.importDraft?.rowId : undefined,
+        designation,
+        name,
+        mark,
+        code,
+        contractor,
+        issue_date_fact,
+      });
       this.closeModal();
       return this.renderRegistry(stage, title);
     }
