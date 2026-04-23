@@ -3,8 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        INSTALL_AWSCLI: "true"
     container_name: construction-manager
     ports:
       - "8080:8080"
@@ -12,19 +10,32 @@ services:
       - .env
     environment:
       - PORT=8080
-      - DB_PATH=/data/construction.db
-      - S3_ENDPOINT=${S3_ENDPOINT:-https://s3.twcstorage.ru}
-      - S3_BUCKET=${S3_BUCKET}
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
-      - S3_SECRET_KEY=${S3_SECRET_KEY}
-      - S3_REGION=${S3_REGION:-ru-1}
-      - DB_FILE_NAME=${DB_FILE_NAME:-construction.db}
-      - UPLOAD_INTERVAL=${UPLOAD_INTERVAL:-300}
-    volumes:
-      - cm_data:/data
+      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/construction_manager?sslmode=disable}
+      - RUN_DB_MIGRATIONS=${RUN_DB_MIGRATIONS:-true}
+      - DB_WAIT_MAX_ATTEMPTS=${DB_WAIT_MAX_ATTEMPTS:-40}
+      - DB_WAIT_DELAY_SECONDS=${DB_WAIT_DELAY_SECONDS:-2}
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
-    command: >
-      sh -c "/sync_db_to_s3.sh & ./main"
+    command: ["./main"]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: construction-manager-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-construction_manager}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-construction_manager}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
-  cm_data:
+  pg_data:

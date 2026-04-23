@@ -42,7 +42,7 @@ construction-manager/
 
 ### 1) Требования
 - Go 1.22+
-- GCC / build-essential (для `mattn/go-sqlite3`)
+- GCC / build-essential (для `mattn/go-sqlite3`, пока runtime ещё на SQLite)
 
 ### 2) Настройка env
 ```bash
@@ -51,7 +51,9 @@ cp .env.example .env
 
 Для локального запуска рекомендуется:
 - `PORT=8080`
-- `DB_PATH=/tmp/construction_ai.db`
+- `DB_PATH=/tmp/construction_ai.db` (текущий runtime)
+- `DATABASE_URL=postgres://postgres:postgres@localhost:5432/construction_manager?sslmode=disable` (подготовка контура миграции)
+- `RUN_DB_MIGRATIONS=true` (для контейнерного старта: автоматическое применение `schema/*.sql`)
 
 ### 3) Старт API + UI
 ```bash
@@ -78,6 +80,9 @@ docker compose up --build -d
 curl http://localhost:8080/api/v1/health
 docker compose down
 ```
+
+> Обновлено для миграции на PostgreSQL: `docker-compose.yml` теперь поднимает отдельный контейнер `postgres` и экспортирует `DATABASE_URL` в API-контейнер.
+> `entrypoint.sh` ждёт готовность PostgreSQL и накатывает SQL-миграции из `schema/*.sql` перед стартом API.
 
 ---
 
