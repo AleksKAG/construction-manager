@@ -52,9 +52,10 @@ cp .env.example .env
 Для локального запуска рекомендуется:
 - `PORT=8080`
 - `DATABASE_URL=postgres://postgres:postgres@localhost:5432/construction_manager?sslmode=disable`
-- `RUN_DB_MIGRATIONS=true` (для контейнерного старта: автоматическое применение `schema/*.sql`)
+- `APP_DB_ENGINE=sqlite` (по умолчанию; текущий runtime приложения)
+- `RUN_DB_MIGRATIONS=false` (в SQLite-режиме миграции PostgreSQL не нужны)
 
-Альтернатива для managed PostgreSQL (если удобнее хранить поля отдельно, без ручной сборки DSN):
+Альтернатива для managed PostgreSQL (когда включён `APP_DB_ENGINE=postgres`, если удобнее хранить поля отдельно, без ручной сборки DSN):
 - `POSTGRESQL_HOST=5.42.122.236`
 - `POSTGRESQL_PORT=5432`
 - `POSTGRESQL_USER=gen_user`
@@ -88,8 +89,8 @@ curl http://localhost:8080/api/v1/health
 docker compose down
 ```
 
-> Обновлено для миграции на PostgreSQL: `docker-compose.yml` теперь поднимает отдельный контейнер `postgres` и экспортирует `DATABASE_URL` в API-контейнер.
-> `entrypoint.sh` ждёт готовность PostgreSQL и накатывает SQL-миграции из `schema/*.sql` перед стартом API.
+> `entrypoint.sh` запускает PostgreSQL bootstrap **только** при `APP_DB_ENGINE=postgres`.
+> По умолчанию приложение стартует в текущем SQLite-режиме (`APP_DB_ENGINE=sqlite`) и не блокируется на ожидании БД.
 
 ### Troubleshooting PostgreSQL startup
 
