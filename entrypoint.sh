@@ -17,11 +17,6 @@ escape_conninfo_value() {
 }
 
 build_database_url_from_parts() {
-    if [ -n "$DATABASE_URL" ]; then
-        log_step "DATABASE_URL is already provided via environment."
-        return 0
-    fi
-
     # Support both POSTGRESQL_* and POSTGRES_* variable families.
     pg_host="${POSTGRESQL_HOST:-${POSTGRES_HOST:-}}"
     pg_port="${POSTGRESQL_PORT:-${POSTGRES_PORT:-5432}}"
@@ -30,8 +25,18 @@ build_database_url_from_parts() {
     pg_dbname="${POSTGRESQL_DBNAME:-${POSTGRES_DB:-}}"
     pg_sslmode="${POSTGRESQL_SSLMODE:-${POSTGRES_SSLMODE:-require}}"
 
+    if [ -n "$DATABASE_URL" ]; then
+        current_host=$(extract_db_host)
+        if [ -n "$current_host" ]; then
+            log_step "DATABASE_URL is already provided via environment."
+            return 0
+        fi
+        log_step "DATABASE_URL is provided but host is empty/unparseable."
+        log_step "Trying to assemble DATABASE_URL from POSTGRES*/POSTGRESQL* variables."
+    fi
+
     if [ -z "$pg_host" ] || [ -z "$pg_user" ] || [ -z "$pg_password" ] || [ -z "$pg_dbname" ]; then
-        log_step "DATABASE_URL is empty and POSTGRES*/POSTGRESQL* are incomplete; cannot assemble DSN from parts."
+        log_step "DATABASE_URL is empty or invalid and POSTGRES*/POSTGRESQL* are incomplete; cannot assemble DSN from parts."
         return 0
     fi
 
@@ -61,7 +66,10 @@ extract_db_host() {
             ;;
         *)
             # key=value DSN; require explicit host= to avoid fallback to local socket.
-            host=$(printf "%s" "$DATABASE_URL" | sed -n 's/.*[[:space:]]host=\([^[:space:]]*\).*/\1/p')
+            host=$(printf "%s" "$DATABASE_URL" | sed -n "s/.*[[:space:]]host=\\([^[:space:]]*\\).*/\\1/p")
+            if [ -z "$host" ]; then
+                host=$(printf "%s" "$DATABASE_URL" | sed -n "s/^host=\\([^[:space:]]*\\).*/\\1/p")
+            fi
             echo "$host"
             ;;
     esac
