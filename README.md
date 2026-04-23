@@ -5,7 +5,7 @@
 ## Текущее состояние (на 15.04.2026)
 
 ### Что уже реализовано
-- Backend на Go (`Gin` + `GORM` + `SQLite`, в процессе миграции на PostgreSQL).
+- Backend на Go (`Gin` + `GORM`), подготовлен PostgreSQL-контур (docker-compose + entrypoint + SQL schema), runtime-переключение в `cmd/api/main.go` ещё в работе.
 - Базовые сущности: проекты, задачи графика, роли/пользователи, шаблоны и строки шаблонов.
 - API для CRUD проектов и задач.
 - API для шаблонов (`template definitions`, `columns`, `project rows`).
@@ -42,7 +42,7 @@ construction-manager/
 
 ### 1) Требования
 - Go 1.22+
-- GCC / build-essential (для `mattn/go-sqlite3`, пока runtime ещё на SQLite)
+- GCC / build-essential (для `mattn/go-sqlite3`, пока runtime в `cmd/api/main.go` ещё на SQLite)
 
 ### 2) Настройка env
 ```bash
@@ -51,8 +51,7 @@ cp .env.example .env
 
 Для локального запуска рекомендуется:
 - `PORT=8080`
-- `DB_PATH=/tmp/construction_ai.db` (текущий runtime)
-- `DATABASE_URL=postgres://postgres:postgres@localhost:5432/construction_manager?sslmode=disable` (подготовка контура миграции)
+- `DATABASE_URL=postgres://postgres:postgres@localhost:5432/construction_manager?sslmode=disable`
 - `RUN_DB_MIGRATIONS=true` (для контейнерного старта: автоматическое применение `schema/*.sql`)
 
 ### 3) Старт API + UI
@@ -156,7 +155,7 @@ YANDEX_AI_BASE_URL=https://ai.api.cloud.yandex.net/v1/responses
 - `seed/tep_templates.json` — стандартные шаблоны ТЭП (участок, онкоцентр, пансионат).
 - `schema/004_tep_tables.sql` — PostgreSQL-миграция таблиц `tep_templates`, `tep_indicators`, `project_tep_values`.
 
-> Примечание: текущее приложение работает на SQLite через GORM. SQL-файл в `schema/` предназначен для целевого PostgreSQL-контура.
+> Примечание: SQL-файлы в `schema/` и контейнерный контур уже ориентированы на PostgreSQL; финальное переключение runtime в `cmd/api/main.go` остаётся отдельным шагом миграции.
 1. Завершить auth слой: JWT + middleware + роли (`viewer/editor/admin`).
 2. Добавить модуль документов и протоколов с загрузкой файлов.
 3. Добавить OpenAPI/Swagger.
