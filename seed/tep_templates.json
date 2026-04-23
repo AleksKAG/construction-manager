@@ -32,7 +32,6 @@
           "label": "Высота здания",
           "unit": "м",
           "required": true,
-          "calculation": "max"
           "calculation": "manual"
         },
         {
@@ -40,7 +39,6 @@
           "label": "Количество этажей",
           "unit": "этаж",
           "required": true,
-          "calculation": "max",
           "calculation": "manual",
           "has_underground": true
         },
@@ -49,7 +47,6 @@
           "label": "Площадь застройки",
           "unit": "м²",
           "required": true,
-          "calculation": "sum"
           "calculation": "manual"
         }
       ]
@@ -59,12 +56,6 @@
       "name": "Здание пансионата",
       "category": "auxiliary",
       "indicators": [
-        {"key": "total_area", "label": "Общая площадь здания", "unit": "м²", "required": true},
-        {"key": "building_volume", "label": "Строительный объем", "unit": "м³", "required": true},
-        {"key": "building_height", "label": "Высота здания", "unit": "м", "required": true},
-        {"key": "floors_count", "label": "Количество этажей", "unit": "этаж", "required": true},
-        {"key": "footprint_area", "label": "Площадь застройки", "unit": "м²", "required": true},
-        {"key": "room_capacity", "label": "Номерной фонд", "unit": "шт.", "required": false}
         {"key": "total_area", "label": "Общая площадь здания", "unit": "м²", "required": true, "calculation": "manual"},
         {"key": "building_volume", "label": "Строительный объем", "unit": "м³", "required": true, "calculation": "manual"},
         {"key": "building_height", "label": "Высота здания", "unit": "м", "required": true, "calculation": "manual"},
@@ -78,8 +69,6 @@
       "name": "Участок",
       "category": "land",
       "indicators": [
-        {"key": "site_area_gpz", "label": "Площадь участка по ГПЗУ", "unit": "м²", "required": true},
-        {"key": "footprint_total", "label": "Площадь застройки (все здания)", "unit": "м²", "required": true}
         {"key": "site_area_gpz", "label": "Площадь участка по ГПЗУ", "unit": "м²", "required": true, "calculation": "manual"},
         {"key": "footprint_total", "label": "Площадь застройки (все здания)", "unit": "м²", "required": true, "calculation": "manual"}
       ]
