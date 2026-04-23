@@ -11,7 +11,7 @@ services:
     environment:
       - PORT=8080
       - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/construction_manager?sslmode=disable}
-      - APP_DB_ENGINE=${APP_DB_ENGINE:-sqlite}
+      - APP_DB_ENGINE=${APP_DB_ENGINE:-postgres}
       - RUN_DB_MIGRATIONS=${RUN_DB_MIGRATIONS:-false}
       - DB_WAIT_MAX_ATTEMPTS=${DB_WAIT_MAX_ATTEMPTS:-40}
       - DB_WAIT_DELAY_SECONDS=${DB_WAIT_DELAY_SECONDS:-2}

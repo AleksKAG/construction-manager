@@ -10,17 +10,13 @@ import (
 
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
+	"github.com/AleksKAG/construction-manager/internal/testutil"
 	"github.com/gin-gonic/gin"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func setupRegistryWorkforceTestRepo(t *testing.T) repository.Repository {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := testutil.OpenTestDB(t)
 	if err := db.AutoMigrate(
 		&models.ProjectObject{},
 		&models.GanttTask{},

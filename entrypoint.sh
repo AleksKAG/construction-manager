@@ -3,7 +3,7 @@ set -e
 
 echo "=== Starting entrypoint script ==="
 
-DB_ENGINE="${APP_DB_ENGINE:-sqlite}"
+DB_ENGINE="${APP_DB_ENGINE:-postgres}"
 
 log_step() {
     # UTC timestamp for easier correlation with platform logs.

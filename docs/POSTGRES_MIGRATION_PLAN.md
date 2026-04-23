@@ -13,6 +13,8 @@
 - Контейнерный контур PostgreSQL:
   - `docker-compose.yml` поднимает отдельный `postgres` сервис и прокидывает `DATABASE_URL` в API.
   - `entrypoint.sh` ждёт готовность PostgreSQL (`pg_isready`) и применяет `schema/*.sql` через `psql`.
+- Скрипт быстрой проверки прогресса миграции:
+  - `scripts/check_postgres_migration.sh` — собирает статус по runtime, compose/entrypoint и оставшимся SQLite-ссылкам.
 
 ## 2) Пошаговый план корректировок
 
@@ -31,23 +33,28 @@
    - Импортировать шаблоны/справочники через `scripts/import_*.py`.
    - Если нужно, добавить отдельный экспорт из SQLite и последующий импорт в PostgreSQL.
 
-4. **Переключить backend c SQLite на PostgreSQL** ⏳
-   - Заменить `gorm.io/driver/sqlite` на `gorm.io/driver/postgres` в `cmd/api/main.go`.
-   - Перейти с `DB_PATH` на `DATABASE_URL` в конфиге.
-   - ~~Обновить `Dockerfile`, `docker-compose.yml`, `entrypoint.sh` под PostgreSQL (убрать файловую синхронизацию SQLite).~~ ✅ уже сделано.
+4. **Переключить backend c SQLite на PostgreSQL** ✅
+   - ✅ Заменён runtime-драйвер в `cmd/api/main.go` на `gorm.io/driver/postgres`.
+   - ✅ Убрано использование `DB_PATH`, основной источник подключения — `DATABASE_URL` (с fallback на `POSTGRES*/POSTGRESQL*`).
+   - ✅ `docker-compose.yml` и `entrypoint.sh` используют PostgreSQL-режим по умолчанию.
 
 5. **Обновить тесты**
    - Текущие unit-тесты используют in-memory SQLite.
-   - Перевести тесты на PostgreSQL Testcontainer или отдельную тестовую БД.
+   - ✅ Добавлен `internal/testutil/OpenTestDB`: тесты могут работать с PostgreSQL при `CM_TEST_DATABASE_URL`.
+   - Перевести тесты на PostgreSQL Testcontainer или отдельную тестовую БД по умолчанию (без fallback).
 
 6. **Проверка после переключения**
    - Smoke API: `/api/v1/health`, CRUD объектов/задач, шаблоны, реестры, СВОР.
    - Проверка индексов и уникальных ограничений по ключевым таблицам.
+   - Прогон технического аудита:
+     ```bash
+     ./scripts/check_postgres_migration.sh
+     ```
 
 ## 3) Что ещё нужно доделать (если не успели в этот релиз)
 
-- Переключить Go runtime (`cmd/api/main.go`) на драйвер PostgreSQL и убрать `DB_PATH`.
-- Полное удаление SQLite-зависимостей (`go-sqlite3`, `gorm sqlite driver`).
+- ~~Переключить Go runtime (`cmd/api/main.go`) на драйвер PostgreSQL и убрать `DB_PATH`.~~ ✅ сделано.
+- Полное удаление SQLite-зависимостей (`go-sqlite3`, `gorm sqlite driver`) — в работе: зависимости ещё нужны для части тестов.
 - Полный рефактор deployment-скриптов, сейчас они заточены под файл `construction.db` и S3 sync.
 - E2E-проверки производительности на PostgreSQL (пулы соединений, таймауты, индексы).
 - Автоматические миграции в CI/CD (например, отдельный шаг deploy: `psql -f schema/*.sql`).
@@ -65,7 +72,7 @@
    - Добавить `depends_on`/ожидание готовности PostgreSQL перед стартом API.
    - Критерий готовности: `docker compose up` поднимает API + PostgreSQL, CRUD работает.
 
-3. **Перевести автотесты на PostgreSQL (обязательно)**
+3. **Перевести автотесты на PostgreSQL (обязательно)** ⏳
    - Заменить in-memory SQLite в тестах на test-контур PostgreSQL (например, Testcontainers).
    - Добавить тестовый bootstrap/teardown схемы.
    - Критерий готовности: `go test ./...` проходит без sqlite-драйвера.

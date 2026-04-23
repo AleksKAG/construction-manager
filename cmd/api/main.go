@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,8 +18,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 
-	_ "github.com/mattn/go-sqlite3"
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
 )
@@ -32,22 +32,19 @@ func main() {
 	logger.SetFormatter(&logrus.TextFormatter{})
 	logger.SetLevel(logrus.InfoLevel)
 
-	// === SQLite подключение — база в корне проекта ===
-	dbPath := getEnv("DB_PATH", "./construction.db")
+	dsn := resolveDatabaseDSN()
+	if dsn == "" {
+		logger.Fatal("DATABASE_URL is required (or set POSTGRES*/POSTGRESQL* variables)")
+	}
 
-	// Создаём папку data, если хочешь хранить в подпапке (рекомендую)
-	_ = os.MkdirAll("./data", 0755)
-	// dbPath = "./data/construction.db"   // раскомментируй, если хочешь в папке data
-
-	logger.Infof("Connecting to SQLite: %s", dbPath)
-
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+	logger.Info("Connecting to PostgreSQL")
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Warn),
 	})
 	if err != nil {
-		logger.Fatal("SQLite connection failed: ", err)
+		logger.Fatal("PostgreSQL connection failed: ", err)
 	}
-	logger.Info("SQLite connected")
+	logger.Info("PostgreSQL connected")
 
 	if err := db.AutoMigrate(
 		&models.ProjectObject{},
@@ -117,7 +114,7 @@ func main() {
 		api.GET("/health", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"status":    "ok",
-				"database":  "sqlite",
+				"database":  "postgres",
 				"timestamp": time.Now(),
 			})
 		})
@@ -259,4 +256,43 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func resolveDatabaseDSN() string {
+	if dsn := strings.TrimSpace(os.Getenv("DATABASE_URL")); dsn != "" {
+		return dsn
+	}
+
+	host := firstNonEmptyEnv("POSTGRESQL_HOST", "POSTGRES_HOST")
+	port := firstNonEmptyEnv("POSTGRESQL_PORT", "POSTGRES_PORT")
+	user := firstNonEmptyEnv("POSTGRESQL_USER", "POSTGRES_USER")
+	password := firstNonEmptyEnv("POSTGRESQL_PASSWORD", "POSTGRES_PASSWORD")
+	dbname := firstNonEmptyEnv("POSTGRESQL_DBNAME", "POSTGRES_DB")
+	sslmode := firstNonEmptyEnv("POSTGRESQL_SSLMODE", "POSTGRES_SSLMODE")
+
+	if host == "" || user == "" || password == "" || dbname == "" {
+		return ""
+	}
+	if port == "" {
+		port = "5432"
+	}
+	if sslmode == "" {
+		sslmode = "require"
+	}
+
+	return "host=" + host +
+		" port=" + port +
+		" user=" + user +
+		" password=" + password +
+		" dbname=" + dbname +
+		" sslmode=" + sslmode
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
