@@ -10,6 +10,9 @@
   - `scripts/import_tep.py`
   - `scripts/import_sdr.py`
 - One-shot скрипт `scripts/migrate_to_postgres.sh` для применения всех SQL-миграций.
+- Контейнерный контур PostgreSQL:
+  - `docker-compose.yml` поднимает отдельный `postgres` сервис и прокидывает `DATABASE_URL` в API.
+  - `entrypoint.sh` ждёт готовность PostgreSQL (`pg_isready`) и применяет `schema/*.sql` через `psql`.
 
 ## 2) Пошаговый план корректировок
 
@@ -28,10 +31,10 @@
    - Импортировать шаблоны/справочники через `scripts/import_*.py`.
    - Если нужно, добавить отдельный экспорт из SQLite и последующий импорт в PostgreSQL.
 
-4. **Переключить backend c SQLite на PostgreSQL**
+4. **Переключить backend c SQLite на PostgreSQL** ⏳
    - Заменить `gorm.io/driver/sqlite` на `gorm.io/driver/postgres` в `cmd/api/main.go`.
    - Перейти с `DB_PATH` на `DATABASE_URL` в конфиге.
-   - Обновить `Dockerfile`, `docker-compose.yml`, `entrypoint.sh` под PostgreSQL (убрать файловую синхронизацию SQLite).
+   - ~~Обновить `Dockerfile`, `docker-compose.yml`, `entrypoint.sh` под PostgreSQL (убрать файловую синхронизацию SQLite).~~ ✅ уже сделано.
 
 5. **Обновить тесты**
    - Текущие unit-тесты используют in-memory SQLite.
@@ -43,6 +46,7 @@
 
 ## 3) Что ещё нужно доделать (если не успели в этот релиз)
 
+- Переключить Go runtime (`cmd/api/main.go`) на драйвер PostgreSQL и убрать `DB_PATH`.
 - Полное удаление SQLite-зависимостей (`go-sqlite3`, `gorm sqlite driver`).
 - Полный рефактор deployment-скриптов, сейчас они заточены под файл `construction.db` и S3 sync.
 - E2E-проверки производительности на PostgreSQL (пулы соединений, таймауты, индексы).
