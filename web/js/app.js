@@ -815,7 +815,7 @@ class ConstructionManagerUI {
           <div class="actions-dropdown" data-actions-menu="registryActions">
             <button id="registryActionsBtn" class="mini" title="Открыть меню действий" aria-label="Открыть меню действий">⚙ Действия</button>
             <div class="actions-dropdown-menu">
-              <button id="addRegistryBtn" class="mini primary">Добавить строку</button>
+              <button id="addRegistryBtn" class="mini">Добавить строку</button>
               <button id="editRegistryBtn" class="mini">Редактировать: ${isEditMode ? 'вкл' : 'выкл'}</button>
               <button id="importRegistryBtn" class="mini">Импорт CSV</button>
               <button id="exportRegistryBtn" class="mini">Экспорт CSV</button>
