@@ -29,7 +29,7 @@ func setupRegistryWorkforceTestRepo(t *testing.T) repository.Repository {
 	); err != nil {
 		t.Fatalf("migrate schema: %v", err)
 	}
-	return repository.NewSQLiteRepository(db)
+	return repository.NewGormRepository(db)
 }
 
 func performJSONRequest(r http.Handler, method, url string, body any) *httptest.ResponseRecorder {
