@@ -10,6 +10,12 @@ fi
 
 echo "DATABASE_URL is set, starting application..."
 
+postgres_probe() {
+    # pg_isready can be unreliable with URL params/SSL options on managed PG.
+    # psql uses the same DSN as migrations, so it's a better readiness signal.
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tAc 'SELECT 1' >/dev/null 2>&1
+}
+
 wait_for_postgres() {
     echo "=== Waiting for PostgreSQL ==="
     max_attempts="${DB_WAIT_MAX_ATTEMPTS:-30}"
@@ -17,7 +23,7 @@ wait_for_postgres() {
     attempt=1
 
     while [ "$attempt" -le "$max_attempts" ]; do
-        if pg_isready -d "$DATABASE_URL" >/dev/null 2>&1; then
+        if postgres_probe; then
             echo "=== PostgreSQL is ready ==="
             return 0
         fi
@@ -27,6 +33,8 @@ wait_for_postgres() {
     done
 
     echo "=== ERROR: PostgreSQL is not reachable via DATABASE_URL ==="
+    echo "=== Last connection error (for diagnostics) ==="
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'SELECT 1' || true
     return 1
 }
 
