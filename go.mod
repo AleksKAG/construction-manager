@@ -8,6 +8,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/sirupsen/logrus v1.9.4
+	gorm.io/driver/postgres v1.5.11
 	gorm.io/driver/sqlite v1.5.0
 	gorm.io/gorm v1.25.0
 )

@@ -42,7 +42,7 @@ construction-manager/
 
 ### 1) Требования
 - Go 1.22+
-- GCC / build-essential (для `mattn/go-sqlite3`, пока runtime в `cmd/api/main.go` ещё на SQLite)
+- Доступный PostgreSQL (локальный контейнер или managed instance)
 
 ### 2) Настройка env
 ```bash
@@ -52,8 +52,8 @@ cp .env.example .env
 Для локального запуска рекомендуется:
 - `PORT=8080`
 - `DATABASE_URL=postgres://postgres:postgres@localhost:5432/construction_manager?sslmode=disable`
-- `APP_DB_ENGINE=sqlite` (по умолчанию; текущий runtime приложения)
-- `RUN_DB_MIGRATIONS=false` (в SQLite-режиме миграции PostgreSQL не нужны)
+- `APP_DB_ENGINE=postgres` (значение по умолчанию)
+- `RUN_DB_MIGRATIONS=true` (для первого запуска, чтобы применить `schema/*.sql`)
 
 Альтернатива для managed PostgreSQL (когда включён `APP_DB_ENGINE=postgres`, если удобнее хранить поля отдельно, без ручной сборки DSN):
 - `POSTGRESQL_HOST=5.42.122.236`
@@ -89,8 +89,7 @@ curl http://localhost:8080/api/v1/health
 docker compose down
 ```
 
-> `entrypoint.sh` запускает PostgreSQL bootstrap **только** при `APP_DB_ENGINE=postgres`.
-> По умолчанию приложение стартует в текущем SQLite-режиме (`APP_DB_ENGINE=sqlite`) и не блокируется на ожидании БД.
+> `entrypoint.sh` запускает PostgreSQL bootstrap при `APP_DB_ENGINE=postgres` (это значение по умолчанию).
 
 ### Troubleshooting PostgreSQL startup
 
@@ -98,6 +97,44 @@ docker compose down
   Используйте URL формата `postgres://user:pass@host:5432/dbname?sslmode=...` и URL-encoding для спецсимволов (например, `%40` для `@`).
 - Если API запускается **в контейнере** через `docker-compose`, не используйте `localhost` как хост БД — нужен `postgres` (имя сервиса).
 - Для PostgreSQL 17+ метрики `checkpoints_timed/checkpoints_req` перенесены из `pg_stat_bgwriter` в `pg_stat_checkpointer`, поэтому старый SQL-мониторинг нужно обновить.
+  Пример совместимого запроса:
+  ```sql
+  WITH bg AS (
+    SELECT
+      buffers_checkpoint,
+      buffers_clean,
+      maxwritten_clean,
+      buffers_backend,
+      buffers_backend_fsync,
+      buffers_alloc,
+      stats_reset
+    FROM pg_stat_bgwriter
+  ),
+  cp AS (
+    SELECT
+      checkpoints_timed,
+      checkpoints_req,
+      checkpoint_write_time,
+      checkpoint_sync_time,
+      stats_reset
+    FROM pg_stat_checkpointer
+  )
+  SELECT
+    cp.checkpoints_timed,
+    cp.checkpoints_req,
+    cp.checkpoint_write_time,
+    cp.checkpoint_sync_time,
+    bg.buffers_checkpoint,
+    bg.buffers_clean,
+    bg.maxwritten_clean,
+    bg.buffers_backend,
+    bg.buffers_backend_fsync,
+    bg.buffers_alloc,
+    COALESCE(cp.stats_reset, bg.stats_reset) AS stats_reset
+  FROM bg
+  CROSS JOIN cp;
+  ```
+  Для PostgreSQL 16 и ниже оставьте старый запрос к `pg_stat_bgwriter`.
 
 ---
 

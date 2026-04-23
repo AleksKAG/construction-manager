@@ -4,16 +4,13 @@ import (
 	"testing"
 
 	"github.com/AleksKAG/construction-manager/internal/models"
-	"gorm.io/driver/sqlite"
+	"github.com/AleksKAG/construction-manager/internal/testutil"
 	"gorm.io/gorm"
 )
 
 func setupMenuDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := testutil.OpenTestDB(t)
 	if err := db.AutoMigrate(&models.ProjectObject{}, &models.MenuItem{}); err != nil {
 		t.Fatalf("migrate schema: %v", err)
 	}
