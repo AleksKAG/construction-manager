@@ -3,74 +3,50 @@ set -e
 
 echo "=== Starting entrypoint script ==="
 
-# Параметры S3 из переменных окружения
-S3_ENDPOINT="${S3_ENDPOINT:-https://s3.twcstorage.ru}"
-S3_BUCKET="${S3_BUCKET}"
-S3_ACCESS_KEY="${S3_ACCESS_KEY}"
-S3_SECRET_KEY="${S3_SECRET_KEY}"
-S3_REGION="${S3_REGION:-ru-1}"
-DB_FILE_NAME="${DB_FILE_NAME:-construction.db}"
-DB_PATH="${DB_PATH:-/data/construction.db}"
-
-# Путь к файлу базы данных
-DB_DIR=$(dirname "$DB_PATH")
-
-# Создаём директорию для базы данных, если её нет
-mkdir -p "$DB_DIR"
-
-echo "S3 Endpoint: $S3_ENDPOINT"
-echo "S3 Bucket: $S3_BUCKET"
-echo "DB Path: $DB_PATH"
-
-DB_DOWNLOADED=false
-
-# Если указаны параметры S3, пытаемся скачать базу
-if [ -n "$S3_BUCKET" ] && [ -n "$S3_ACCESS_KEY" ] && [ -n "$S3_SECRET_KEY" ]; then
-    if ! command -v aws >/dev/null 2>&1; then
-        echo "=== Warning: aws cli is not installed. Skip S3 download. Build with --build-arg INSTALL_AWSCLI=true to enable S3 sync. ==="
-    else
-    echo "=== Attempting to download database from S3 ==="
-    
-    # Настраиваем aws cli
-    export AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY"
-    export AWS_SECRET_ACCESS_KEY="$S3_SECRET_KEY"
-    export AWS_DEFAULT_REGION="$S3_REGION"
-    
-    # Пробуем скачать базу из S3
-    if aws s3 cp "s3://${S3_BUCKET}/${DB_FILE_NAME}" "$DB_PATH" --endpoint-url "$S3_ENDPOINT" 2>/dev/null; then
-        echo "=== Database downloaded successfully from S3 ==="
-        ls -la "$DB_PATH"
-        DB_DOWNLOADED=true
-    else
-        echo "=== Warning: Could not download database from S3 (file may not exist or credentials invalid) ==="
-    fi
-    fi
-else
-    echo "=== S3 credentials not provided, skipping download ==="
+if [ -z "$DATABASE_URL" ]; then
+    echo "=== ERROR: DATABASE_URL is not set ==="
+    exit 1
 fi
 
-# Если база не скачалась из S3, проверяем наличие локальной базы в томе
-if [ "$DB_DOWNLOADED" = false ]; then
-    if [ -f "$DB_PATH" ]; then
-        echo "=== Using existing local database from volume ==="
-        ls -la "$DB_PATH"
-    else
-        echo "=== No database found in volume ==="
-        # Проверяем, есть ли файл в исходной папке проекта (для локальной разработки без тома)
-        # Это сработает, если файл пробросился через volumes в docker-compose или лежит рядом при локальном запуске
-        if [ -f "/app/${DB_FILE_NAME}" ]; then
-            echo "=== Copying database from project directory ==="
-            cp "/app/${DB_FILE_NAME}" "$DB_PATH"
-            ls -la "$DB_PATH"
-        elif [ -f "./${DB_FILE_NAME}" ]; then
-            echo "=== Copying database from current directory ==="
-            cp "./${DB_FILE_NAME}" "$DB_PATH"
-            ls -la "$DB_PATH"
-        else
-            echo "=== No database file found anywhere. Application will create a new one or fail if required. ==="
+echo "DATABASE_URL is set, starting application..."
+
+wait_for_postgres() {
+    echo "=== Waiting for PostgreSQL ==="
+    max_attempts="${DB_WAIT_MAX_ATTEMPTS:-30}"
+    delay="${DB_WAIT_DELAY_SECONDS:-2}"
+    attempt=1
+
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if pg_isready -d "$DATABASE_URL" >/dev/null 2>&1; then
+            echo "=== PostgreSQL is ready ==="
+            return 0
         fi
+        echo "PostgreSQL is not ready yet (attempt ${attempt}/${max_attempts})..."
+        attempt=$((attempt + 1))
+        sleep "$delay"
+    done
+
+    echo "=== ERROR: PostgreSQL is not reachable via DATABASE_URL ==="
+    return 1
+}
+
+apply_schema_migrations() {
+    if [ "${RUN_DB_MIGRATIONS:-true}" != "true" ]; then
+        echo "=== RUN_DB_MIGRATIONS=false, skip schema migrations ==="
+        return 0
     fi
-fi
+
+    echo "=== Applying SQL migrations from /app/schema ==="
+    for file in /app/schema/*.sql; do
+        [ -e "$file" ] || continue
+        echo "Applying migration: ${file}"
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"
+    done
+    echo "=== SQL migrations applied ==="
+}
+
+wait_for_postgres
+apply_schema_migrations
 
 echo "=== Starting application ==="
 exec "$@"
