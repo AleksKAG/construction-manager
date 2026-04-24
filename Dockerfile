@@ -14,11 +14,13 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
     go build -a -installsuffix cgo -o main ./cmd/api
 
 FROM alpine:3.21
-RUN apk --no-cache add ca-certificates wget libgcc bash postgresql-client
+RUN apk --no-cache add ca-certificates wget libgcc bash postgresql-client aws-cli
 WORKDIR /app
 COPY --from=builder /app/main .
 COPY --from=builder /app/web ./web 
 COPY --from=builder /app/schema ./schema
+COPY scripts/backup_postgres_to_s3.sh /backup_postgres_to_s3.sh
+RUN chmod +x /backup_postgres_to_s3.sh
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 EXPOSE 8080
