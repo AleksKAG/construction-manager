@@ -127,8 +127,8 @@ func CreateIrdDocument(repo repository.Repository) gin.HandlerFunc {
 			ProjectID:  projectID,
 			DocType:    docType,
 			DocNumber:  input.DocNumber,
-			IssueDate:  input.IssueDate,
-			ExpiryDate: input.ExpiryDate,
+			IssueDate:  nullIfEmpty(input.IssueDate),
+			ExpiryDate: nullIfEmpty(input.ExpiryDate),
 			Status:     status,
 			Issuer:     input.Issuer,
 			Notes:      input.Notes,
@@ -223,4 +223,14 @@ func DeleteIrdDocument(repo repository.Repository) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, gin.H{"message": "document deleted"})
 	}
+}
+
+// nullIfEmpty returns empty string as "" -> "" stays "", but we need to return pointer or special handling
+// For our case with TEXT columns that accept NULL, we convert empty strings to empty string
+// which GORM will handle as NULL if the column is nullable
+func nullIfEmpty(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return ""
+	}
+	return s
 }

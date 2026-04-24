@@ -4,6 +4,23 @@
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- Таблица определений шаблонов (теп, сср, schedule, ird)
+CREATE TABLE IF NOT EXISTS template_definitions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    version INTEGER DEFAULT 1,
+    structure_json TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_template_definitions_code ON template_definitions(code);
+COMMENT ON TABLE template_definitions IS 'Определения шаблонов: теп, сср, schedule, ird';
+COMMENT ON COLUMN template_definitions.code IS 'Код шаблона: tep, ssr, schedule, ird';
+COMMENT ON COLUMN template_definitions.structure_json IS 'JSON со структурой полей шаблона';
+
 -- Таблица элементов меню проекта
 CREATE TABLE IF NOT EXISTS menu_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -175,6 +175,19 @@ func GetDashboardMetrics(repo repository.Repository) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
 			return
 		}
+
+		// Check if project_template_rows table exists before querying
+		if !repo.RawDB().Migrator().HasTable(&models.ProjectTemplateRow{}) {
+			// Return basic metrics without TEP/estimate/schedule data
+			c.JSON(http.StatusOK, gin.H{
+				"project_id": projectID,
+				"area":       gin.H{"total_area_m2": 0, "source": "unavailable"},
+				"cost":       gin.H{"value": project.Budget, "source": "project.budget"},
+				"progress":   gin.H{"plan_percent": 0, "fact_percent": 0, "source": "unavailable"},
+			})
+			return
+		}
+
 		tepRows, err := repo.ListTemplateRows(c.Request.Context(), projectID, "tep")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
