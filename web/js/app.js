@@ -70,6 +70,7 @@ class ConstructionManagerUI {
     this.projectsTimer = null;
     this.touchStartX = null;
     this.dashboardMetrics = {};
+    this.isCreatingProject = false; // Флаг для блокировки повторных кликов при создании проекта
     this.templateEditModes = {};
     this.registryEditModes = { 'phase-p': false, 'phase-r': false };
     this.templateRowsCache = [];
@@ -1341,6 +1342,7 @@ class ConstructionManagerUI {
   openProjectForm() {
     this.state.editProjectId = null;
     this.modalMode = 'createProject';
+    this.isCreatingProject = false; // Сброс флага при открытии формы
     document.getElementById('modalTitle').textContent = 'Добавить проект';
     document.getElementById('modalBody').innerHTML = `
       <div class="form-grid">
@@ -2033,15 +2035,36 @@ class ConstructionManagerUI {
     }
 
     if (this.modalMode === 'createProject') {
+      // Блокировка повторных кликов
+      if (this.isCreatingProject) return;
+      
       const data = this.collectProjectForm();
       const err = this.validateProjectForm(data);
       if (err) return alert(err);
-      await api('/objects', 'POST', { name: data.name, address: data.address, budget: Number(data.budget || 0), status: data.status || 'planning' });
-      await this.loadObjects();
-      this.selectedObjectId = this.objects.at(-1)?.id || this.selectedObjectId;
-      this.closeModal();
-      this.renderProjectTree();
-      this.switchView('projects', 'Проекты');
+      
+      this.isCreatingProject = true;
+      const saveBtn = document.getElementById('saveEntity');
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Создание...';
+      }
+      
+      try {
+        await api('/objects', 'POST', { name: data.name, address: data.address, budget: Number(data.budget || 0), status: data.status || 'planning' });
+        await this.loadObjects();
+        this.selectedObjectId = this.objects.at(-1)?.id || this.selectedObjectId;
+        this.closeModal();
+        this.renderProjectTree();
+        this.switchView('projects', 'Проекты');
+      } catch (e) {
+        alert('Ошибка создания проекта: ' + (e.message || 'Неизвестная ошибка'));
+      } finally {
+        this.isCreatingProject = false;
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Создать';
+        }
+      }
       return;
     }
 
@@ -2235,6 +2258,7 @@ class ConstructionManagerUI {
     document.body.style.overflow = '';
     document.getElementById('entityModal').classList.remove('open');
     this.modalMode = null;
+    this.isCreatingProject = false; // Сброс флага блокировки при закрытии модалки
     this.editRowId = null;
     this.state.modalDirty = false;
     this.importDraft = null;
