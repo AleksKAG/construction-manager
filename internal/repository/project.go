@@ -3,9 +3,14 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/AleksKAG/construction-manager/internal/models"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type GormRepository struct {
@@ -27,7 +32,42 @@ func (r *GormRepository) RawDB() *gorm.DB {
 }
 
 func (r *GormRepository) CreateProject(ctx context.Context, project *models.ProjectObject) error {
-	return r.DB.WithContext(ctx).Create(project).Error
+	return r.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if project.ID == "" {
+			project.ID = uuid.NewString()
+		}
+		if project.ProjectID == "" {
+			project.ProjectID = project.ID
+		}
+		if project.ObjectType == "" {
+			project.ObjectType = "building"
+		}
+
+		projectCode := strings.TrimSpace(project.Code)
+		if projectCode == "" {
+			projectCode = fmt.Sprintf("obj-%s", strings.ReplaceAll(project.ProjectID, "-", ""))
+			if len(projectCode) > 32 {
+				projectCode = projectCode[:32]
+			}
+		}
+
+		now := time.Now().UTC()
+		if err := tx.Table("projects").Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			DoNothing: true,
+		}).Create(map[string]any{
+			"id":         project.ProjectID,
+			"code":       projectCode,
+			"name":       project.Name,
+			"status":     "active",
+			"created_at": now,
+			"updated_at": now,
+		}).Error; err != nil {
+			return err
+		}
+
+		return tx.Create(project).Error
+	})
 }
 
 func (r *GormRepository) ListProjects(ctx context.Context) ([]models.ProjectObject, error) {
