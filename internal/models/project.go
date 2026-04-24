@@ -12,7 +12,10 @@ import (
 // ProjectObject — строительный объект
 type ProjectObject struct {
 	ID              string             `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID       string             `gorm:"type:text;not null;index" json:"project_id,omitempty"`
+	Code            string             `gorm:"type:text" json:"code,omitempty"`
 	Name            string             `gorm:"type:text;not null" json:"name"`
+	ObjectType      string             `gorm:"type:text;default:'building'" json:"object_type,omitempty"`
 	Address         string             `gorm:"type:text" json:"address,omitempty"`
 	Budget          float64            `gorm:"type:real" json:"budget,omitempty"`
 	Status          string             `gorm:"type:text;default:'planning'" json:"status"`
@@ -65,6 +68,12 @@ func (p *ProjectObject) AfterFind(tx *gorm.DB) error {
 func (p *ProjectObject) BeforeCreate(tx *gorm.DB) error {
 	if p.ID == "" {
 		p.ID = uuid.New().String()
+	}
+	if p.ProjectID == "" {
+		p.ProjectID = p.ID
+	}
+	if p.ObjectType == "" {
+		p.ObjectType = "building"
 	}
 	return nil
 }
@@ -275,18 +284,18 @@ func (r *ProjectTemplateRow) AfterFind(tx *gorm.DB) error {
 
 // IrdDocument — документ ИРД (ГПЗУ, ТЗ, МТЗ, ТУ)
 type IrdDocument struct {
-	ID          string    `gorm:"primaryKey;type:text" json:"id"`
-	ProjectID   string    `gorm:"type:text;index;not null" json:"project_id"`
-	DocType     string    `gorm:"type:text;not null" json:"doc_type"`
-	DocNumber   string    `gorm:"type:text" json:"doc_number,omitempty"`
-	IssueDate   string    `gorm:"type:text" json:"issue_date,omitempty"`
-	ExpiryDate  string    `gorm:"type:text" json:"expiry_date,omitempty"`
-	Status      string    `gorm:"type:text;default:'active'" json:"status"`
-	Issuer      string    `gorm:"type:text" json:"issuer,omitempty"`
-	Notes       string    `gorm:"type:text" json:"notes,omitempty"`
-	FilePath    string    `gorm:"type:text" json:"file_path,omitempty"`
-	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
-	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
+	ID         string    `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID  string    `gorm:"type:text;index;not null" json:"project_id"`
+	DocType    string    `gorm:"type:text;not null" json:"doc_type"`
+	DocNumber  string    `gorm:"type:text" json:"doc_number,omitempty"`
+	IssueDate  string    `gorm:"type:text" json:"issue_date,omitempty"`
+	ExpiryDate string    `gorm:"type:text" json:"expiry_date,omitempty"`
+	Status     string    `gorm:"type:text;default:'active'" json:"status"`
+	Issuer     string    `gorm:"type:text" json:"issuer,omitempty"`
+	Notes      string    `gorm:"type:text" json:"notes,omitempty"`
+	FilePath   string    `gorm:"type:text" json:"file_path,omitempty"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
 }
 
 func (d *IrdDocument) BeforeCreate(tx *gorm.DB) error {
