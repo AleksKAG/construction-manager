@@ -76,9 +76,9 @@ type DocStageR struct {
 	CipherPRef          string     `gorm:"type:text;index;not null" json:"cipher_p_ref"`
 	CipherR             string     `gorm:"type:text;index;not null" json:"cipher_r"`
 	Name                string     `gorm:"type:text;not null" json:"name"`
-	IssueDate           *time.Time `gorm:"type:datetime" json:"issue_date,omitempty"`
+	IssueDate           *time.Time `json:"issue_date,omitempty"`
 	CurrentVersion      string     `gorm:"type:text;default:'0'" json:"current_version"`
-	CurrentRevisionDate *time.Time `gorm:"type:datetime" json:"current_revision_date,omitempty"`
+	CurrentRevisionDate *time.Time `json:"current_revision_date,omitempty"`
 	CreatedAt           time.Time  `gorm:"autoCreateTime" json:"created_at,omitempty"`
 	UpdatedAt           time.Time  `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
 }
@@ -98,7 +98,7 @@ type DocStageRRevision struct {
 	ID           string    `gorm:"primaryKey;type:text" json:"id"`
 	DocRID       string    `gorm:"type:text;index;not null" json:"doc_r_id"`
 	RevisionNum  string    `gorm:"type:text;not null" json:"revision_num"`
-	RevisionDate time.Time `gorm:"type:datetime;not null" json:"revision_date"`
+	RevisionDate time.Time `gorm:"not null" json:"revision_date"`
 	ChangeNote   string    `gorm:"type:text" json:"change_note,omitempty"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
 }
@@ -115,12 +115,12 @@ type SvorRecord struct {
 	ID                     string     `gorm:"primaryKey;type:text" json:"id"`
 	ProjectID              string     `gorm:"type:text;index;not null" json:"project_id"`
 	DocRID                 string     `gorm:"type:text;index;not null" json:"doc_r_id"`
-	SubmissionDate         *time.Time `gorm:"type:datetime" json:"submission_date,omitempty"`
-	ContractorFeedbackDate *time.Time `gorm:"type:datetime" json:"contractor_feedback_date,omitempty"`
+	SubmissionDate         *time.Time `json:"submission_date,omitempty"`
+	ContractorFeedbackDate *time.Time `json:"contractor_feedback_date,omitempty"`
 	FeedbackDetails        string     `gorm:"type:text" json:"feedback_details,omitempty"`
 	Status                 string     `gorm:"type:text;index;default:'draft'" json:"status"`
 	RDVersionSnapshot      string     `gorm:"type:text" json:"rd_version_snapshot,omitempty"`
-	RDRevisionDateSnapshot *time.Time `gorm:"type:datetime" json:"rd_revision_date_snapshot,omitempty"`
+	RDRevisionDateSnapshot *time.Time `json:"rd_revision_date_snapshot,omitempty"`
 	SvorVersion            string     `gorm:"type:text;default:'1'" json:"svor_version"`
 	RDAdjustmentVersion    string     `gorm:"type:text" json:"rd_adjustment_version,omitempty"`
 	Notes                  string     `gorm:"type:text" json:"notes,omitempty"`
@@ -164,7 +164,7 @@ func (s *SvorRecord) ValidateStatusChange(newStatus string) error {
 type SvorHistory struct {
 	ID           string    `gorm:"primaryKey;type:text" json:"id"`
 	SvorRecordID string    `gorm:"type:text;index;not null" json:"svor_record_id"`
-	ActionDate   time.Time `gorm:"type:datetime;not null" json:"action_date"`
+	ActionDate   time.Time `gorm:"not null" json:"action_date"`
 	ActionType   string    `gorm:"type:text;index;not null" json:"action_type"`
 	OldStatus    string    `gorm:"type:text" json:"old_status,omitempty"`
 	NewStatus    string    `gorm:"type:text" json:"new_status,omitempty"`
