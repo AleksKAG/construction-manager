@@ -611,7 +611,10 @@ class ConstructionManagerUI {
         <td>${o.address || '—'}</td>
         <td>${this.localizeProjectStatus(o.status)}</td>
         <td>${(Number(o.budget) || 0).toLocaleString('ru-RU')}</td>
-        <td><button class="mini" data-edit-project="${o.id}">✏️</button></td>
+        <td>
+          <button class="mini" data-edit-project="${o.id}">✏️</button>
+          <button class="mini danger" data-delete-project="${o.id}">🗑</button>
+        </td>
       </tr>
     `).join('') || '<tr><td colspan="5">Нет проектов</td></tr>';
 
@@ -633,6 +636,10 @@ class ConstructionManagerUI {
 
     document.querySelectorAll('[data-edit-project]').forEach((btn) => {
       btn.addEventListener('click', () => this.openProjectEditForm(btn.dataset.editProject));
+    });
+
+    document.querySelectorAll('[data-delete-project]').forEach((btn) => {
+      btn.addEventListener('click', () => this.deleteProject(btn.dataset.deleteProject));
     });
   }
 
@@ -1431,6 +1438,21 @@ class ConstructionManagerUI {
     const duplicate = this.objects.find((o) => o.name.toLowerCase() === data.name.toLowerCase() && (!isEdit || String(o.id) !== String(this.state.editProjectId)));
     if (duplicate) return 'Проект с таким наименованием уже существует';
     return null;
+  }
+
+  async deleteProject(id) {
+    if (!confirm('Вы уверены, что хотите удалить этот проект? Это действие нельзя отменить.')) return;
+    try {
+      await api(`/objects/${id}`, 'DELETE');
+      await this.loadObjects();
+      this.renderProjectTree();
+      this.renderProjects();
+      if (this.selectedObjectId === id) {
+        this.selectedObjectId = this.objects[0]?.id || null;
+      }
+    } catch (e) {
+      alert('Ошибка удаления проекта: ' + (e.message || 'Неизвестная ошибка'));
+    }
   }
 
   openRegistryForm(stage, title, row = null) {
