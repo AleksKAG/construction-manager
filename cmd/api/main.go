@@ -46,31 +46,36 @@ func main() {
 	}
 	logger.Info("PostgreSQL connected")
 
-	if err := db.AutoMigrate(
-		&models.ProjectObject{},
-		&models.GanttTask{},
-		&models.DocumentRegistry{},
-		&models.WorkforceDailyRecord{},
-		&models.User{},
-		&models.Role{},
-		&models.Permission{},
-		&models.UserRole{},
-		&models.MenuItem{},
-		&models.Dashboard{},
-		&models.DashboardWidget{},
-		&models.TemplateDefinition{},
-		&models.TemplateColumn{},
-		&models.ProjectTemplateRow{},
-		&models.DocStageP{},
-		&models.DocStageR{},
-		&models.DocStageRRevision{},
-		&models.SvorRecord{},
-		&models.SvorHistory{},
-		&models.IrdDocument{},
-	); err != nil {
-		logger.Fatal("Migration failed: ", err)
+	if shouldRunAutoMigrate() {
+		logger.Info("RUN_DB_MIGRATIONS=true, running GORM AutoMigrate")
+		if err := db.AutoMigrate(
+			&models.ProjectObject{},
+			&models.GanttTask{},
+			&models.DocumentRegistry{},
+			&models.WorkforceDailyRecord{},
+			&models.User{},
+			&models.Role{},
+			&models.Permission{},
+			&models.UserRole{},
+			&models.MenuItem{},
+			&models.Dashboard{},
+			&models.DashboardWidget{},
+			&models.TemplateDefinition{},
+			&models.TemplateColumn{},
+			&models.ProjectTemplateRow{},
+			&models.DocStageP{},
+			&models.DocStageR{},
+			&models.DocStageRRevision{},
+			&models.SvorRecord{},
+			&models.SvorHistory{},
+			&models.IrdDocument{},
+		); err != nil {
+			logger.Fatal("Migration failed: ", err)
+		}
+		logger.Info("Migrations done")
+	} else {
+		logger.Info("RUN_DB_MIGRATIONS!=true, skipping GORM AutoMigrate")
 	}
-	logger.Info("Migrations done")
 
 	// Репозиторий + sample data
 	repo := repository.NewGormRepository(db)
@@ -256,6 +261,10 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func shouldRunAutoMigrate() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("RUN_DB_MIGRATIONS")), "true")
 }
 
 func resolveDatabaseDSN() string {

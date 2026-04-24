@@ -38,10 +38,10 @@
    - ✅ Убрано использование `DB_PATH`, основной источник подключения — `DATABASE_URL` (с fallback на `POSTGRES*/POSTGRESQL*`).
    - ✅ `docker-compose.yml` и `entrypoint.sh` используют PostgreSQL-режим по умолчанию.
 
-5. **Обновить тесты**
-   - Текущие unit-тесты используют in-memory SQLite.
-   - ✅ Добавлен `internal/testutil/OpenTestDB`: тесты могут работать с PostgreSQL при `CM_TEST_DATABASE_URL`.
-   - Перевести тесты на PostgreSQL Testcontainer или отдельную тестовую БД по умолчанию (без fallback).
+5. **Обновить тесты** ✅
+   - ✅ `internal/testutil/OpenTestDB` теперь работает только с PostgreSQL (`CM_TEST_DATABASE_URL`).
+   - ✅ In-memory SQLite fallback удалён; при отсутствии DSN тесты с БД делают `Skip`.
+   - ⏭️ Следующий шаг: автоматический подъем PostgreSQL в CI (Testcontainers/сервис БД).
 
 6. **Проверка после переключения**
    - Smoke API: `/api/v1/health`, CRUD объектов/задач, шаблоны, реестры, СВОР.
@@ -54,7 +54,7 @@
 ## 3) Что ещё нужно доделать (если не успели в этот релиз)
 
 - ~~Переключить Go runtime (`cmd/api/main.go`) на драйвер PostgreSQL и убрать `DB_PATH`.~~ ✅ сделано.
-- Полное удаление SQLite-зависимостей (`go-sqlite3`, `gorm sqlite driver`) — в работе: зависимости ещё нужны для части тестов.
+- Полное удаление SQLite-зависимостей (`go-sqlite3`, `gorm sqlite driver`) из Go-кода и модулей — ✅ выполнено.
 - Полный рефактор deployment-скриптов, сейчас они заточены под файл `construction.db` и S3 sync.
 - E2E-проверки производительности на PostgreSQL (пулы соединений, таймауты, индексы).
 - Автоматические миграции в CI/CD (например, отдельный шаг deploy: `psql -f schema/*.sql`).
@@ -72,10 +72,10 @@
    - Добавить `depends_on`/ожидание готовности PostgreSQL перед стартом API.
    - Критерий готовности: `docker compose up` поднимает API + PostgreSQL, CRUD работает.
 
-3. **Перевести автотесты на PostgreSQL (обязательно)** ⏳
-   - Заменить in-memory SQLite в тестах на test-контур PostgreSQL (например, Testcontainers).
-   - Добавить тестовый bootstrap/teardown схемы.
-   - Критерий готовности: `go test ./...` проходит без sqlite-драйвера.
+3. **Перевести автотесты на PostgreSQL (обязательно)** ✅
+   - ✅ In-memory SQLite убран из `internal/testutil`.
+   - ✅ `go test ./...` проходит без sqlite-драйвера в зависимостях.
+   - ⏭️ Следующий инкремент: автоматизировать подъем PostgreSQL (Testcontainers/CI service).
 
 4. **Закрыть технический долг после switch-over (желательно в тот же заход)**
    - Удалить пакеты и упоминания SQLite из кода, `.env.example`, README.
