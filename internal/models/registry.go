@@ -19,13 +19,13 @@ type DocumentRegistry struct {
 	Name           string     `gorm:"type:text;not null" json:"name"`
 	Contractor     string     `gorm:"type:text" json:"contractor,omitempty"`
 	Note           string     `gorm:"type:text" json:"note,omitempty"`
-	IssueDateFact  *time.Time `gorm:"type:datetime" json:"issue_date_fact,omitempty"`
+	IssueDateFact  *time.Time `json:"issue_date_fact,omitempty"`
 	RevisionCount  int        `gorm:"type:integer;default:0" json:"revision_count"`
 	RevisionsJSON  string     `gorm:"type:text" json:"-"`
 	SyncedProgress float64    `gorm:"type:real;default:0" json:"synced_progress"`
 	SyncedStatus   string     `gorm:"type:text" json:"synced_status,omitempty"`
 	LinkedTaskID   *string    `gorm:"type:text;index" json:"linked_task_id,omitempty"`
-	LastSyncedAt   *time.Time `gorm:"type:datetime" json:"last_synced_at,omitempty"`
+	LastSyncedAt   *time.Time `json:"last_synced_at,omitempty"`
 	CreatedAt      time.Time  `gorm:"autoCreateTime" json:"created_at,omitempty"`
 	UpdatedAt      time.Time  `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
 }
