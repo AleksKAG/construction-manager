@@ -2,10 +2,10 @@
 
 Веб-приложение для **технического заказчика в строительстве**: управление проектами, задачами, шаблонами (ТЭП/сметы/графики), базовыми дашбордами и структурой проектной информации.
 
-## Текущее состояние (на 15.04.2026)
+## Текущее состояние (на 24.04.2026)
 
 ### Что уже реализовано
-- Backend на Go (`Gin` + `GORM`), подготовлен PostgreSQL-контур (docker-compose + entrypoint + SQL schema), runtime-переключение в `cmd/api/main.go` ещё в работе.
+- Backend на Go (`Gin` + `GORM`) уже работает через PostgreSQL runtime (`cmd/api/main.go`), включая docker-compose/entrypoint и SQL schema bootstrap.
 - Базовые сущности: проекты, задачи графика, роли/пользователи, шаблоны и строки шаблонов.
 - API для CRUD проектов и задач.
 - API для шаблонов (`template definitions`, `columns`, `project rows`).
@@ -53,7 +53,10 @@ cp .env.example .env
 - `PORT=8080`
 - `DATABASE_URL=postgres://postgres:postgres@localhost:5432/construction_manager?sslmode=disable`
 - `APP_DB_ENGINE=postgres` (значение по умолчанию)
-- `RUN_DB_MIGRATIONS=true` (для первого запуска, чтобы применить `schema/*.sql`)
+- `RUN_DB_MIGRATIONS=true` (для первого запуска, чтобы применить `schema/*.sql` и `AutoMigrate`)
+
+Для production/managed PostgreSQL обычно лучше:
+- `RUN_DB_MIGRATIONS=false` — тогда `entrypoint.sh` не запускает SQL-миграции и `cmd/api/main.go` пропускает `AutoMigrate`.
 
 Альтернатива для managed PostgreSQL (когда включён `APP_DB_ENGINE=postgres`, если удобнее хранить поля отдельно, без ручной сборки DSN):
 - `POSTGRESQL_HOST=5.42.122.236`
@@ -195,8 +198,8 @@ YANDEX_AI_BASE_URL=https://ai.api.cloud.yandex.net/v1/responses
 
 ## План развития
 
-- SQLite подходит для небольших нагрузок и одного инстанса.
-- Для нескольких реплик и высокой нагрузки лучше перейти на PostgreSQL.
+- Базовый runtime уже переведён на PostgreSQL и требует `DATABASE_URL`.
+- Следующий шаг миграции: полностью убрать SQLite-следы из legacy-скриптов и документации.
 - Добавьте мониторинг, ротацию логов и бэкапы volume.
 
 Подробный пошаговый план и команды миграции: `docs/POSTGRES_MIGRATION_PLAN.md`.
@@ -208,7 +211,7 @@ YANDEX_AI_BASE_URL=https://ai.api.cloud.yandex.net/v1/responses
 - `seed/tep_templates.json` — стандартные шаблоны ТЭП (участок, онкоцентр, пансионат).
 - `schema/004_tep_tables.sql` — PostgreSQL-миграция таблиц `tep_templates`, `tep_indicators`, `project_tep_values`.
 
-> Примечание: SQL-файлы в `schema/` и контейнерный контур уже ориентированы на PostgreSQL; финальное переключение runtime в `cmd/api/main.go` остаётся отдельным шагом миграции.
+> Примечание: SQL-файлы в `schema/`, runtime `cmd/api/main.go` и контейнерный контур уже ориентированы на PostgreSQL.
 1. Завершить auth слой: JWT + middleware + роли (`viewer/editor/admin`).
 2. Добавить модуль документов и протоколов с загрузкой файлов.
 3. Добавить OpenAPI/Swagger.
