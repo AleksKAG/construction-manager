@@ -213,6 +213,10 @@ type TemplateDefinition struct {
 	Description string `gorm:"type:text" json:"description,omitempty"`
 }
 
+func (t *TemplateDefinition) TableName() string {
+	return "template_definitions"
+}
+
 func (t *TemplateDefinition) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == "" {
 		t.ID = uuid.New().String()
@@ -229,6 +233,10 @@ type TemplateColumn struct {
 	DataType     string `gorm:"type:text;default:'text'" json:"data_type"`
 	Required     bool   `gorm:"type:boolean;default:false" json:"required"`
 	SortOrder    int    `gorm:"type:integer;default:0" json:"sort_order"`
+}
+
+func (c *TemplateColumn) TableName() string {
+	return "template_columns"
 }
 
 func (c *TemplateColumn) BeforeCreate(tx *gorm.DB) error {
@@ -250,6 +258,10 @@ type ProjectTemplateRow struct {
 	CreatedByUser string            `gorm:"type:text" json:"created_by_user,omitempty"`
 	CreatedAt     time.Time         `gorm:"autoCreateTime" json:"created_at,omitempty"`
 	UpdatedAt     time.Time         `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (r *ProjectTemplateRow) TableName() string {
+	return "project_template_rows"
 }
 
 func (r *ProjectTemplateRow) BeforeCreate(tx *gorm.DB) error {
