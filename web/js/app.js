@@ -386,8 +386,16 @@ class ConstructionManagerUI {
       'Экспертиза (архив)': 'docsArchiveExpertise',
       'Стадия Р (архив)': 'docsArchiveStageR',
       'Шаблоны документов': 'docsTemplates',
+      'ТЭП': 'tep',
+      'График проектирования': 'designSchedule',
+      'Заключение Р': 'docsArchiveExpertise',
     };
-    return map[String(title || '').trim()] || '';
+    const normalized = String(title || '').trim();
+    const result = map[normalized] || '';
+    if (!result && normalized) {
+      console.warn(`[resolveMenuViewKey] Не найдено соответствие для: "${normalized}"`);
+    }
+    return result;
   }
 
   configureHeader() {
@@ -1542,6 +1550,7 @@ class ConstructionManagerUI {
     const project = this.currentProject();
     if (!project) return;
     const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
+    const isIRD = code === 'input_design_data';
     const tpl = await getTemplate(code);
     const file = await this.pickFile('.csv,.xlsx,.xls');
     if (!file) return;
@@ -1549,20 +1558,29 @@ class ConstructionManagerUI {
     if (parsed.length < 2) return alert('Файл пустой или нет строк для импорта');
     const headers = parsed[0].map((h) => this.normalizeImportToken(h));
     const columns = tpl.columns || [];
+    
+    // Для ИРД используем упрощенное сопоставление полей
     const rows = parsed.slice(1).map((line) => {
       const data = {};
       columns.forEach((col) => {
-        const idx = headers.findIndex((h) =>
-          h === this.normalizeImportToken(col.field_key || '') || h === this.normalizeImportToken(col.title || ''));
+        const fieldKey = col.field_key || '';
+        const title = col.title || '';
+        // Пробуем найти колонку по ключу поля или заголовку
+        const idx = headers.findIndex((h) => {
+          const normalizedKey = this.normalizeImportToken(fieldKey);
+          const normalizedTitle = this.normalizeImportToken(title);
+          return h === normalizedKey || h === normalizedTitle || h.includes(normalizedKey) || normalizedKey.includes(h);
+        });
         if (idx >= 0) data[col.field_key] = line[idx] ?? '';
       });
       return data;
     }).filter((entry) => Object.values(entry).some((v) => String(v || '').trim() !== ''));
+    
     if (code === 'design_schedule') {
       const scheduleStage = this.currentView === 'designScheduleR' ? 'R' : 'P';
       rows.forEach((row) => { row.schedule_stage = scheduleStage; });
     }
-    if (!rows.length) return alert('Не удалось распознать строки по заголовкам CSV');
+    if (!rows.length) return alert('Не удалось распознать строки по заголовкам CSV. Проверьте названия колонок в файле.');
     const fields = columns.map((c) => c.field_key);
     this.importDraft = {
       kind: 'template-import',
@@ -1602,12 +1620,20 @@ class ConstructionManagerUI {
       const data = {};
       fields.forEach((field) => {
         const aliases = map[field].map((token) => this.normalizeImportToken(token));
-        const idx = headers.findIndex((h) => aliases.includes(h));
+        // Ищем точное совпадение или частичное вхождение
+        let idx = headers.findIndex((h) => aliases.includes(h));
+        if (idx === -1) {
+          // Пробуем найти по частичному совпадению
+          for (const alias of aliases) {
+            idx = headers.findIndex((h) => h.includes(alias) || alias.includes(h));
+            if (idx >= 0) break;
+          }
+        }
         if (idx >= 0) data[field] = line[idx] ?? '';
       });
       return data;
     }).filter((entry) => String(entry.designation || '').trim() && String(entry.name || '').trim());
-    if (!rows.length) return alert('Не удалось распознать обязательные поля (Обозначение, Наименование)');
+    if (!rows.length) return alert('Не удалось распознать обязательные поля (Обозначение, Наименование). Проверьте названия колонок в файле.');
     this.importDraft = { kind: 'registry-import', stage, title, rows, mode: 'upsert' };
     this.modalMode = 'importPreview';
     document.getElementById('modalTitle').textContent = `${title}: импорт — предпросмотр`;
@@ -1812,6 +1838,18 @@ class ConstructionManagerUI {
       await issueDemoToken('admin');
       return alert('Demo token обновлён.');
     }
+    if (['protocolInternal', 'protocolDesign', 'protocolSMR'].includes(this.currentView)) {
+      // Для протоколов — заглушка, в будущем можно открыть форму создания поручения
+      const section = this.currentView === 'protocolInternal' ? 'Внутренние' : this.currentView === 'protocolDesign' ? 'Проектирование' : 'СМР';
+      return alert(`Раздел «Протоколы — ${section}» в разработке. Скоро появится возможность добавлять поручения.`);
+    }
+    if (this.currentView === 'docsTemplates') {
+      // Для шаблонов документов открываем форму создания нового шаблона
+      const project = this.currentProject();
+      if (!project) return alert('Выберите проект');
+      // Можно реализовать открытие модального окна для создания шаблона
+      return alert('Функционал добавления шаблона документа будет реализован в следующей версии');
+    }
     if (this.isTemplateView(this.currentView)) {
       const resolved = this.resolveTemplateView(this.currentView);
       this.currentTemplateCode = this.currentTemplateCode || resolved.code;
@@ -1855,6 +1893,18 @@ class ConstructionManagerUI {
       if (this.svorFilters.dateFrom) q.set('date_from', this.svorFilters.dateFrom);
       if (this.svorFilters.dateTo) q.set('date_to', this.svorFilters.dateTo);
       window.open(`/api/v1/projects/${project.id}/svor/report.xlsx?${q.toString()}`, '_blank');
+    }
+    if (['protocolInternal', 'protocolDesign', 'protocolSMR'].includes(this.currentView)) {
+      // Для протоколов — обновление списка (заглушка)
+      return this.renderContent();
+    }
+    if (this.currentView === 'docsTemplates') {
+      // Экспорт шаблонов документов в XLSX
+      const project = this.currentProject();
+      if (!project) return alert('Выберите проект');
+      const token = localStorage.getItem('cm_token');
+      const url = `/api/v1/projects/${project.id}/docs/templates/export.xlsx`;
+      window.open(url + (token ? `?token=${encodeURIComponent(token)}` : ''), '_blank');
     }
   }
 
@@ -2022,6 +2072,49 @@ class ConstructionManagerUI {
     this.openModal();
   }
 
+  async analyzeDashboardsWithAI() {
+    const activeStatuses = new Set(['active', 'design', 'construction']);
+    const activeProjects = this.objects.filter((o) => activeStatuses.has(String(o.status || '').toLowerCase()));
+    
+    if (!activeProjects.length) {
+      return 'Нет активных проектов для анализа.';
+    }
+
+    const dashboardData = this.state.dashboards
+      .filter((d) => activeProjects.some((p) => String(p.id) === String(d.projectId)))
+      .map((d) => {
+        const project = activeProjects.find((p) => String(p.id) === String(d.projectId));
+        const metrics = this.dashboardMetrics[String(project?.id)] || {};
+        return {
+          projectName: d.projectName,
+          type: d.type,
+          status: project?.status,
+          progress: metrics.fact || 0,
+          plan: metrics.plan || 0,
+          deviation: metrics.deviation || 0,
+          budget: metrics.cost || 0,
+          spent: metrics.spent || 0,
+          address: metrics.address || '',
+          area: metrics.area || 0,
+          milestones: metrics.milestones || [],
+        };
+      });
+
+    if (!dashboardData.length) {
+      return 'Дашборды для активных проектов не найдены.';
+    }
+
+    try {
+      const payload = await api('/agent/summary', 'POST', {
+        question: 'Проанализируй дашборды по активным проектам. Укажи: общий прогресс, критические отставания (где факт < плана более чем на 10%), проблемы по бюджету, рекомендации.',
+        context: { dashboards: dashboardData, projects_count: activeProjects.length },
+      });
+      return payload.answer || 'Не удалось получить анализ.';
+    } catch (error) {
+      return `Ошибка анализа: ${error.message || 'Неизвестная ошибка'}`;
+    }
+  }
+
   removeDashboard(id) {
     if (!confirm('Удалить дашборд?')) return;
     this.state.dashboards = this.state.dashboards.filter((d) => d.id !== id);
@@ -2153,11 +2246,24 @@ class ConstructionManagerUI {
       saveBtn.disabled = true;
       saveBtn.textContent = 'Формирование...';
       try {
+        // Сначала пробуем анализ дашбордов
+        const dashboardAnalysis = await this.analyzeDashboardsWithAI();
+        
+        // Затем получаем сводку по каждому проекту
         const chunks = await Promise.all(activeProjects.map(async (project) => {
           const payload = await api('/agent/summary', 'POST', { project_id: String(project.id), question: 'Сформируй краткий статус, прогресс, последние задачи и критические моменты.' });
           return [`Проект: ${project.name}`, payload.answer, 'Рекомендации:', ...(payload.next_actions || []).map((a, i) => `${i + 1}. ${a}`)].join('\n');
         }));
-        const lines = [`Сводка по активным проектам (${activeProjects.length})`, '', ...chunks];
+        
+        const lines = [
+          `Сводка по активным проектам (${activeProjects.length})`,
+          '',
+          '=== AI-АНАЛИЗ ДАШБОРДОВ ===',
+          dashboardAnalysis,
+          '',
+          '=== ДЕТАЛИ ПО ПРОЕКТАМ ===',
+          ...chunks
+        ];
         answerEl.textContent = lines.join('\n');
       } catch (error) {
         answerEl.textContent = error?.message || 'Не удалось получить ответ агента';

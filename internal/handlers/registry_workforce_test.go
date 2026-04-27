@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
@@ -158,7 +157,7 @@ func TestCreateWorkforceRecord_ValidatesTaskProjectAndPersists(t *testing.T) {
 		t.Fatalf("expected task_id %q, got %q", task.ID, created.TaskID)
 	}
 	if created.WorkDate.Format("2006-01-02") != "2026-04-12" {
-		t.Fatalf("unexpected work date: %s", created.WorkDate.Format(time.DateOnly))
+		t.Fatalf("unexpected work date: %s", created.WorkDate.Format("2006-01-02"))
 	}
 
 	listResp := performJSONRequest(r, http.MethodGet, "/api/v1/projects/project-1/smr/workforce", nil)
