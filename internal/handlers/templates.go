@@ -51,50 +51,17 @@ func ListTemplateRows(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
 		code := c.Param("code")
+		
+		// Специальная обработка для input_design_data (ИРД) - перенаправляем на специальный обработчик
+		if code == "input_design_data" {
+			ListIrdAsTemplateRows(repo)(c)
+			return
+		}
+		
 		rows, err := repo.ListTemplateRows(c.Request.Context(), projectID, code)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
-		}
-		if code == "input_design_data" {
-			docs, err := repo.ListIrdDocuments(c.Request.Context(), projectID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			rows = make([]models.ProjectTemplateRow, 0, len(docs))
-			for _, d := range docs {
-				rows = append(rows, models.ProjectTemplateRow{
-					ValuesMap: map[string]string{
-						"doc_type":    d.DocType,
-						"doc_number":  d.DocNumber,
-						"issuer":      d.Issuer,
-						"issue_date":  d.IssueDate,
-						"expiry_date": d.ExpiryDate,
-						"notes":       d.Notes,
-					},
-				})
-			}
-		}
-		if code == "input_design_data" {
-			docs, err := repo.ListIrdDocuments(c.Request.Context(), projectID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			rows = make([]models.ProjectTemplateRow, 0, len(docs))
-			for _, d := range docs {
-				rows = append(rows, models.ProjectTemplateRow{
-					ValuesMap: map[string]string{
-						"doc_type":    d.DocType,
-						"doc_number":  d.DocNumber,
-						"issuer":      d.Issuer,
-						"issue_date":  d.IssueDate,
-						"expiry_date": d.ExpiryDate,
-						"notes":       d.Notes,
-					},
-				})
-			}
 		}
 
 		search := strings.ToLower(strings.TrimSpace(c.Query("search")))
@@ -128,6 +95,13 @@ func CreateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
 		code := c.Param("code")
+		
+		// Специальная обработка для input_design_data (ИРД) - перенаправляем на специальный обработчик
+		if code == "input_design_data" {
+			CreateIrdFromTemplateRow(repo)(c)
+			return
+		}
+		
 		var input struct {
 			Data map[string]string `json:"data"`
 		}
