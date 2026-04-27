@@ -144,15 +144,23 @@ func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			status = "active"
 		}
 
+		// Обработка дат - только непустые значения
 		issueDate := strings.TrimSpace(input.Data["issue_date"])
 		expiryDate := strings.TrimSpace(input.Data["expiry_date"])
-		if issueDate != "" {
+		
+		// Преобразуем пустые строки в пустые значения для БД
+		if issueDate == "" || issueDate == "null" {
+			issueDate = ""
+		} else {
 			if _, err := time.Parse("2006-01-02", issueDate); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "issue_date: используйте формат YYYY-MM-DD"})
 				return
 			}
 		}
-		if expiryDate != "" {
+		
+		if expiryDate == "" || expiryDate == "null" {
+			expiryDate = ""
+		} else {
 			if _, err := time.Parse("2006-01-02", expiryDate); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "expiry_date: используйте формат YYYY-MM-DD"})
 				return
