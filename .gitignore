@@ -1,31 +1,46 @@
 ```
-# Binary/executable files
-main
+# Compiled and build artifacts
+*.o
+*.obj
+*.out
+build/
+dist/
+
+# Dependencies
+vendor/
+node_modules/
+*.mod
+*.sum
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
 
-# Environment files
+# Environment
 .env
 .env.local
 *.env.*
 
-# Editors/IDE
+# Editors
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Dependencies
-node_modules/
-.venv/
-venv/
-__pycache__/
-.mypy_cache/
-.pytest_cache/
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Build artifacts
-dist/
-build/
-target/
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Go specific
+*.test
+*.prof
+go.mod
+go.sum
 ```

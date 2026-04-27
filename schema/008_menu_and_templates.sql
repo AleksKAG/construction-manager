@@ -21,6 +21,21 @@ COMMENT ON TABLE template_definitions IS 'Определения шаблоно�
 COMMENT ON COLUMN template_definitions.code IS 'Код шаблона: tep, ssr, schedule, ird';
 COMMENT ON COLUMN template_definitions.structure_json IS 'JSON со структурой полей шаблона';
 
+-- Таблица колонок шаблонов
+CREATE TABLE IF NOT EXISTS template_columns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template_code VARCHAR(50) NOT NULL REFERENCES template_definitions(code) ON DELETE CASCADE,
+    field_key VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    data_type VARCHAR(50) DEFAULT 'text',
+    required BOOLEAN DEFAULT false,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(template_code, field_key)
+);
+CREATE INDEX idx_template_columns_template ON template_columns(template_code);
+COMMENT ON TABLE template_columns IS 'Колонки шаблонов';
+
 -- Таблица элементов меню проекта
 CREATE TABLE IF NOT EXISTS menu_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
