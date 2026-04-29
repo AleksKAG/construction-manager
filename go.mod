@@ -1,6 +1,6 @@
 module github.com/AleksKAG/construction-manager
 
-go 1.23
+go 1.19
 
 require (
 	github.com/gin-gonic/gin v1.9.1
