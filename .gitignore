@@ -1,26 +1,24 @@
 ```
-# Compiled and build artifacts
-*.o
+# Binaries
+*.exe
+*.dll
+*.so
+*.a
 *.obj
 *.out
-build/
-dist/
 
 # Dependencies
 vendor/
-node_modules/
-*.mod
-*.sum
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
+# Build artifacts
+build/
+dist/
+target/
 
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
 # Editors
 .vscode/
@@ -28,22 +26,14 @@ node_modules/
 *.swp
 *.swo
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
+# Logs
+*.log
 
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Go specific
-*.test
-*.prof
-go.mod
-go.sum
-# Go-specific
-*.test
-*.prof
+# Temporary files
+*.tmp
 ```

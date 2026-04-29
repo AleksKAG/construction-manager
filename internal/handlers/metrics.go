@@ -78,9 +78,22 @@ var tepIndicatorToKey = map[string]string{
 func GetTEPByProject(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("projectId")
+		
+		// Проверка на пустой projectID
+		if projectID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "project_id is required"})
+			return
+		}
+		
 		project, err := repo.GetProjectByID(c.Request.Context(), projectID)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
+			// При отсутствии проекта возвращаем 200 OK с флагом projectNotFound
+			c.JSON(http.StatusOK, gin.H{
+				"project_id":      projectID,
+				"projectNotFound": true,
+				"project_name":    "",
+				"sections":        []tepSection{},
+			})
 			return
 		}
 		rows, err := repo.ListTemplateRows(c.Request.Context(), projectID, "tep")
@@ -152,6 +165,13 @@ func PatchTEPRow(repo repository.Repository) gin.HandlerFunc {
 func GetEstimateSummary(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("projectId")
+		
+		// Проверка на пустой projectID
+		if projectID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "project_id is required"})
+			return
+		}
+		
 		rows, err := repo.ListTemplateRows(c.Request.Context(), projectID, "summary_estimate")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -170,9 +190,24 @@ func GetEstimateSummary(repo repository.Repository) gin.HandlerFunc {
 func GetDashboardMetrics(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("projectId")
+		
+		// Проверка на пустой projectID
+		if projectID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "project_id is required"})
+			return
+		}
+		
 		project, err := repo.GetProjectByID(c.Request.Context(), projectID)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
+			// При отсутствии проекта возвращаем 200 OK с флагом projectNotFound
+			// вместо 404, чтобы фронтенд не падал
+			c.JSON(http.StatusOK, gin.H{
+				"project_id":      projectID,
+				"projectNotFound": true,
+				"area":            gin.H{"total_area_m2": 0, "source": "unavailable"},
+				"cost":            gin.H{"value": 0, "source": "unavailable"},
+				"progress":        gin.H{"plan_percent": 0, "fact_percent": 0, "source": "unavailable"},
+			})
 			return
 		}
 
@@ -180,10 +215,12 @@ func GetDashboardMetrics(repo repository.Repository) gin.HandlerFunc {
 		if !repo.RawDB().Migrator().HasTable(&models.ProjectTemplateRow{}) {
 			// Return basic metrics without TEP/estimate/schedule data
 			c.JSON(http.StatusOK, gin.H{
-				"project_id": projectID,
-				"area":       gin.H{"total_area_m2": 0, "source": "unavailable"},
-				"cost":       gin.H{"value": project.Budget, "source": "project.budget"},
-				"progress":   gin.H{"plan_percent": 0, "fact_percent": 0, "source": "unavailable"},
+				"project_id":      projectID,
+				"project_name":    project.Name,
+				"projectNotFound": false,
+				"area":            gin.H{"total_area_m2": 0, "source": "unavailable"},
+				"cost":            gin.H{"value": project.Budget, "source": "project.budget"},
+				"progress":        gin.H{"plan_percent": 0, "fact_percent": 0, "source": "unavailable"},
 			})
 			return
 		}
