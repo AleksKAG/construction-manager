@@ -146,6 +146,7 @@ func LoadStandardTemplates(repo repository.Repository, logger *logrus.Logger) er
 		{Code: "tep", Name: "Технико-экономические показатели", Description: "Шаблон ТЭП"},
 		{Code: "summary_estimate", Name: "Сводный расчет", Description: "Сводный сметный расчет"},
 		{Code: "smr_schedule", Name: "График строительно-монтажных работ", Description: "Шаблон СМР"},
+		{Code: "docs", Name: "Документы", Description: "Документы проекта"},
 	}
 	for _, tpl := range templates {
 		t := tpl
@@ -197,6 +198,15 @@ func LoadStandardTemplates(repo repository.Repository, logger *logrus.Logger) er
 		{TemplateCode: "smr_schedule", FieldKey: "fact_start", Title: "Начало", DataType: "date", SortOrder: 8},
 		{TemplateCode: "smr_schedule", FieldKey: "fact_end", Title: "Окончание факт", DataType: "date", SortOrder: 9},
 		{TemplateCode: "smr_schedule", FieldKey: "finish_deviation", Title: "Отклонение окончания", DataType: "number", SortOrder: 10},
+
+		// Docs template columns
+		{TemplateCode: "docs", FieldKey: "doc_type", Title: "Тип документа", DataType: "text", Required: true, SortOrder: 1},
+		{TemplateCode: "docs", FieldKey: "doc_number", Title: "Номер документа", DataType: "text", SortOrder: 2},
+		{TemplateCode: "docs", FieldKey: "issue_date", Title: "Дата выдачи", DataType: "date", SortOrder: 3},
+		{TemplateCode: "docs", FieldKey: "expiry_date", Title: "Срок действия", DataType: "date", SortOrder: 4},
+		{TemplateCode: "docs", FieldKey: "status", Title: "Статус", DataType: "text", SortOrder: 5},
+		{TemplateCode: "docs", FieldKey: "issuer", Title: "Выдавший орган", DataType: "text", SortOrder: 6},
+		{TemplateCode: "docs", FieldKey: "notes", Title: "Примечания", DataType: "text", SortOrder: 7},
 	}
 
 	for _, col := range columns {

@@ -8,6 +8,7 @@ dist/
 
 # Dependencies
 vendor/
+node_modules/
 *.mod
 *.sum
 
@@ -27,6 +28,21 @@ vendor/
 *.swp
 *.swo
 
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Go specific
+*.test
+*.prof
+go.mod
+go.sum
 # Go-specific
 *.test
 *.prof
