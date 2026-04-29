@@ -43,4 +43,7 @@ htmlcov/
 *.prof
 go.mod
 go.sum
+# Go-specific
+*.test
+*.prof
 ```
