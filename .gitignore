@@ -1,5 +1,11 @@
 ```
-# Binaries
+# Database schema files are typically version controlled, so no ignores needed for SQL files
+# Only ignore common artifacts if present in project
+
+# Compiled/Binary files
+*.pyc
+*.class
+*.o
 *.exe
 *.dll
 *.so
@@ -8,32 +14,36 @@
 *.out
 
 # Dependencies
-vendor/
-
-# Build artifacts
-build/
+node_modules/
+venv/
+.venv/
+__pycache__/
 dist/
+build/
 target/
+.gradle/
 
-# Environment
-.env
-.env.local
-.env.*
-
-# Editors
+# Editor/IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
+*.tmp
 
-# Logs
+# System/Environment files
+.DS_Store
+Thumbs.db
+.env
+.env.local
+*.env.*
+
+# Logs and coverage
 *.log
-
-# Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Temporary files
-*.tmp
+# Cache directories
+.mypy_cache/
+.pytest_cache/
 ```
