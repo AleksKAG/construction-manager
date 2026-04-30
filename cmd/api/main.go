@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -39,7 +40,12 @@ func main() {
 
 	logger.Info("Connecting to PostgreSQL")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Warn),
+		Logger: gormLogger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), gormLogger.Config{
+			SlowThreshold:             500 * time.Millisecond,
+			LogLevel:                  gormLogger.Warn,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  false,
+		}),
 	})
 	if err != nil {
 		logger.Fatal("PostgreSQL connection failed: ", err)
@@ -47,7 +53,7 @@ func main() {
 	logger.Info("PostgreSQL connected")
 
 	if shouldRunAutoMigrate() {
-		logger.Info("RUN_DB_MIGRATIONS=true, running GORM AutoMigrate")
+		logger.Info("RUN_DB_MIGRATIONS=true, running full GORM AutoMigrate")
 		if err := db.AutoMigrate(
 			&models.ProjectObject{},
 			&models.GanttTask{},
@@ -74,7 +80,17 @@ func main() {
 		}
 		logger.Info("Migrations done")
 	} else {
-		logger.Info("RUN_DB_MIGRATIONS!=true, skipping GORM AutoMigrate")
+		logger.Info("RUN_DB_MIGRATIONS!=true, running safe minimum migrations for critical tables")
+		if err := db.AutoMigrate(
+			&models.MenuItem{},
+			&models.TemplateDefinition{},
+			&models.TemplateColumn{},
+			&models.ProjectTemplateRow{},
+			&models.IrdDocument{},
+		); err != nil {
+			logger.Fatal("Minimum migration failed: ", err)
+		}
+		logger.Info("Minimum migrations done")
 	}
 
 	// Репозиторий + sample data

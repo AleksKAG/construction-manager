@@ -55,8 +55,9 @@ cp .env.example .env
 - `APP_DB_ENGINE=postgres` (значение по умолчанию)
 - `RUN_DB_MIGRATIONS=true` (для первого запуска, чтобы применить `schema/*.sql` и `AutoMigrate`)
 
-Для production/managed PostgreSQL обычно лучше:
-- `RUN_DB_MIGRATIONS=false` — тогда `entrypoint.sh` не запускает SQL-миграции и `cmd/api/main.go` пропускает `AutoMigrate`.
+Для production/managed PostgreSQL рекомендуется детерминированный bootstrap:
+- `RUN_DB_MIGRATIONS=true` — `entrypoint.sh` гарантированно применяет все `schema/*.sql` при старте контейнера.
+- Если в вашем окружении миграции выполняются отдельным deploy-step (вне контейнера), только тогда можно ставить `RUN_DB_MIGRATIONS=false`.
 
 Альтернатива для managed PostgreSQL (когда включён `APP_DB_ENGINE=postgres`, если удобнее хранить поля отдельно, без ручной сборки DSN):
 - `POSTGRESQL_HOST=5.42.122.236`

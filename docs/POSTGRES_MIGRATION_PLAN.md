@@ -60,6 +60,18 @@
 - Автоматические миграции в CI/CD (например, отдельный шаг deploy: `psql -f schema/*.sql`).
 - План отката (rollback) при ошибках миграции в production.
 
+## 3.1) TeamWeb/production: где задаётся RUN_DB_MIGRATIONS и как идёт bootstrap
+
+- В контейнерном запуске переменная задаётся в `docker-compose.yml` в сервисе `construction-manager`:
+  - `RUN_DB_MIGRATIONS=${RUN_DB_MIGRATIONS:-true}`.
+- Bootstrap выполняется в `entrypoint.sh`:
+  1. Валидация/сборка `DATABASE_URL`.
+  2. Ожидание готовности PostgreSQL.
+  3. При `RUN_DB_MIGRATIONS=true` — последовательное применение всех `schema/*.sql` через `psql`.
+- Для TeamWeb это означает:
+  - либо оставляем `RUN_DB_MIGRATIONS=true` (рекомендуется для детерминированного старта),
+  - либо ставим `false` только если миграции гарантированно запускаются отдельным шагом деплоя до старта API.
+
 ### Что взять в следующий заход (приоритетный чек-лист)
 
 1. **Переключить runtime на PostgreSQL (обязательно)** ✅

@@ -1050,13 +1050,14 @@ class ConstructionManagerUI {
     const resolvedCode = this.resolveTemplateView(this.currentView).code;
     const code = resolvedCode || defaultCode;
     const isIRD = code === 'input_design_data';
+    const scheduleStage = code === 'design_schedule' ? (this.currentView === 'designScheduleR' ? 'R' : 'P') : '';
     let tpl;
     let rowsPayload;
 
     try {
       [tpl, rowsPayload] = await Promise.all([
         getTemplate(code),
-        listTemplateRows(project.id, code, { page: this.templatePage, page_size: isIRD ? 200 : 20, search: this.templateSearch }),
+        listTemplateRows(project.id, code, { page: this.templatePage, page_size: isIRD ? 200 : 20, search: this.templateSearch, ...(scheduleStage ? { schedule_stage: scheduleStage } : {}) }),
       ]);
       if (renderNonce !== this.renderNonce || expectedView !== this.currentView) return;
     } catch (error) {
@@ -1066,7 +1067,7 @@ class ConstructionManagerUI {
 
     const columns = tpl.columns || [];
     rowsPayload = await this.ensureDefaultTemplateRows(project.id, code, rowsPayload);
-    if (code === 'design_schedule') rowsPayload = await this.syncScheduleRowsWithRegistry(project.id, rowsPayload, this.currentView === 'designScheduleR' ? 'R' : 'P');
+    if (code === 'design_schedule') rowsPayload = await this.syncScheduleRowsWithRegistry(project.id, rowsPayload, scheduleStage);
     const rows = rowsPayload.data || [];
     const pager = rowsPayload.pagination || { page: 1, total: rows.length, page_size: 20 };
 
@@ -1164,33 +1165,27 @@ class ConstructionManagerUI {
     } catch (_) {
       return rowsPayload;
     }
-    const allRowsPayload = await listTemplateRows(projectId, 'design_schedule', { page: 1, page_size: 500, search: '' });
-    const allRows = [...(allRowsPayload.data || [])].sort((a, b) => (a.row_number || 0) - (b.row_number || 0));
-    const existing = allRows.filter((row) => {
-      const rowStage = String(row?.data?.schedule_stage || 'P').toUpperCase();
-      return rowStage === scheduleStage;
-    });
+    const allRowsPayload = await listTemplateRows(projectId, 'design_schedule', { page: 1, page_size: 500, search: '', schedule_stage: scheduleStage });
+    const existing = [...(allRowsPayload.data || [])].sort((a, b) => (a.row_number || 0) - (b.row_number || 0));
 
-    for (let i = 0; i < registry.length; i += 1) {
-      const item = registry[i];
-      const base = {
-        volume_no: item.volume_number || String(i + 1),
-        code: item.designation || item.code || '',
-        name: item.name || '',
-        executor: item.contractor || '',
-        schedule_stage: scheduleStage,
-      };
-      if (existing[i]) {
-        const current = existing[i].data || {};
-        if (current.volume_no !== base.volume_no || current.code !== base.code || current.name !== base.name || current.executor !== base.executor || current.schedule_stage !== base.schedule_stage) {
-          await updateTemplateRow(existing[i].id, { ...current, ...base });
-        }
-      } else {
+    // Оптимизация: не обновляем строки на каждом рендере.
+    // Автосоздание выполняем только если для стадии пока нет строк,
+    // чтобы не тормозить меню/переключение экранов множеством PATCH/POST.
+    if (existing.length === 0 && registry.length > 0) {
+      for (let i = 0; i < registry.length; i += 1) {
+        const item = registry[i];
+        const base = {
+          volume_no: item.volume_number || String(i + 1),
+          code: item.designation || item.code || '',
+          name: item.name || '',
+          executor: item.contractor || '',
+          schedule_stage: scheduleStage,
+        };
         await createTemplateRow(projectId, 'design_schedule', base);
       }
     }
-    const refreshed = await listTemplateRows(projectId, 'design_schedule', { page: 1, page_size: 500, search: this.templateSearch });
-    const filtered = (refreshed.data || []).filter((row) => String(row?.data?.schedule_stage || 'P').toUpperCase() === scheduleStage);
+    const refreshed = await listTemplateRows(projectId, 'design_schedule', { page: 1, page_size: 500, search: this.templateSearch, schedule_stage: scheduleStage });
+    const filtered = refreshed.data || [];
     const pageSize = 20;
     const page = Math.max(1, this.templatePage);
     const start = (page - 1) * pageSize;
@@ -1287,6 +1282,11 @@ class ConstructionManagerUI {
 
   async saveIRDEdit(rowId, defaultCode, title) {
     if (!rowId) return;
+    const irdError = this.validateIrdDates(this.irdDraftData || {});
+    if (irdError) {
+      alert(irdError);
+      return;
+    }
     await updateIrdRow(rowId, this.irdDraftData);
     this.irdEditingRowId = null;
     this.irdDraftData = {};
@@ -1388,7 +1388,10 @@ class ConstructionManagerUI {
       const p = await api(`/objects/${id}`);
       document.getElementById('modalBody').innerHTML = `
         <div class="form-grid">
-          <h4>Основная информация</h4>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+            <h4 style="margin:0;">Основная информация</h4>
+            <button type="button" class="mini danger" data-delete-project-in-modal="${id}">Удалить проект</button>
+          </div>
           <label>Наименование*<input data-project-field="name" value="${p.name || ''}" required></label>
           <label>Адрес объекта*<input data-project-field="address" value="${p.address || ''}" required></label>
           <div class="form-grid two">
@@ -1421,6 +1424,11 @@ class ConstructionManagerUI {
       document.querySelectorAll('[data-project-field]').forEach((el) => el.addEventListener('input', () => {
         this.state.modalDirty = this.serializedProjectForm() !== this.state.projectFormSnapshot;
       }));
+      document.querySelector('[data-delete-project-in-modal]')?.addEventListener('click', async () => {
+        const deleteId = String(id);
+        const deleted = await this.deleteProject(deleteId);
+        if (deleted) this.closeModal();
+      });
     } catch (e) {
       document.getElementById('modalBody').innerHTML = `<div class="notice">${e.message}</div>`;
     }
@@ -1448,8 +1456,19 @@ class ConstructionManagerUI {
     return null;
   }
 
+  validateIrdDates(data) {
+    const issue = String(data?.issue_date || '').trim();
+    const expiry = String(data?.expiry_date || '').trim();
+    if (!issue || !expiry) return null;
+    const issueDate = new Date(issue);
+    const expiryDate = new Date(expiry);
+    if (Number.isNaN(issueDate.getTime()) || Number.isNaN(expiryDate.getTime())) return null;
+    if (expiryDate < issueDate) return 'Срок действия (expiry_date) не может быть раньше даты выдачи (issue_date)';
+    return null;
+  }
+
   async deleteProject(id) {
-    if (!confirm('Вы уверены, что хотите удалить этот проект? Это действие нельзя отменить.')) return;
+    if (!confirm('Вы уверены, что хотите удалить этот проект? Это действие нельзя отменить.')) return false;
     try {
       await api(`/objects/${id}`, 'DELETE');
       await this.loadObjects();
@@ -1458,8 +1477,10 @@ class ConstructionManagerUI {
       if (this.selectedObjectId === id) {
         this.selectedObjectId = this.objects[0]?.id || null;
       }
+      return true;
     } catch (e) {
       alert('Ошибка удаления проекта: ' + (e.message || 'Неизвестная ошибка'));
+      return false;
     }
   }
 
@@ -2335,6 +2356,13 @@ class ConstructionManagerUI {
         const data = {};
         document.querySelectorAll('[data-field]').forEach((input) => { data[input.dataset.field] = input.value; });
         const code = this.currentTemplateCode || this.resolveTemplateView(this.currentView).code;
+        if (code === 'input_design_data') {
+          const irdError = this.validateIrdDates(data);
+          if (irdError) {
+            alert(irdError);
+            return;
+          }
+        }
         if (code === 'design_schedule') data.schedule_stage = this.currentView === 'designScheduleR' ? 'R' : 'P';
         if (this.editRowId) await updateTemplateRow(this.editRowId, data);
         else await createTemplateRow(this.selectedObjectId, code, data);

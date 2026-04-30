@@ -51,17 +51,33 @@ func ListTemplateRows(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
 		code := c.Param("code")
-		
+
 		// Специальная обработка для input_design_data (ИРД) - перенаправляем на специальный обработчик
 		if code == "input_design_data" {
 			ListIrdAsTemplateRows(repo)(c)
 			return
 		}
-		
+
 		rows, err := repo.ListTemplateRows(c.Request.Context(), projectID, code)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+		if code == "design_schedule" {
+			stage := strings.ToUpper(strings.TrimSpace(c.Query("schedule_stage")))
+			if stage == "P" || stage == "R" {
+				stageFiltered := make([]models.ProjectTemplateRow, 0, len(rows))
+				for _, row := range rows {
+					rowStage := strings.ToUpper(strings.TrimSpace(row.ValuesMap["schedule_stage"]))
+					if rowStage == "" {
+						rowStage = "P"
+					}
+					if rowStage == stage {
+						stageFiltered = append(stageFiltered, row)
+					}
+				}
+				rows = stageFiltered
+			}
 		}
 
 		search := strings.ToLower(strings.TrimSpace(c.Query("search")))
@@ -95,13 +111,13 @@ func CreateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("id")
 		code := c.Param("code")
-		
+
 		// Специальная обработка для input_design_data (ИРД) - перенаправляем на специальный обработчик
 		if code == "input_design_data" {
 			CreateIrdFromTemplateRow(repo)(c)
 			return
 		}
-		
+
 		var input struct {
 			Data map[string]string `json:"data"`
 		}
