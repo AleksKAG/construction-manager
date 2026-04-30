@@ -707,12 +707,12 @@ class ConstructionManagerUI {
       const cipher = document.getElementById('docpCipher')?.value.trim();
       const name = document.getElementById('docpName')?.value.trim();
       const section = document.getElementById('docpSection')?.value.trim();
-      if (!cipher) return alert('Укажите шифр');
-      if (!name) return alert('Укажите наименование');
+      if (!cipher) return this.showToast('Укажите шифр', 'error');
+      if (!name) return this.showToast('Укажите наименование', 'error');
       try {
         await api(`/projects/${project.id}/docs/p`, 'POST', { cipher, name, section });
         await this.renderDocsStageP();
-      } catch (e) { alert(e.message || 'Ошибка сохранения'); }
+      } catch (e) { this.showToast(e.message || 'Ошибка сохранения', 'error'); }
     });
     document.querySelectorAll('[data-edit-docp]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -725,7 +725,7 @@ class ConstructionManagerUI {
           const cipher = document.getElementById('docpCipher')?.value.trim();
           const name = document.getElementById('docpName')?.value.trim();
           const section = document.getElementById('docpSection')?.value.trim();
-          if (!cipher || !name) return alert('Заполните шифр и наименование');
+          if (!cipher || !name) return this.showToast('Заполните шифр и наименование', 'error');
           await api(`/projects/${project.id}/docs/p/${btn.dataset.editDocp}`, 'PUT', { cipher, name, section });
           await this.renderDocsStageP();
         };
@@ -786,12 +786,12 @@ class ConstructionManagerUI {
       const cipher_p_ref = document.getElementById('docrCipherP')?.value.trim();
       const name = document.getElementById('docrName')?.value.trim();
       const issue_date = document.getElementById('docrIssueDate')?.value;
-      if (!cipher_r) return alert('Укажите шифр Р');
-      if (!name) return alert('Укажите наименование');
+      if (!cipher_r) return this.showToast('Укажите шифр Р', 'error');
+      if (!name) return this.showToast('Укажите наименование', 'error');
       try {
         await api(`/projects/${project.id}/docs/r`, 'POST', { cipher_r, cipher_p_ref, name, issue_date });
         await this.renderDocsStageR();
-      } catch (e) { alert(e.message || 'Ошибка сохранения'); }
+      } catch (e) { this.showToast(e.message || 'Ошибка сохранения', 'error'); }
     });
     document.querySelectorAll('[data-add-rev]').forEach((btn) => btn.addEventListener('click', () => this.openAddRevisionModal(btn.dataset.addRev)));
     document.querySelectorAll('[data-del-docr]').forEach((btn) => {
@@ -878,7 +878,7 @@ class ConstructionManagerUI {
         try {
           await api(`/projects/${project.id}/design/${stage}/registry/${btn.dataset.delRegistry}`, 'DELETE');
           await this.renderRegistry(stage, title);
-        } catch (e) { alert(e.message || 'Ошибка удаления'); }
+        } catch (e) { this.showToast(e.message || 'Ошибка удаления', 'error'); }
       });
     });
   }
@@ -925,7 +925,7 @@ class ConstructionManagerUI {
     document.getElementById('saveWorkforceBtn')?.addEventListener('click', async () => {
       const task_id = document.getElementById('workforceTask')?.value;
       const work_date = document.getElementById('workforceDate')?.value;
-      if (!task_id || !work_date) return alert('Заполните задачу и дату');
+      if (!task_id || !work_date) return this.showToast('Заполните задачу и дату', 'error');
       const plannedValue = document.getElementById('workforcePlan')?.value;
       const actualValue = document.getElementById('workforceFact')?.value;
       await api(`/projects/${project.id}/smr/workforce`, 'POST', {
@@ -1351,7 +1351,7 @@ class ConstructionManagerUI {
     if (!rowId) return;
     const irdError = this.validateIrdDates(this.irdDraftData || {});
     if (irdError) {
-      alert(irdError);
+      this.showToast(irdError, 'error');
       return;
     }
     try {
@@ -1554,7 +1554,7 @@ class ConstructionManagerUI {
       }
       return true;
     } catch (e) {
-      alert('Ошибка удаления проекта: ' + (e.message || 'Неизвестная ошибка'));
+      this.showToast('Ошибка удаления проекта: ' + (e.message || 'Неизвестная ошибка'), 'error');
       return false;
     }
   }
@@ -1651,7 +1651,7 @@ class ConstructionManagerUI {
     const file = await this.pickFile('.csv,.xlsx,.xls');
     if (!file) return;
     const parsed = await this.parseSpreadsheetRows(file);
-    if (parsed.length < 2) return alert('Файл пустой или нет строк для импорта');
+    if (parsed.length < 2) return this.showToast('Файл пустой или нет строк для импорта', 'error');
     const headers = parsed[0].map((h) => this.normalizeImportToken(h));
     const columns = tpl.columns || [];
     
@@ -1676,7 +1676,7 @@ class ConstructionManagerUI {
       const scheduleStage = this.currentView === 'designScheduleR' ? 'R' : 'P';
       rows.forEach((row) => { row.schedule_stage = scheduleStage; });
     }
-    if (!rows.length) return alert('Не удалось распознать строки по заголовкам CSV. Проверьте названия колонок в файле.');
+    if (!rows.length) return this.showToast('Не удалось распознать строки по заголовкам CSV. Проверьте названия колонок в файле.', 'error');
     const fields = columns.map((c) => c.field_key);
     this.importDraft = {
       kind: 'template-import',
@@ -1699,7 +1699,7 @@ class ConstructionManagerUI {
     const file = await this.pickFile('.csv,.xlsx,.xls');
     if (!file) return;
     const parsed = await this.parseSpreadsheetRows(file);
-    if (parsed.length < 2) return alert('Файл пустой или нет строк для импорта');
+    if (parsed.length < 2) return this.showToast('Файл пустой или нет строк для импорта', 'error');
     const headers = parsed[0].map((h) => this.normalizeImportToken(h));
     const map = {
       volume_number: ['№', 'номер', 'том', '№ тома', 'volume_number'],
@@ -1729,7 +1729,7 @@ class ConstructionManagerUI {
       });
       return data;
     }).filter((entry) => String(entry.designation || '').trim() && String(entry.name || '').trim());
-    if (!rows.length) return alert('Не удалось распознать обязательные поля (Обозначение, Наименование). Проверьте названия колонок в файле.');
+    if (!rows.length) return this.showToast('Не удалось распознать обязательные поля (Обозначение, Наименование). Проверьте названия колонок в файле.', 'error');
     this.importDraft = { kind: 'registry-import', stage, title, rows, mode: 'upsert' };
     this.modalMode = 'importPreview';
     document.getElementById('modalTitle').textContent = `${title}: импорт — предпросмотр`;
@@ -1886,7 +1886,7 @@ class ConstructionManagerUI {
   }
 
   exportRowsToXLSX(fileName, headers, rows) {
-    if (!window.XLSX) return alert('Библиотека XLSX не загружена');
+    if (!window.XLSX) return this.showToast('Библиотека XLSX не загружена', 'error');
     const sheet = window.XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const book = window.XLSX.utils.book_new();
     window.XLSX.utils.book_append_sheet(book, sheet, 'Данные');
@@ -1934,19 +1934,19 @@ class ConstructionManagerUI {
     if (this.currentView === 'svorHistory') return this.renderSvorHistoryList();
     if (this.currentView === 'auth') {
       await issueDemoToken('admin');
-      return alert('Demo token обновлён.');
+      return this.showToast('Demo token обновлён.', 'success');
     }
     if (['protocolInternal', 'protocolDesign', 'protocolSMR'].includes(this.currentView)) {
       // Для протоколов — заглушка, в будущем можно открыть форму создания поручения
       const section = this.currentView === 'protocolInternal' ? 'Внутренние' : this.currentView === 'protocolDesign' ? 'Проектирование' : 'СМР';
-      return alert(`Раздел «Протоколы — ${section}» в разработке. Скоро появится возможность добавлять поручения.`);
+      return this.showToast(`Раздел «Протоколы — ${section}» в разработке. Скоро появится возможность добавлять поручения.`, 'info');
     }
     if (this.currentView === 'docsTemplates') {
       // Для шаблонов документов открываем форму создания нового шаблона
       const project = this.currentProject();
-      if (!project) return alert('Выберите проект');
+      if (!project) return this.showToast('Выберите проект', 'error');
       // Можно реализовать открытие модального окна для создания шаблона
-      return alert('Функционал добавления шаблона документа будет реализован в следующей версии');
+      return this.showToast('Функционал добавления шаблона документа будет реализован в следующей версии', 'info');
     }
     if (this.isTemplateView(this.currentView)) {
       const resolved = this.resolveTemplateView(this.currentView);
@@ -1999,7 +1999,7 @@ class ConstructionManagerUI {
     if (this.currentView === 'docsTemplates') {
       // Экспорт шаблонов документов в XLSX
       const project = this.currentProject();
-      if (!project) return alert('Выберите проект');
+      if (!project) return this.showToast('Выберите проект', 'error');
       const token = localStorage.getItem('cm_token');
       const url = `/api/v1/projects/${project.id}/docs/templates/export.xlsx`;
       window.open(url + (token ? `?token=${encodeURIComponent(token)}` : ''), '_blank');
@@ -2227,7 +2227,7 @@ class ConstructionManagerUI {
       const revision_num = document.getElementById('revNum')?.value?.trim();
       const revision_date = document.getElementById('revDate')?.value;
       const change_note = document.getElementById('revNote')?.value?.trim();
-      if (!docRID || !revision_num || !revision_date) return alert('Заполните номер и дату изменения');
+      if (!docRID || !revision_num || !revision_date) return this.showToast('Заполните номер и дату изменения', 'error');
       await api(`/projects/${project.id}/docs/r/${docRID}/revisions`, 'POST', { revision_num, revision_date, change_note });
       this.closeModal();
       return this.renderDocsStageR();
@@ -2236,7 +2236,7 @@ class ConstructionManagerUI {
     if (this.modalMode === 'createSvor') {
       const project = this.currentProject();
       const doc_r_id = document.getElementById('newSvorDocR')?.value;
-      if (!doc_r_id) return alert('Выберите комплект РД');
+      if (!doc_r_id) return this.showToast('Выберите комплект РД', 'error');
       await api(`/projects/${project.id}/svor`, 'POST', {
         doc_r_id,
         submission_date: document.getElementById('newSvorSubmissionDate')?.value || '',
@@ -2253,7 +2253,7 @@ class ConstructionManagerUI {
       
       const data = this.collectProjectForm();
       const err = this.validateProjectForm(data);
-      if (err) return alert(err);
+      if (err) return this.showToast(err, 'error');
       
       this.isCreatingProject = true;
       const saveBtn = document.getElementById('saveEntity');
@@ -2270,7 +2270,7 @@ class ConstructionManagerUI {
         this.renderProjectTree();
         this.switchView('projects', 'Проекты');
       } catch (e) {
-        alert('Ошибка создания проекта: ' + (e.message || 'Неизвестная ошибка'));
+        this.showToast('Ошибка создания проекта: ' + (e.message || 'Неизвестная ошибка'), 'error');
       } finally {
         this.isCreatingProject = false;
         if (saveBtn) {
@@ -2290,7 +2290,7 @@ class ConstructionManagerUI {
       if (err) {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Сохранить';
-        return alert(err);
+        return this.showToast(err, 'error');
       }
       try {
         await api(`/objects/${this.state.editProjectId}`, 'PUT', {
@@ -2302,13 +2302,13 @@ class ConstructionManagerUI {
           planned_end_date: data.planned_end_date || null,
           description: data.description || '',
         });
-        alert('Сохранено');
+        this.showToast('Сохранено', 'success');
         await this.loadObjects();
         this.renderProjectTree();
         this.closeModal();
         this.renderProjects();
       } catch (e) {
-        alert(e.message || 'Ошибка сохранения');
+        this.showToast(e.message || 'Ошибка сохранения', 'error');
       } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Сохранить';
@@ -2320,9 +2320,9 @@ class ConstructionManagerUI {
       const projectId = document.getElementById('dashboardProject')?.value;
       const type = document.querySelector('input[name="dashType"]:checked')?.value || 'basic';
       const name = document.getElementById('dashboardName')?.value?.trim();
-      if (!projectId) return alert('Выберите проект');
+      if (!projectId) return this.showToast('Выберите проект', 'error');
       if (this.state.dashboards.some((d) => String(d.projectId) === String(projectId) && d.type === type)) {
-        return alert('Этот проект уже добавлен для выбранного типа дашборда');
+        return this.showToast('Этот проект уже добавлен для выбранного типа дашборда', 'error');
       }
       const project = this.objects.find((o) => String(o.id) === String(projectId));
       this.state.dashboards.push({ id: crypto.randomUUID(), projectId, projectName: project?.name || 'Проект', type, title: name || `${project?.name || 'Проект'} • ${type}` });
@@ -2712,12 +2712,12 @@ class ConstructionManagerUI {
 
   async attachImageFile(file) {
     if (!file.type?.startsWith('image/')) {
-      alert('Поддерживаются только изображения.');
+      this.showToast('Поддерживаются только изображения.', 'error');
       return;
     }
     const maxBytes = 8 * 1024 * 1024;
     if (file.size > maxBytes) {
-      alert('Слишком большой файл. Максимум 8 МБ.');
+      this.showToast('Слишком большой файл. Максимум 8 МБ.', 'error');
       return;
     }
 
@@ -2735,7 +2735,7 @@ class ConstructionManagerUI {
 
   async captureScreenshotArea() {
     if (!navigator.mediaDevices?.getDisplayMedia) {
-      alert('Ваш браузер не поддерживает захват экрана.');
+      this.showToast('Ваш браузер не поддерживает захват экрана.', 'error');
       return;
     }
 
