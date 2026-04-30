@@ -223,7 +223,30 @@ func (r *GormRepository) ListIrdDocuments(ctx context.Context, projectID string)
 }
 
 func (r *GormRepository) CreateIrdDocument(ctx context.Context, doc *models.IrdDocument) error {
-	return r.DB.WithContext(ctx).Create(doc).Error
+	if doc.ID == "" {
+		doc.ID = uuid.NewString()
+	}
+	values := map[string]any{
+		"id":         doc.ID,
+		"project_id": doc.ProjectID,
+		"doc_type":   doc.DocType,
+		"doc_number": doc.DocNumber,
+		"status":     doc.Status,
+		"issuer":     doc.Issuer,
+		"notes":      doc.Notes,
+		"file_path":  doc.FilePath,
+	}
+	if strings.TrimSpace(doc.IssueDate) == "" {
+		values["issue_date"] = nil
+	} else {
+		values["issue_date"] = doc.IssueDate
+	}
+	if strings.TrimSpace(doc.ExpiryDate) == "" {
+		values["expiry_date"] = nil
+	} else {
+		values["expiry_date"] = doc.ExpiryDate
+	}
+	return r.DB.WithContext(ctx).Model(&models.IrdDocument{}).Create(values).Error
 }
 
 func (r *GormRepository) GetIrdDocumentByID(ctx context.Context, id string) (*models.IrdDocument, error) {
@@ -236,7 +259,25 @@ func (r *GormRepository) GetIrdDocumentByID(ctx context.Context, id string) (*mo
 }
 
 func (r *GormRepository) UpdateIrdDocument(ctx context.Context, doc *models.IrdDocument) error {
-	return r.DB.WithContext(ctx).Save(doc).Error
+	values := map[string]any{
+		"doc_type":   doc.DocType,
+		"doc_number": doc.DocNumber,
+		"status":     doc.Status,
+		"issuer":     doc.Issuer,
+		"notes":      doc.Notes,
+		"file_path":  doc.FilePath,
+	}
+	if strings.TrimSpace(doc.IssueDate) == "" {
+		values["issue_date"] = nil
+	} else {
+		values["issue_date"] = doc.IssueDate
+	}
+	if strings.TrimSpace(doc.ExpiryDate) == "" {
+		values["expiry_date"] = nil
+	} else {
+		values["expiry_date"] = doc.ExpiryDate
+	}
+	return r.DB.WithContext(ctx).Model(&models.IrdDocument{}).Where("id = ?", doc.ID).Updates(values).Error
 }
 
 func (r *GormRepository) DeleteIrdDocument(ctx context.Context, id string) error {
