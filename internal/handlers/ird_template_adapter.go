@@ -11,6 +11,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func validateIrdDateRange(issueDate, expiryDate string) error {
+	if issueDate == "" || expiryDate == "" {
+		return nil
+	}
+	issue, err := time.Parse("2006-01-02", issueDate)
+	if err != nil {
+		return fmt.Errorf("issue_date: используйте формат YYYY-MM-DD")
+	}
+	expiry, err := time.Parse("2006-01-02", expiryDate)
+	if err != nil {
+		return fmt.Errorf("expiry_date: используйте формат YYYY-MM-DD")
+	}
+	if expiry.Before(issue) {
+		return fmt.Errorf("expiry_date не может быть раньше issue_date")
+	}
+	return nil
+}
+
 // irdColumns — колонки ИРД, жёстко заданные в коде.
 // Не зависят от БД: шаблон всегда доступен на любой чистой базе.
 var irdColumns = []gin.H{
@@ -147,7 +165,7 @@ func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 		// Обработка дат - только непустые значения
 		issueDate := strings.TrimSpace(input.Data["issue_date"])
 		expiryDate := strings.TrimSpace(input.Data["expiry_date"])
-		
+
 		// Преобразуем пустые строки в пустые значения для БД
 		if issueDate == "" || issueDate == "null" {
 			issueDate = ""
@@ -157,7 +175,7 @@ func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 				return
 			}
 		}
-		
+
 		if expiryDate == "" || expiryDate == "null" {
 			expiryDate = ""
 		} else {
@@ -165,6 +183,10 @@ func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "expiry_date: используйте формат YYYY-MM-DD"})
 				return
 			}
+		}
+		if err := validateIrdDateRange(issueDate, expiryDate); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
 		}
 
 		doc := &models.IrdDocument{
@@ -252,6 +274,10 @@ func UpdateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 				return
 			}
 			doc.ExpiryDate = v
+		}
+		if err := validateIrdDateRange(doc.IssueDate, doc.ExpiryDate); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
 		}
 		if v := strings.TrimSpace(input.Data["status"]); v != "" {
 			doc.Status = v
