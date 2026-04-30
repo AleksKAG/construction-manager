@@ -62,25 +62,26 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
+		warnings := make([]string, 0, 4)
 		tepRows, err := repo.ListTemplateRows(c.Request.Context(), input.ProjectID, "tep")
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
+			warnings = append(warnings, "TEP недоступен: "+err.Error())
+			tepRows = nil
 		}
 		estimateRows, err := repo.ListTemplateRows(c.Request.Context(), input.ProjectID, "summary_estimate")
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
+			warnings = append(warnings, "Сводный сметный расчёт недоступен: "+err.Error())
+			estimateRows = nil
 		}
 		scheduleRows, err := repo.ListTemplateRows(c.Request.Context(), input.ProjectID, "design_schedule")
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
+			warnings = append(warnings, "График проектирования недоступен: "+err.Error())
+			scheduleRows = nil
 		}
 		tasks, err := repo.ListTasksByProject(c.Request.Context(), input.ProjectID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
+			warnings = append(warnings, "Задачи проекта недоступны: "+err.Error())
+			tasks = nil
 		}
 
 		area := round2(resolveTotalArea(tepRows))
@@ -164,7 +165,7 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 		}
 
 		summary := fmt.Sprintf(
-			"Проект: %s\nСтатус: %s\nАдрес: %s\nПлощадь: %.2f м²\nБюджет/стоимость: %.2f руб.\nПлан: %.2f%%\nФакт: %.2f%%\nОтклонение: %.2f п.п.\nЗадач в проекте: %d\nПоследние выполненные задачи: %s\nКритические моменты: %s",
+			"Проект: %s\n\n1) Статус и контекст:\n- Статус: %s\n- Адрес: %s\n\n2) Прогресс:\n- Площадь: %.2f м²\n- Бюджет/стоимость: %.2f руб.\n- План: %.2f%%\n- Факт: %.2f%%\n- Отклонение: %.2f п.п.\n\n3) Последние задачи:\n- Всего задач: %d\n- Выполнено недавно: %s\n\n4) Критические риски:\n- %s",
 			project.Name,
 			projectStatus,
 			project.Address,
@@ -179,6 +180,9 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 		)
 		if q := strings.TrimSpace(input.Question); q != "" {
 			summary = fmt.Sprintf("%s\n\nФокус вопроса: %s", summary, q)
+		}
+		if len(warnings) > 0 {
+			summary = fmt.Sprintf("%s\n\n5) Ограничения данных (fallback при частичных ошибках API):\n- %s", summary, strings.Join(warnings, "\n- "))
 		}
 
 		c.JSON(http.StatusOK, gin.H{
