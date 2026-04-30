@@ -48,6 +48,7 @@ class ConstructionManagerUI {
       projectRefreshSeconds: 120,
       dashboardRefreshing: false,
       projectsRefreshing: false,
+      tableLoading: false,
       modalDirty: false,
       editProjectId: null,
       projectFormSnapshot: '',
@@ -845,7 +846,8 @@ class ConstructionManagerUI {
           </div>
         </div>
         <p class="metric">Редактирование включается через меню «Действия» и применяется только к текущей таблице.</p>
-        <div class="table-wrap">
+        <div class="table-wrap table-load-wrap ${this.state.tableLoading ? "is-loading" : ""}">
+          <div class="table-loading-overlay ${this.state.tableLoading ? "" : "hidden"}"><span class="spinner"></span></div>
         <table class="table table-sticky">
           <thead><tr><th>№</th><th>Том</th><th>Шифр</th><th>Марка</th><th>Обозначение</th><th>Наименование</th><th>Исполнитель</th><th>Примечание</th><th class="${isEditMode ? '' : 'hidden'}"></th></tr></thead>
           <tbody>${body || '<tr><td colspan="9">Нет данных</td></tr>'}</tbody>
@@ -1096,7 +1098,8 @@ class ConstructionManagerUI {
           <button class="mini" id="prevPage">←</button>
           <button class="mini" id="nextPage">→</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap table-load-wrap ${this.state.tableLoading ? "is-loading" : ""}">
+          <div class="table-loading-overlay ${this.state.tableLoading ? "" : "hidden"}"><span class="spinner"></span></div>
         <table class="table ${isIRD ? 'table-sticky-head' : ''}">
           <thead><tr>${columns.map((c) => `<th>${this.normalizeTemplateColumnTitle(code, c)}</th>`).join('')}<th class="actions-col ${this.templateEditModes[this.currentView || code] ? "" : "hidden"}">Действия</th></tr></thead>
           <tbody>
@@ -1196,6 +1199,34 @@ class ConstructionManagerUI {
     };
   }
 
+  async forceSyncScheduleFromRegistry(projectId, stage = 'phase-p') {
+    const scheduleStage = stage === 'phase-r' ? 'R' : 'P';
+    const payload = await api(`/projects/${projectId}/design/${stage}/registry`);
+    const registry = Array.isArray(payload) ? payload : [];
+    if (!registry.length) return;
+    const schedulePayload = await listTemplateRows(projectId, 'design_schedule', { page: 1, page_size: 500, search: '', schedule_stage: scheduleStage });
+    const existing = schedulePayload.data || [];
+    const byCode = new Map(existing.map((row) => [String((row.data || {}).code || '').trim().toLowerCase(), row]));
+    for (let i = 0; i < registry.length; i += 1) {
+      const item = registry[i];
+      const code = String(item.designation || item.code || '').trim();
+      const normalized = code.toLowerCase();
+      const base = {
+        volume_no: item.volume_number || String(i + 1),
+        code,
+        name: item.name || '',
+        executor: item.contractor || '',
+        schedule_stage: scheduleStage,
+      };
+      const current = byCode.get(normalized);
+      if (!current) {
+        await createTemplateRow(projectId, 'design_schedule', base);
+      } else {
+        await updateTemplateRow(current.id, { ...(current.data || {}), ...base });
+      }
+    }
+  }
+
 
   renderTemplateRows(code, rows, columns) {
     this.templateRowsCache = rows;
@@ -1208,13 +1239,49 @@ class ConstructionManagerUI {
     return rows.map((r) => `<tr>${columns.map((c) => `<td>${(r.data || {})[c.field_key] ?? ""}</td>`).join("")}<td class="actions-col ${this.templateEditModes[this.currentView || code] ? "" : "hidden"}"><div class="row-actions"><button class="mini" data-edit-row="${r.id}">Ред.</button><button class="mini danger" data-del-row="${r.id}">Удал.</button><button class="mini" data-move-row="${r.id}:up">↑</button><button class="mini" data-move-row="${r.id}:down">↓</button></div></td></tr>`).join("");
   }
 
+  formatDisplayDate(value) {
+    if (!value) return '';
+    const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return value;
+    return `${m[3]}-${m[2]}-${m[1]}`;
+  }
+
+  showToast(message, type = 'success') {
+    const root = document.getElementById('toastRoot') || (() => {
+      const el = document.createElement('div');
+      el.id = 'toastRoot';
+      el.className = 'toast-root';
+      document.body.appendChild(el);
+      return el;
+    })();
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `<button class="toast-close" aria-label="Закрыть">✕</button><div>${message}</div>`;
+    root.appendChild(toast);
+    const close = () => { toast.classList.add('fade-out'); setTimeout(() => toast.remove(), 300); };
+    toast.querySelector('.toast-close')?.addEventListener('click', close);
+    setTimeout(close, 5000);
+  }
+
+  async withTableLoading(action) {
+    this.state.tableLoading = true;
+    document.querySelectorAll('.table-load-wrap').forEach((el) => el.classList.add('is-loading'));
+    document.querySelectorAll('.table-loading-overlay').forEach((el) => el.classList.remove('hidden'));
+    try { return await action(); }
+    finally {
+      this.state.tableLoading = false;
+      document.querySelectorAll('.table-load-wrap').forEach((el) => el.classList.remove('is-loading'));
+      document.querySelectorAll('.table-loading-overlay').forEach((el) => el.classList.add('hidden'));
+    }
+  }
+
   renderIRDRows(rows, columns) {
     const code = this.currentTemplateCode || 'input_design_data';
     return rows.map((r) => {
       const isRowEditing = this.irdEditingRowId != null && String(this.irdEditingRowId) === String(r.id);
       const cells = columns.map((c) => {
         const current = isRowEditing ? (this.irdDraftData[c.field_key] ?? '') : ((r.data || {})[c.field_key] ?? '');
-        if (!isRowEditing) return `<td>${current}</td>`;
+        if (!isRowEditing) return `<td>${c.data_type === 'date' ? this.formatDisplayDate(current) : current}</td>`;
         const type = c.data_type === 'number' ? 'number' : c.data_type === 'date' ? 'date' : 'text';
         return `<td><input class="ird-inline-input" data-ird-field="${c.field_key}" type="${type}" value="${current}"></td>`;
       }).join('');
@@ -1287,10 +1354,18 @@ class ConstructionManagerUI {
       alert(irdError);
       return;
     }
-    await updateIrdRow(rowId, this.irdDraftData);
-    this.irdEditingRowId = null;
-    this.irdDraftData = {};
-    await this.renderTemplateScreen(defaultCode, title);
+    try {
+      await this.withTableLoading(async () => {
+        await updateIrdRow(rowId, this.irdDraftData);
+        this.irdEditingRowId = null;
+        this.irdDraftData = {};
+        await this.renderTemplateScreen(defaultCode, title);
+      });
+      this.showToast('Данные добавлены/обновлены.', 'success');
+    } catch (error) {
+      this.showToast(`Ошибка сохранения: ${error?.message || 'неизвестная ошибка'}`, 'error');
+      throw error;
+    }
   }
 
   renderTEPSectionedRows(rows, columns) {
@@ -1682,7 +1757,8 @@ class ConstructionManagerUI {
           </select>
         </label>` : '<div></div>'}
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap table-load-wrap ${this.state.tableLoading ? "is-loading" : ""}">
+          <div class="table-loading-overlay ${this.state.tableLoading ? "" : "hidden"}"><span class="spinner"></span></div>
       <table class="table">
         <thead><tr>${fields.map((f) => `<th>${f}</th>`).join('')}</tr></thead>
         <tbody>
@@ -1746,7 +1822,8 @@ class ConstructionManagerUI {
         <h4 style="margin:0">Ошибки импорта</h4>
         <button class="mini" id="downloadImportErrorsBtn">Скачать ошибки CSV</button>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap table-load-wrap ${this.state.tableLoading ? "is-loading" : ""}">
+          <div class="table-loading-overlay ${this.state.tableLoading ? "" : "hidden"}"><span class="spinner"></span></div>
         <table class="table">
           <thead><tr><th>Строка</th><th>Ошибка</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -2272,6 +2349,7 @@ class ConstructionManagerUI {
         
         // Затем получаем сводку по каждому проекту
         const chunks = await Promise.all(activeProjects.map(async (project) => {
+          if (!project?.id) return `Проект: ${project?.name || 'Без названия'}\nОшибка: project_id is required`;
           const payload = await api('/agent/summary', 'POST', { project_id: String(project.id), question: 'Сформируй краткий статус, прогресс, последние задачи и критические моменты.' });
           return [`Проект: ${project.name}`, payload.answer, 'Рекомендации:', ...(payload.next_actions || []).map((a, i) => `${i + 1}. ${a}`)].join('\n');
         }));
@@ -2305,19 +2383,29 @@ class ConstructionManagerUI {
       const code = document.getElementById('regCode')?.value.trim();
       const contractor = document.getElementById('regContractor')?.value.trim();
       const issue_date_fact = document.getElementById('regIssueDate')?.value || undefined;
-      if (!designation) return alert('Укажите обозначение');
-      if (!name) return alert('Укажите наименование');
-      await api(`/projects/${project.id}/design/${stage}/registry`, 'POST', {
-        id: this.importDraft?.kind === 'registry-edit' ? this.importDraft?.rowId : undefined,
-        designation,
-        name,
-        mark,
-        code,
-        contractor,
-        issue_date_fact,
+      if (!designation) {
+        this.showToast('Укажите обозначение', 'error');
+        return;
+      }
+      if (!name) {
+        this.showToast('Укажите наименование', 'error');
+        return;
+      }
+      await this.withTableLoading(async () => {
+        await api(`/projects/${project.id}/design/${stage}/registry`, 'POST', {
+          id: this.importDraft?.kind === 'registry-edit' ? this.importDraft?.rowId : undefined,
+          designation,
+          name,
+          mark,
+          code,
+          contractor,
+          issue_date_fact,
+        });
+        await this.renderRegistry(stage, title);
       });
       this.closeModal();
-      return this.renderRegistry(stage, title);
+      this.showToast('Данные добавлены/обновлены.', 'success');
+      return;
     }
 
     if (this.modalMode === 'importPreview') {
@@ -2327,13 +2415,17 @@ class ConstructionManagerUI {
       if (this.importDraft.kind === 'template-import') {
         const mode = this.importDraft.mode || 'add';
         const keyField = this.importDraft.keyField || this.detectImportKeyField(this.importDraft.fields || []);
-        const stats = await api(`/objects/${project.id}/templates/${this.importDraft.code}/import`, 'POST', {
-          mode,
-          key_field: keyField,
-          rows: this.importDraft.rows,
+        const stats = await this.withTableLoading(async () => {
+          const result = await api(`/objects/${project.id}/templates/${this.importDraft.code}/import`, 'POST', {
+            mode,
+            key_field: keyField,
+            rows: this.importDraft.rows,
+          });
+          await this.renderTemplateScreen(this.importDraft.code, this.importDraft.title);
+          return result;
         });
         this.closeModal();
-        await this.renderTemplateScreen(this.importDraft.code, this.importDraft.title);
+        this.showToast((stats.errors && stats.errors.length) ? `Импорт с ошибками: ${stats.errors.length}` : 'Данные добавлены.', (stats.errors && stats.errors.length) ? 'error' : 'success');
         this.showImportResultModal(this.importDraft.title, stats);
         return;
       }
@@ -2343,9 +2435,14 @@ class ConstructionManagerUI {
           ...row,
           volume_number: this.parseImportInt(row.volume_number),
         }));
-        const stats = await api(`/projects/${project.id}/design/${this.importDraft.stage}/registry/import`, 'POST', { mode, rows });
+        const stats = await this.withTableLoading(async () => {
+          const result = await api(`/projects/${project.id}/design/${this.importDraft.stage}/registry/import`, 'POST', { mode, rows });
+          await this.forceSyncScheduleFromRegistry(project.id, this.importDraft.stage);
+          await this.renderRegistry(this.importDraft.stage, this.importDraft.title);
+          return result;
+        });
         this.closeModal();
-        await this.renderRegistry(this.importDraft.stage, this.importDraft.title);
+        this.showToast((stats.errors && stats.errors.length) ? `Импорт с ошибками: ${stats.errors.length}` : 'Данные добавлены.', (stats.errors && stats.errors.length) ? 'error' : 'success');
         this.showImportResultModal(this.importDraft.title, stats);
         return;
       }
@@ -2359,18 +2456,22 @@ class ConstructionManagerUI {
         if (code === 'input_design_data') {
           const irdError = this.validateIrdDates(data);
           if (irdError) {
-            alert(irdError);
+            this.showToast(irdError, 'error');
             return;
           }
         }
         if (code === 'design_schedule') data.schedule_stage = this.currentView === 'designScheduleR' ? 'R' : 'P';
-        if (this.editRowId) await updateTemplateRow(this.editRowId, data);
-        else await createTemplateRow(this.selectedObjectId, code, data);
+        await this.withTableLoading(async () => {
+          if (this.editRowId) await updateTemplateRow(this.editRowId, data);
+          else await createTemplateRow(this.selectedObjectId, code, data);
+        });
         this.closeModal();
         if (["tep", "summary_estimate"].includes(code)) await this.refreshDashboardMetrics();
-        return this.renderContent();
+        await this.renderContent();
+        this.showToast('Данные добавлены/обновлены.', 'success');
+        return;
       } catch (error) {
-        alert(error?.message || 'Не удалось сохранить строку');
+        this.showToast(error?.message || 'Не удалось сохранить строку', 'error');
       }
     }
   }
