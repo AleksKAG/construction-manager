@@ -11,6 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var validIrdDocTypes = map[string]bool{"GPZU": true, "TZ": true, "MTZ": true, "TU": true}
+
 func validateIrdDateRange(issueDate, expiryDate string) error {
 	if issueDate == "" || expiryDate == "" {
 		return nil
@@ -151,9 +153,13 @@ func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		docType := strings.TrimSpace(input.Data["doc_type"])
+		docType := strings.ToUpper(strings.TrimSpace(input.Data["doc_type"]))
 		if docType == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "doc_type is required"})
+			return
+		}
+		if !validIrdDocTypes[docType] {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid doc_type, must be GPZU, TZ, MTZ or TU"})
 			return
 		}
 
@@ -253,6 +259,11 @@ func UpdateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 
 		// Обновляем только переданные поля
 		if v := strings.TrimSpace(input.Data["doc_type"]); v != "" {
+			v = strings.ToUpper(v)
+			if !validIrdDocTypes[v] {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid doc_type, must be GPZU, TZ, MTZ or TU"})
+				return
+			}
 			doc.DocType = v
 		}
 		if v, ok := input.Data["doc_number"]; ok {
@@ -261,17 +272,23 @@ func UpdateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 		if v, ok := input.Data["issuer"]; ok {
 			doc.Issuer = strings.TrimSpace(v)
 		}
-		if v := strings.TrimSpace(input.Data["issue_date"]); v != "" {
-			if _, err := time.Parse("2006-01-02", v); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "issue_date: используйте формат YYYY-MM-DD"})
-				return
+		if v, ok := input.Data["issue_date"]; ok {
+			v = strings.TrimSpace(v)
+			if v != "" {
+				if _, err := time.Parse("2006-01-02", v); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "issue_date: используйте формат YYYY-MM-DD"})
+					return
+				}
 			}
 			doc.IssueDate = v
 		}
-		if v := strings.TrimSpace(input.Data["expiry_date"]); v != "" {
-			if _, err := time.Parse("2006-01-02", v); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "expiry_date: используйте формат YYYY-MM-DD"})
-				return
+		if v, ok := input.Data["expiry_date"]; ok {
+			v = strings.TrimSpace(v)
+			if v != "" {
+				if _, err := time.Parse("2006-01-02", v); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "expiry_date: используйте формат YYYY-MM-DD"})
+					return
+				}
 			}
 			doc.ExpiryDate = v
 		}
@@ -384,9 +401,13 @@ func ImportIrdTemplateRows(repo repository.Repository) gin.HandlerFunc {
 			for k, v := range raw {
 				data[k] = strings.TrimSpace(fmt.Sprint(v))
 			}
-			docType := strings.TrimSpace(data["doc_type"])
+			docType := strings.ToUpper(strings.TrimSpace(data["doc_type"]))
 			if docType == "" {
 				errorsList = append(errorsList, rowError{Index: idx + 1, Message: "doc_type is required"})
+				continue
+			}
+			if !validIrdDocTypes[docType] {
+				errorsList = append(errorsList, rowError{Index: idx + 1, Message: "invalid doc_type, must be GPZU, TZ, MTZ or TU"})
 				continue
 			}
 			issueDate := strings.TrimSpace(data["issue_date"])
