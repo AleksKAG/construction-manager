@@ -86,7 +86,6 @@ func main() {
 			&models.TemplateDefinition{},
 			&models.TemplateColumn{},
 			&models.ProjectTemplateRow{},
-			&models.IrdDocument{},
 		); err != nil {
 			logger.Fatal("Minimum migration failed: ", err)
 		}
