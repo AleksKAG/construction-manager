@@ -11,8 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var validIrdDocTypes = map[string]bool{"GPZU": true, "TZ": true, "MTZ": true, "TU": true}
-
 func validateIrdDateRange(issueDate, expiryDate string) error {
 	if issueDate == "" || expiryDate == "" {
 		return nil
@@ -153,15 +151,7 @@ func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		docType := strings.ToUpper(strings.TrimSpace(input.Data["doc_type"]))
-		if docType == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "doc_type is required"})
-			return
-		}
-		if !validIrdDocTypes[docType] {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid doc_type, must be GPZU, TZ, MTZ or TU"})
-			return
-		}
+		docType := strings.TrimSpace(input.Data["doc_type"])
 
 		status := strings.TrimSpace(input.Data["status"])
 		if status == "" {
@@ -258,13 +248,8 @@ func UpdateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 		}
 
 		// Обновляем только переданные поля
-		if v := strings.TrimSpace(input.Data["doc_type"]); v != "" {
-			v = strings.ToUpper(v)
-			if !validIrdDocTypes[v] {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid doc_type, must be GPZU, TZ, MTZ or TU"})
-				return
-			}
-			doc.DocType = v
+		if v, ok := input.Data["doc_type"]; ok {
+			doc.DocType = strings.TrimSpace(v)
 		}
 		if v, ok := input.Data["doc_number"]; ok {
 			doc.DocNumber = strings.TrimSpace(v)
@@ -401,15 +386,7 @@ func ImportIrdTemplateRows(repo repository.Repository) gin.HandlerFunc {
 			for k, v := range raw {
 				data[k] = strings.TrimSpace(fmt.Sprint(v))
 			}
-			docType := strings.ToUpper(strings.TrimSpace(data["doc_type"]))
-			if docType == "" {
-				errorsList = append(errorsList, rowError{Index: idx + 1, Message: "doc_type is required"})
-				continue
-			}
-			if !validIrdDocTypes[docType] {
-				errorsList = append(errorsList, rowError{Index: idx + 1, Message: "invalid doc_type, must be GPZU, TZ, MTZ or TU"})
-				continue
-			}
+			docType := strings.TrimSpace(data["doc_type"])
 			issueDate := strings.TrimSpace(data["issue_date"])
 			expiryDate := strings.TrimSpace(data["expiry_date"])
 			if issueDate != "" {
