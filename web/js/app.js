@@ -62,7 +62,10 @@ class ConstructionManagerUI {
     this.currentTemplateName = null;
     this.templatePage = 1;
     this.templateSearch = '';
+    this.ganttScope = 'page';
+    this.ganttScale = 'day';
     this.editRowId = null;
+    this.templateAutoCalculatedFields = new Set();
     this.projectsMenuOpen = true;
     this.expandedProjects = new Set();
     this.expandedMenuNodes = new Set();
@@ -1078,6 +1081,16 @@ class ConstructionManagerUI {
     this.currentTemplateName = (this.currentView === 'designScheduleR')
       ? 'График разработки рабочей документации'
       : templateName;
+    let ganttRows = rows;
+    if (code === 'design_schedule' && this.ganttScope === 'all') {
+      try {
+        const allPayload = await listTemplateRows(project.id, code, { page: 1, page_size: 500, search: this.templateSearch, ...(scheduleStage ? { schedule_stage: scheduleStage } : {}) });
+        ganttRows = allPayload.data || rows;
+      } catch (_) {
+        ganttRows = rows;
+      }
+    }
+    const ganttBlock = code === 'design_schedule' ? this.renderScheduleGantt(ganttRows, { projectId: project.id, scope: this.ganttScope, scale: this.ganttScale, stage: scheduleStage }) : '';
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
@@ -1098,6 +1111,7 @@ class ConstructionManagerUI {
           <button class="mini" id="prevPage">←</button>
           <button class="mini" id="nextPage">→</button>
         </div>
+        ${ganttBlock}
         <div class="table-wrap table-load-wrap ${this.state.tableLoading ? "is-loading" : ""}">
           <div class="table-loading-overlay ${this.state.tableLoading ? "" : "hidden"}"><span class="spinner"></span></div>
         <table class="table ${isIRD ? 'table-sticky-head' : ''}">
@@ -1125,12 +1139,65 @@ class ConstructionManagerUI {
       return this.exportTemplateXLSX(project.id, code);
     };
     document.getElementById('importTemplateBtn').onclick = () => this.startTemplateImport();
+    if (code === 'design_schedule') {
+      document.querySelectorAll('[data-gantt-scope]').forEach((btn) => btn.onclick = async () => {
+        this.ganttScope = btn.dataset.ganttScope;
+        await this.renderTemplateScreen(defaultCode, title);
+      });
+      document.querySelectorAll('[data-gantt-scale]').forEach((btn) => btn.onclick = async () => {
+        this.ganttScale = btn.dataset.ganttScale;
+        await this.renderTemplateScreen(defaultCode, title);
+      });
+    }
     document.querySelectorAll('[data-edit-row]').forEach((btn) => { btn.onclick = () => this.openTemplateForm(tpl, rows.find((r) => String(r.id) === String(btn.dataset.editRow))); });
     document.querySelectorAll('[data-del-row]').forEach((btn) => { btn.onclick = async () => { if (!confirm("Удалить строку?")) return; await deleteTemplateRow(btn.dataset.delRow); if (["tep", "summary_estimate"].includes(code)) await this.refreshDashboardMetrics(); await this.renderTemplateScreen(defaultCode, title); }; });
     document.querySelectorAll("[data-move-row]").forEach((btn) => { btn.onclick = async () => { const [rowId, direction] = String(btn.dataset.moveRow).split(":"); await this.moveTemplateRow(code, rowId, direction); await this.renderTemplateScreen(defaultCode, title); }; });
     if (isIRD) {
       this.bindIRDEditEvents(defaultCode, title);
     }
+  }
+
+  renderScheduleGantt(rows, options = {}) {
+    const scope = options.scope || 'page';
+    const scale = options.scale || 'day';
+    const prepared = (rows || []).map((r) => r.data || {}).map((d) => ({
+      name: d.name || d.code || d.volume_no || 'Этап',
+      start: d.fact_start || d.baseline_start || '',
+      end: d.fact_end || d.baseline_end || '',
+      progress: Number(d.progress || 0),
+    })).filter((x) => x.start && x.end);
+    if (!prepared.length) {
+      return `<div class="gantt-wrap"><div class="metric">Диаграмма Ганта: недостаточно дат для построения.</div></div>`;
+    }
+    const stamps = prepared.flatMap((x) => [new Date(`${x.start}T00:00:00`).getTime(), new Date(`${x.end}T00:00:00`).getTime()]);
+    const minTs = Math.min(...stamps);
+    const maxTs = Math.max(...stamps);
+    const divisor = scale === 'month' ? 30 : 1;
+    const total = Math.max(1, ((maxTs - minTs) / 86400000) / divisor);
+    const bars = prepared.map((x) => {
+      const s = new Date(`${x.start}T00:00:00`).getTime();
+      const e = new Date(`${x.end}T00:00:00`).getTime();
+      const left = (((s - minTs) / 86400000) / divisor) / total * 100;
+      const width = Math.max(1, ((((e - s) / 86400000) / divisor) / total) * 100);
+      const progress = Math.max(0, Math.min(100, Number.isFinite(x.progress) ? x.progress : 0));
+      return `<div class="gantt-row">
+        <div class="gantt-name" title="${x.name}">${x.name}</div>
+        <div class="gantt-track">
+          <div class="gantt-bar" style="left:${left}%;width:${width}%"><span style="width:${progress}%"></span></div>
+        </div>
+        <div class="gantt-dates">${x.start} → ${x.end}</div>
+      </div>`;
+    }).join('');
+    return `<div class="gantt-wrap">
+      <div class="gantt-header"><strong>Диаграмма Ганта</strong><span class="metric">${scope === 'all' ? 'по всем строкам' : 'по текущей странице'} (${prepared.length} задач)</span></div>
+      <div class="row-actions" style="margin-bottom:8px;gap:6px;">
+        <button class="mini ${scope === 'page' ? 'primary' : ''}" data-gantt-scope="page">Текущая страница</button>
+        <button class="mini ${scope === 'all' ? 'primary' : ''}" data-gantt-scope="all">Все строки</button>
+        <button class="mini ${scale === 'day' ? 'primary' : ''}" data-gantt-scale="day">Дни</button>
+        <button class="mini ${scale === 'month' ? 'primary' : ''}" data-gantt-scale="month">Месяцы</button>
+      </div>
+      ${bars}
+    </div>`;
   }
 
   bindActionsDropdown(menuName) {
@@ -1426,7 +1493,44 @@ class ConstructionManagerUI {
       const type = c.data_type === 'number' ? 'number' : c.data_type === 'date' ? 'date' : 'text';
       return `<label>${c.title}<input data-field="${c.field_key}" type="${type}" value="${value}"></label>`;
     }).join('')}</div>`;
+    if ((this.currentTemplateCode || this.resolveTemplateView(this.currentView).code) === 'design_schedule') {
+      this.templateAutoCalculatedFields = new Set();
+      setTimeout(() => this.bindDesignScheduleAutocalc(), 0);
+    }
     this.openModal();
+  }
+
+  bindDesignScheduleAutocalc() {
+    const all = Array.from(document.querySelectorAll('#modalBody [data-field]'));
+    const byField = Object.fromEntries(all.map((el) => [el.dataset.field, el]));
+    const pairs = [
+      { start: 'baseline_start', end: 'baseline_end', days: 'baseline_days' },
+      { start: 'fact_start', end: 'fact_end', days: 'fact_days' },
+    ];
+    const parseDate = (v) => (v ? new Date(`${v}T00:00:00`) : null);
+    const toYMD = (d) => d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : '';
+    const daysBetween = (a, b) => Math.round((b - a) / 86400000);
+    const recalc = (group) => {
+      const s = byField[group.start]; const e = byField[group.end]; const d = byField[group.days];
+      if (!s || !e || !d) return;
+      [s, e, d].forEach((el) => el.classList.remove('auto-calculated'));
+      const start = parseDate(s.value); const end = parseDate(e.value);
+      const daysRaw = String(d.value || '').trim();
+      const days = daysRaw === '' ? null : Number(daysRaw);
+      if (start && end && (days === null || Number.isNaN(days))) {
+        d.value = String(daysBetween(start, end));
+        d.classList.add('auto-calculated'); this.templateAutoCalculatedFields.add(group.days); return;
+      }
+      if (start && Number.isFinite(days) && !end) {
+        e.value = toYMD(new Date(start.getTime() + days * 86400000));
+        e.classList.add('auto-calculated'); this.templateAutoCalculatedFields.add(group.end); return;
+      }
+      if (end && Number.isFinite(days) && !start) {
+        s.value = toYMD(new Date(end.getTime() - days * 86400000));
+        s.classList.add('auto-calculated'); this.templateAutoCalculatedFields.add(group.start);
+      }
+    };
+    all.forEach((el) => el.addEventListener('input', () => pairs.forEach(recalc)));
   }
 
   openProjectForm() {
@@ -2460,6 +2564,10 @@ class ConstructionManagerUI {
             return;
           }
         }
+        if (code === 'design_schedule') {
+          const computedFields = Array.from(this.templateAutoCalculatedFields || []);
+          if (computedFields.length && !confirm(`Будут сохранены автоматически рассчитанные поля: ${computedFields.join(', ')}. Продолжить?`)) return;
+        }
         if (code === 'design_schedule') data.schedule_stage = this.currentView === 'designScheduleR' ? 'R' : 'P';
         await this.withTableLoading(async () => {
           if (this.editRowId) await updateTemplateRow(this.editRowId, data);
@@ -2517,6 +2625,7 @@ class ConstructionManagerUI {
     this.modalMode = null;
     this.isCreatingProject = false; // Сброс флага блокировки при закрытии модалки
     this.editRowId = null;
+    this.templateAutoCalculatedFields = new Set();
     this.state.modalDirty = false;
     this.importDraft = null;
     this.state.editProjectId = null;
