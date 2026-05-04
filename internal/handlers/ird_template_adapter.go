@@ -42,6 +42,31 @@ var irdColumns = []gin.H{
 	{"field_key": "file_path", "title": "Файл/Ссылка", "data_type": "text", "sort_order": 8},
 }
 
+var allowedIrdDocTypes = map[string]bool{"GPZU": true, "TZ": true, "MTZ": true, "TU": true}
+var allowedIrdStatuses = map[string]bool{"draft": true, "active": true, "expired": true, "revoked": true}
+
+func normalizeIrdDocType(value string) (string, error) {
+	docType := strings.ToUpper(strings.TrimSpace(value))
+	if docType == "" {
+		return "", fmt.Errorf("doc_type is required")
+	}
+	if !allowedIrdDocTypes[docType] {
+		return "", fmt.Errorf("invalid doc_type, must be GPZU, TZ, MTZ or TU")
+	}
+	return docType, nil
+}
+
+func normalizeIrdStatus(value string) (string, error) {
+	status := strings.ToLower(strings.TrimSpace(value))
+	if status == "" {
+		return "active", nil
+	}
+	if !allowedIrdStatuses[status] {
+		return "", fmt.Errorf("invalid status, must be draft, active, expired or revoked")
+	}
+	return status, nil
+}
+
 // GetIrdTemplate — GET /api/v1/templates/input_design_data
 // Возвращает описание шаблона ИРД прямо из кода, не обращаясь к БД.
 // Это гарантирует что вкладка ИРД работает на любой чистой базе данных.
@@ -151,11 +176,15 @@ func CreateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		docType := strings.TrimSpace(input.Data["doc_type"])
-
-		status := strings.TrimSpace(input.Data["status"])
-		if status == "" {
-			status = "active"
+		docType, err := normalizeIrdDocType(input.Data["doc_type"])
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		status, err := normalizeIrdStatus(input.Data["status"])
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
 		}
 
 		// Обработка дат - только непустые значения
@@ -249,7 +278,12 @@ func UpdateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 
 		// Обновляем только переданные поля
 		if v, ok := input.Data["doc_type"]; ok {
-			doc.DocType = strings.TrimSpace(v)
+			docType, err := normalizeIrdDocType(v)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			doc.DocType = docType
 		}
 		if v, ok := input.Data["doc_number"]; ok {
 			doc.DocNumber = strings.TrimSpace(v)
@@ -281,8 +315,13 @@ func UpdateIrdFromTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if v := strings.TrimSpace(input.Data["status"]); v != "" {
-			doc.Status = v
+		if v, ok := input.Data["status"]; ok {
+			status, err := normalizeIrdStatus(v)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			doc.Status = status
 		}
 		if v, ok := input.Data["notes"]; ok {
 			doc.Notes = strings.TrimSpace(v)
@@ -386,7 +425,11 @@ func ImportIrdTemplateRows(repo repository.Repository) gin.HandlerFunc {
 			for k, v := range raw {
 				data[k] = strings.TrimSpace(fmt.Sprint(v))
 			}
-			docType := strings.TrimSpace(data["doc_type"])
+			docType, err := normalizeIrdDocType(data["doc_type"])
+			if err != nil {
+				errorsList = append(errorsList, rowError{Index: idx + 1, Message: err.Error()})
+				continue
+			}
 			issueDate := strings.TrimSpace(data["issue_date"])
 			expiryDate := strings.TrimSpace(data["expiry_date"])
 			if issueDate != "" {
@@ -401,9 +444,10 @@ func ImportIrdTemplateRows(repo repository.Repository) gin.HandlerFunc {
 					continue
 				}
 			}
-			status := strings.TrimSpace(data["status"])
-			if status == "" {
-				status = "active"
+			status, err := normalizeIrdStatus(data["status"])
+			if err != nil {
+				errorsList = append(errorsList, rowError{Index: idx + 1, Message: err.Error()})
+				continue
 			}
 			key := strings.ToLower(strings.TrimSpace(docType + "|" + strings.TrimSpace(data["doc_number"])))
 			existing, hasExisting := existingByKey[key]

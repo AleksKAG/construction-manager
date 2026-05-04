@@ -31,7 +31,7 @@ func performReq(r http.Handler, method, url string, body any) *httptest.Response
 	return w
 }
 
-func TestImportIrdTemplateRows_AllowsArbitraryDocType(t *testing.T) {
+func TestImportIrdTemplateRows_RejectsInvalidDocType(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := setupImportTestRepo(t)
 	project := models.ProjectObject{ID: "project-ird", Name: "IRD"}
@@ -59,11 +59,8 @@ func TestImportIrdTemplateRows_AllowsArbitraryDocType(t *testing.T) {
 	if err := repo.RawDB().Where("project_id = ?", project.ID).Find(&docs).Error; err != nil {
 		t.Fatalf("load docs: %v", err)
 	}
-	if len(docs) != 1 {
-		t.Fatalf("expected 1 doc, got %d", len(docs))
-	}
-	if docs[0].DocType != "CUSTOM_PERMIT" {
-		t.Fatalf("expected arbitrary doc_type preserved, got %q", docs[0].DocType)
+	if len(docs) != 0 {
+		t.Fatalf("expected no created docs for invalid doc_type, got %d", len(docs))
 	}
 }
 

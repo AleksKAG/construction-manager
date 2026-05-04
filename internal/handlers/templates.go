@@ -125,6 +125,9 @@ func CreateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		if code == "design_schedule" {
+			normalizeDesignScheduleTriplets(input.Data)
+		}
 
 		_, columns, err := repo.GetTemplateByCode(c.Request.Context(), code)
 		if err != nil {
@@ -192,6 +195,9 @@ func UpdateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 		if dataToValidate == nil {
 			dataToValidate = row.ValuesMap
 		}
+		if row.TemplateCode == "design_schedule" {
+			normalizeDesignScheduleTriplets(dataToValidate)
+		}
 		if err := validateTemplateData(columns, dataToValidate); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -211,6 +217,37 @@ func UpdateTemplateRow(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, row)
+	}
+}
+
+func normalizeDesignScheduleTriplets(values map[string]string) {
+	if values == nil {
+		return
+	}
+	normalizeScheduleTriplet(values, "baseline_start", "baseline_end", "baseline_days")
+	normalizeScheduleTriplet(values, "fact_start", "fact_end", "fact_days")
+}
+
+func normalizeScheduleTriplet(values map[string]string, startKey, endKey, daysKey string) {
+	startRaw := strings.TrimSpace(values[startKey])
+	endRaw := strings.TrimSpace(values[endKey])
+	daysRaw := strings.TrimSpace(values[daysKey])
+	startDate, startErr := time.Parse("2006-01-02", startRaw)
+	endDate, endErr := time.Parse("2006-01-02", endRaw)
+	days, daysErr := strconv.Atoi(daysRaw)
+	hasStart := startRaw != "" && startErr == nil
+	hasEnd := endRaw != "" && endErr == nil
+	hasDays := daysRaw != "" && daysErr == nil
+	if hasStart && hasEnd && !hasDays {
+		values[daysKey] = strconv.Itoa(int(endDate.Sub(startDate).Hours() / 24))
+		return
+	}
+	if hasStart && hasDays && !hasEnd {
+		values[endKey] = startDate.AddDate(0, 0, days).Format("2006-01-02")
+		return
+	}
+	if hasEnd && hasDays && !hasStart {
+		values[startKey] = endDate.AddDate(0, 0, -days).Format("2006-01-02")
 	}
 }
 
