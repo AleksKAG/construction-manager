@@ -300,7 +300,7 @@ class ConstructionManagerUI {
     tree.querySelectorAll('[data-view-link]').forEach((item) => {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
-        const rawView = item.dataset.viewLink;
+        const rawView = item.dataset.view;
         const view = this.isKnownView(rawView) || rawView.startsWith('template:') ? rawView : `template:${rawView}`;
         this.switchView(view, item.dataset.viewTitle, { collapseMobile: item.dataset.hasChildren !== 'true' });
       });
