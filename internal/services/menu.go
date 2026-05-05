@@ -28,9 +28,7 @@ func EnsureDefaultProjectMenu(db *gorm.DB, projectID string) error {
 	if err := db.Model(&models.MenuItem{}).Where("project_id = ?", projectID).Count(&count).Error; err != nil {
 		return err
 	}
-	if count > 0 {
-		return nil
-	}
+	
 
 	items := []models.MenuItem{
 		{ProjectID: projectID, Title: "Проектирование", ItemType: "section", SortOrder: 10},
