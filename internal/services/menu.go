@@ -24,10 +24,7 @@ func EnsureProjectMenus(ctx context.Context, db *gorm.DB) error {
 }
 
 func EnsureDefaultProjectMenu(db *gorm.DB, projectID string) error {
-	var count int64
-	if err := db.Model(&models.MenuItem{}).Where("project_id = ?", projectID).Count(&count).Error; err != nil {
-		return err
-	}
+	
 	
 
 	items := []models.MenuItem{
