@@ -93,6 +93,11 @@ type GanttTask struct {
 	LinkedRegistryID *string `gorm:"type:text;index" json:"linked_registry_id,omitempty"`
 }
 
+// Errorf implements [assert.TestingT].
+func (t GanttTask) Errorf(format string, args ...interface{}) {
+	panic("unimplemented")
+}
+
 func (t *GanttTask) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == "" {
 		t.ID = uuid.New().String()
