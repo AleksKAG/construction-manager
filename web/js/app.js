@@ -300,8 +300,7 @@ class ConstructionManagerUI {
     tree.querySelectorAll('[data-view-link]').forEach((item) => {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
-        const rawView = item.dataset.viewLink;
-        const view = this.isKnownView(rawView) || rawView.startsWith('template:') ? rawView : `template:${rawView}`;
+        const view = this.normalizeMenuViewKey(item.dataset.viewLink, item.dataset.viewTitle);
         this.switchView(view, item.dataset.viewTitle, { collapseMobile: item.dataset.hasChildren !== 'true' });
       });
     });
@@ -355,13 +354,37 @@ class ConstructionManagerUI {
       const hasChildren = Array.isArray(node.children) && node.children.length > 0;
       const expanded = hasChildren && this.expandedMenuNodes.has(nodeKey);
       const marker = hasChildren ? (expanded ? '▼ ' : '▶ ') : '';
-      const resolvedView = node.view_key || this.resolveMenuViewKey(node.title);
+      const resolvedView = this.normalizeMenuViewKey(node.view_key, node.title);
       const attrs = (resolvedView && !hasChildren) ? `data-view-link="${resolvedView}" data-view-title="${node.title}" data-has-children="false"` : '';
       const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}"` : '';
       const row = `<div class="tree-row level-${Math.min(level, 4)}" ${attrs} ${toggleAttrs}>${marker}${node.title}</div>`;
       const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1) : '';
       return `${row}${children}`;
     }).join('');
+  }
+
+  normalizeMenuViewKey(rawView, title = '') {
+    const titleView = this.resolveMenuViewKey(title);
+    const normalizedTitle = String(title || '').trim();
+    const raw = String(rawView || '').trim();
+
+    // For shared template codes such as design_schedule the title is the only
+    // reliable way to distinguish the PD and RD schedule menu items.
+    if (['График ПД', 'График РД', 'График проектирования', 'График СМР'].includes(normalizedTitle) && titleView) {
+      return titleView;
+    }
+
+    const aliases = {
+      design_schedule: titleView || 'designSchedule',
+      schedule: titleView || 'smrSchedule',
+      smr_schedule: 'smrSchedule',
+      ssr: 'estimate',
+      ird: 'template:ird',
+      docs: 'docsTemplates',
+    };
+    const view = aliases[raw] || raw || titleView;
+    if (!view) return '';
+    return this.isKnownView(view) || view.startsWith('template:') ? view : `template:${view}`;
   }
 
   resolveMenuViewKey(title) {

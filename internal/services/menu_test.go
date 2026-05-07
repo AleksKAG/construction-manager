@@ -56,6 +56,16 @@ func TestEnsureProjectMenuStructure_CreatesMVPHierarchy(t *testing.T) {
 		t.Fatalf("expected registryR view key, got %q", registryR.ViewKey)
 	}
 
+	scheduleP := findMenuItemByPath(t, db, projectID, "Проектирование", "Стадия П", "График ПД")
+	if scheduleP.ViewKey != "designSchedule" {
+		t.Fatalf("expected designSchedule view key, got %q", scheduleP.ViewKey)
+	}
+
+	scheduleR := findMenuItemByPath(t, db, projectID, "Проектирование", "Стадия Р", "График РД")
+	if scheduleR.ViewKey != "designScheduleR" {
+		t.Fatalf("expected designScheduleR view key, got %q", scheduleR.ViewKey)
+	}
+
 	workforce := findMenuItemByPath(t, db, projectID, "СМР", "Учёт рабочих")
 	if workforce.ViewKey != "workforceDaily" {
 		t.Fatalf("expected workforceDaily view key, got %q", workforce.ViewKey)
