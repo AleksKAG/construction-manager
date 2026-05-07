@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"net/http"
@@ -58,6 +59,16 @@ func ListTemplateRows(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
+		if code == "design_schedule" {
+			stage := strings.ToUpper(strings.TrimSpace(c.Query("schedule_stage")))
+			if stage == "P" || stage == "R" {
+				if err := ensureDesignScheduleRows(c.Request.Context(), repo, projectID, stage); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+			}
+		}
+
 		rows, err := repo.ListTemplateRows(c.Request.Context(), projectID, code)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -105,6 +116,232 @@ func ListTemplateRows(repo repository.Repository) gin.HandlerFunc {
 			},
 		})
 	}
+}
+
+func ensureDesignScheduleRows(ctx context.Context, repo repository.Repository, projectID, stage string) error {
+	stage = strings.ToUpper(strings.TrimSpace(stage))
+	if stage != "P" && stage != "R" {
+		return nil
+	}
+
+	existingRows, err := repo.ListTemplateRows(ctx, projectID, "design_schedule")
+	if err != nil {
+		return err
+	}
+	maxRowNumber := 0
+	existingByKey := map[string]models.ProjectTemplateRow{}
+	for _, row := range existingRows {
+		if row.RowNumber > maxRowNumber {
+			maxRowNumber = row.RowNumber
+		}
+		rowStage := strings.ToUpper(strings.TrimSpace(row.ValuesMap["schedule_stage"]))
+		if rowStage == "" {
+			rowStage = "P"
+		}
+		if rowStage != stage {
+			continue
+		}
+		key := scheduleRowKey(row.ValuesMap["code"], row.ValuesMap["name"])
+		if key != "" {
+			existingByKey[key] = row
+		}
+	}
+
+	drafts, err := scheduleDraftsFromRegistry(ctx, repo, projectID, stage)
+	if err != nil {
+		return err
+	}
+	if len(drafts) == 0 {
+		drafts, err = scheduleDraftsFromTasks(ctx, repo, projectID, stage)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, draft := range drafts {
+		key := scheduleRowKey(draft["code"], draft["name"])
+		if key == "" {
+			continue
+		}
+		if existing, ok := existingByKey[key]; ok {
+			merged := mergeScheduleRowData(existing.ValuesMap, draft)
+			if !mapsEqual(existing.ValuesMap, merged) {
+				existing.ValuesMap = merged
+				if err := repo.UpdateTemplateRow(ctx, &existing); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
+		maxRowNumber++
+		row := &models.ProjectTemplateRow{
+			ProjectID:     projectID,
+			TemplateCode:  "design_schedule",
+			RowNumber:     maxRowNumber,
+			ValuesMap:     draft,
+			CreatedByUser: "system",
+		}
+		if err := repo.CreateTemplateRow(ctx, row); err != nil {
+			return err
+		}
+		existingByKey[key] = *row
+	}
+	return nil
+}
+
+func scheduleDraftsFromRegistry(ctx context.Context, repo repository.Repository, projectID, stage string) ([]map[string]string, error) {
+	var registryRows []models.DocumentRegistry
+	if err := repo.RawDB().WithContext(ctx).
+		Where("project_id = ? AND stage = ?", projectID, stage).
+		Order("designation asc").
+		Find(&registryRows).Error; err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "document_registr") || strings.Contains(strings.ToLower(err.Error()), "no such table") {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(registryRows) == 0 {
+		return nil, nil
+	}
+
+	taskByID := map[string]models.GanttTask{}
+	var taskIDs []string
+	for _, row := range registryRows {
+		if row.LinkedTaskID != nil && strings.TrimSpace(*row.LinkedTaskID) != "" {
+			taskIDs = append(taskIDs, *row.LinkedTaskID)
+		}
+	}
+	if len(taskIDs) > 0 {
+		var tasks []models.GanttTask
+		if err := repo.RawDB().WithContext(ctx).Where("id IN ?", taskIDs).Find(&tasks).Error; err != nil {
+			return nil, err
+		}
+		for _, task := range tasks {
+			taskByID[task.ID] = task
+		}
+	}
+
+	drafts := make([]map[string]string, 0, len(registryRows))
+	for i, row := range registryRows {
+		volumeNo := ""
+		if row.VolumeNumber != nil {
+			volumeNo = strconv.Itoa(*row.VolumeNumber)
+		} else {
+			volumeNo = strconv.Itoa(i + 1)
+		}
+		draft := map[string]string{
+			"volume_no":      volumeNo,
+			"code":           firstNonEmptyScheduleValue(row.Designation, row.Code, row.Mark),
+			"name":           row.Name,
+			"executor":       row.Contractor,
+			"schedule_stage": stage,
+		}
+		if row.LinkedTaskID != nil {
+			if task, ok := taskByID[*row.LinkedTaskID]; ok {
+				applyTaskDatesToScheduleDraft(draft, task)
+			}
+		}
+		drafts = append(drafts, draft)
+	}
+	return drafts, nil
+}
+
+func scheduleDraftsFromTasks(ctx context.Context, repo repository.Repository, projectID, stage string) ([]map[string]string, error) {
+	tasks, err := repo.ListTasksByProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	drafts := []map[string]string{}
+	for i, task := range tasks {
+		if !taskBelongsToScheduleStage(task, stage) {
+			continue
+		}
+		code, name := splitScheduleTaskName(task.Name)
+		draft := map[string]string{
+			"volume_no":      strconv.Itoa(i + 1),
+			"code":           code,
+			"name":           name,
+			"executor":       task.Contractor,
+			"schedule_stage": stage,
+		}
+		applyTaskDatesToScheduleDraft(draft, task)
+		drafts = append(drafts, draft)
+	}
+	return drafts, nil
+}
+
+func taskBelongsToScheduleStage(task models.GanttTask, stage string) bool {
+	source := strings.ToUpper(strings.TrimSpace(task.Source))
+	status := strings.ToLower(strings.TrimSpace(task.Status))
+	if stage == "R" {
+		return source == "REGISTRY_R" || status == "rd" || status == "р" || strings.Contains(status, "рд")
+	}
+	return source == "REGISTRY_P" || status == "design" || status == "проектирование" || strings.Contains(status, "пд")
+}
+
+func splitScheduleTaskName(name string) (string, string) {
+	parts := strings.SplitN(strings.TrimSpace(name), " — ", 2)
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	}
+	return strings.TrimSpace(name), strings.TrimSpace(name)
+}
+
+func applyTaskDatesToScheduleDraft(draft map[string]string, task models.GanttTask) {
+	if strings.TrimSpace(task.StartDate) != "" {
+		draft["baseline_start"] = task.StartDate
+	}
+	if strings.TrimSpace(task.EndDate) != "" {
+		draft["baseline_end"] = task.EndDate
+	}
+	if task.Duration > 0 {
+		draft["baseline_days"] = strconv.Itoa(task.Duration)
+	}
+	draft["progress"] = strconv.FormatFloat(task.Progress, 'f', -1, 64)
+}
+
+func mergeScheduleRowData(current, draft map[string]string) map[string]string {
+	merged := map[string]string{}
+	for k, v := range current {
+		merged[k] = v
+	}
+	for k, v := range draft {
+		if strings.TrimSpace(merged[k]) == "" || k == "volume_no" || k == "code" || k == "name" || k == "executor" || k == "schedule_stage" {
+			merged[k] = v
+		}
+	}
+	return merged
+}
+
+func scheduleRowKey(code, name string) string {
+	code = strings.ToLower(strings.TrimSpace(code))
+	name = strings.ToLower(strings.TrimSpace(name))
+	if code != "" {
+		return code
+	}
+	return name
+}
+
+func firstNonEmptyScheduleValue(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func mapsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for key, value := range a {
+		if b[key] != value {
+			return false
+		}
+	}
+	return true
 }
 
 func CreateTemplateRow(repo repository.Repository) gin.HandlerFunc {
