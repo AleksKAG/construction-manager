@@ -131,15 +131,6 @@ func LoadSampleData(repo repository.Repository, logger *logrus.Logger) error {
 func LoadStandardTemplates(repo repository.Repository, logger *logrus.Logger) error {
 	ctx := context.Background()
 
-	var count int64
-	if err := repo.RawDB().Model(&models.TemplateDefinition{}).Count(&count).Error; err != nil {
-		return fmt.Errorf("failed to count templates: %w", err)
-	}
-	if count > 0 {
-		logger.Infof("Standard templates already exist (%d), skipping", count)
-		return nil
-	}
-
 	templates := []models.TemplateDefinition{
 		{Code: "input_design_data", Name: "Исходные данные для проектирования", Description: "Шаблон ИДП"},
 		{Code: "design_schedule", Name: "График разработки проектной документации", Description: "Шаблон графика ПД"},
@@ -148,11 +139,33 @@ func LoadStandardTemplates(repo repository.Repository, logger *logrus.Logger) er
 		{Code: "smr_schedule", Name: "График строительно-монтажных работ", Description: "Шаблон СМР"},
 		{Code: "docs", Name: "Документы", Description: "Документы проекта"},
 	}
+	// Do not skip seeding just because older migrations inserted legacy templates.
+	// Existing databases can contain tep/schedule/ird but miss design_schedule,
+	// which makes the PD/RD schedule menu items resolve to a missing template.
+	createdTemplates := 0
+	updatedTemplates := 0
 	for _, tpl := range templates {
+		var existing models.TemplateDefinition
+		result := repo.RawDB().WithContext(ctx).Where("code = ?", tpl.Code).Find(&existing)
+		if result.Error != nil {
+			return fmt.Errorf("failed to load template %s: %w", tpl.Code, result.Error)
+		}
+		if result.RowsAffected > 0 {
+			if err := repo.RawDB().WithContext(ctx).Model(&existing).Updates(map[string]any{
+				"name":        tpl.Name,
+				"description": tpl.Description,
+			}).Error; err != nil {
+				return fmt.Errorf("failed to update template %s: %w", tpl.Code, err)
+			}
+			updatedTemplates++
+			continue
+		}
+
 		t := tpl
 		if err := repo.RawDB().WithContext(ctx).Create(&t).Error; err != nil {
 			return fmt.Errorf("failed to create template %s: %w", t.Code, err)
 		}
+		createdTemplates++
 	}
 
 	columns := []models.TemplateColumn{
@@ -209,13 +222,34 @@ func LoadStandardTemplates(repo repository.Repository, logger *logrus.Logger) er
 		{TemplateCode: "docs", FieldKey: "notes", Title: "Примечания", DataType: "text", SortOrder: 7},
 	}
 
+	createdColumns := 0
+	updatedColumns := 0
 	for _, col := range columns {
+		var existing models.TemplateColumn
+		result := repo.RawDB().WithContext(ctx).Where("template_code = ? AND field_key = ?", col.TemplateCode, col.FieldKey).Find(&existing)
+		if result.Error != nil {
+			return fmt.Errorf("failed to load template column %s/%s: %w", col.TemplateCode, col.FieldKey, result.Error)
+		}
+		if result.RowsAffected > 0 {
+			if err := repo.RawDB().WithContext(ctx).Model(&existing).Updates(map[string]any{
+				"title":      col.Title,
+				"data_type":  col.DataType,
+				"required":   col.Required,
+				"sort_order": col.SortOrder,
+			}).Error; err != nil {
+				return fmt.Errorf("failed to update template column %s/%s: %w", col.TemplateCode, col.FieldKey, err)
+			}
+			updatedColumns++
+			continue
+		}
+
 		c := col
 		if err := repo.RawDB().WithContext(ctx).Create(&c).Error; err != nil {
 			return fmt.Errorf("failed to create template column %s/%s: %w", c.TemplateCode, c.FieldKey, err)
 		}
+		createdColumns++
 	}
 
-	logger.Info("Standard templates loaded")
+	logger.Infof("Standard templates ensured (templates created=%d updated=%d, columns created=%d updated=%d)", createdTemplates, updatedTemplates, createdColumns, updatedColumns)
 	return nil
 }
