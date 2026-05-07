@@ -88,7 +88,7 @@ class ConstructionManagerUI {
     this.workforceRows = [];
     this.workforceTasks = [];
     this.svorRows = [];
-    this.svorPagination = { page: 1, page_size: 20, total: 0 };
+    this.svorPagination = { page: 1, page_size: 500, total: 0 };
     this.svorFilters = { status: '', dateFrom: '', dateTo: '' };
     this.svorDashboard = null;
     this.aiState = {
@@ -245,7 +245,7 @@ class ConstructionManagerUI {
     const rows = rowsPayload.data || [];
     if (code !== 'tep' || rows.length > 0 || this.templateSearch) return rowsPayload;
     for (let i = 0; i < DEFAULT_TEP_ROWS.length; i += 1) await createTemplateRow(projectId, code, DEFAULT_TEP_ROWS[i]);
-    return listTemplateRows(projectId, code, { page: this.templatePage, page_size: 20, search: this.templateSearch });
+    return listTemplateRows(projectId, code, { page: this.templatePage, page_size: 500, search: this.templateSearch });
   }
 
   async loadProjectMenu(projectId) {
@@ -1085,7 +1085,7 @@ class ConstructionManagerUI {
     try {
       [tpl, rowsPayload] = await Promise.all([
         getTemplate(code),
-        listTemplateRows(project.id, code, { page: this.templatePage, page_size: isIRD ? 200 : 20, search: this.templateSearch, ...(scheduleStage ? { schedule_stage: scheduleStage } : {}) }),
+        listTemplateRows(project.id, code, { page: this.templatePage, page_size: isIRD ? 200 : 500, search: this.templateSearch, ...(scheduleStage ? { schedule_stage: scheduleStage } : {}) }),
       ]);
       if (renderNonce !== this.renderNonce || expectedView !== this.currentView) return;
     } catch (error) {
@@ -1104,7 +1104,7 @@ class ConstructionManagerUI {
       if (renderNonce !== this.renderNonce || expectedView !== this.currentView) return;
     }
     const rows = rowsPayload.data || [];
-    const pager = rowsPayload.pagination || { page: 1, total: rows.length, page_size: 20 };
+    const pager = rowsPayload.pagination || { page: 1, total: rows.length, page_size: 500 };
 
     this.currentTemplateCode = code;
     const templateName = tpl.template?.name || title;
@@ -1286,7 +1286,7 @@ class ConstructionManagerUI {
     }
     const refreshed = await listTemplateRows(projectId, 'design_schedule', { page: 1, page_size: 500, search: this.templateSearch, schedule_stage: scheduleStage });
     const filtered = refreshed.data || [];
-    const pageSize = 20;
+    const pageSize = 500;
     const page = Math.max(1, this.templatePage);
     const start = (page - 1) * pageSize;
     const end = Math.min(filtered.length, start + pageSize);
