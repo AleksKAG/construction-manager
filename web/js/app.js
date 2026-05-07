@@ -1095,7 +1095,14 @@ class ConstructionManagerUI {
 
     const columns = tpl.columns || [];
     rowsPayload = await this.ensureDefaultTemplateRows(project.id, code, rowsPayload);
-    if (code === 'design_schedule') rowsPayload = await this.syncScheduleRowsWithRegistry(project.id, rowsPayload, scheduleStage);
+    if (code === 'design_schedule') {
+      try {
+        rowsPayload = await this.syncScheduleRowsWithRegistry(project.id, rowsPayload, scheduleStage);
+      } catch (error) {
+        console.error('Не удалось синхронизировать график с ведомостью комплектов', error);
+      }
+      if (renderNonce !== this.renderNonce || expectedView !== this.currentView) return;
+    }
     const rows = rowsPayload.data || [];
     const pager = rowsPayload.pagination || { page: 1, total: rows.length, page_size: 20 };
 
@@ -1268,7 +1275,7 @@ class ConstructionManagerUI {
       for (let i = 0; i < registry.length; i += 1) {
         const item = registry[i];
         const base = {
-          volume_no: item.volume_number || String(i + 1),
+          volume_no: String(item.volume_number || i + 1),
           code: item.designation || item.code || '',
           name: item.name || '',
           executor: item.contractor || '',
@@ -1302,7 +1309,7 @@ class ConstructionManagerUI {
       const code = String(item.designation || item.code || '').trim();
       const normalized = code.toLowerCase();
       const base = {
-        volume_no: item.volume_number || String(i + 1),
+        volume_no: String(item.volume_number || i + 1),
         code,
         name: item.name || '',
         executor: item.contractor || '',
