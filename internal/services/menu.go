@@ -60,7 +60,7 @@ func EnsureDefaultProjectMenu(db *gorm.DB, projectID string) error {
 		{ProjectID: projectID, ParentID: items[2].ID, Title: "Технический надзор", ItemType: "leaf", SortOrder: 4},
 		{ProjectID: projectID, ParentID: items[2].ID, Title: "График поставки оборудования", ItemType: "leaf", SortOrder: 5},
 
-		{ProjectID: projectID, ParentID: items[3].ID, Title: "График", ItemType: "leaf", SortOrder: 1},
+		{ProjectID: projectID, ParentID: items[3].ID, Title: "График?", ItemType: "leaf", SortOrder: 1},
 		{ProjectID: projectID, ParentID: items[3].ID, Title: "Документация", ItemType: "leaf", SortOrder: 2},
 
 		{ProjectID: projectID, ParentID: items[4].ID, Title: "Протоколы внутренние", ItemType: "leaf", SortOrder: 1},
@@ -167,9 +167,9 @@ func EnsureProjectMenuStructure(db *gorm.DB, projectID string) error {
 	}).Delete(&models.MenuItem{}).Error
 
 	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "ССР", "template:estimate_ssr", "view", 1)
-	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "Главы", "template:estimate_chapters", "view", 2)
-	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "Объекты", "template:estimate_objects", "view", 3)
-	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "Локальные сметы", "template:estimate_local", "view", 4)
+	//_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "Главы", "template:estimate_chapters", "view", 2)
+	//_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "Объектые сметы", "template:estimate_objects", "view", 3)
+	//_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "Локальные сметы", "template:estimate_local", "view", 4)
 	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "Ведомости объёмов", "template:estimate_volumes", "view", 5)
 	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "КАЦ", "template:estimate_kac", "view", 6)
 	_, _ = ensureMenuItem(db, projectID, estimateSection.ID, "СВОР", "svorMain", "view", 7)
