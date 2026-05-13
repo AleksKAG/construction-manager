@@ -110,7 +110,7 @@ class ConstructionManagerUI {
   }
 
   async bootstrap() {
-    if (!localStorage.getItem('cm_token')) await issueDemoToken('admin');
+    await this.checkAuth();
     await this.loadObjects();
     if (!this.state.dashboards.length) this.seedDashboards();
     this.renderProjectTree();
@@ -2635,103 +2635,103 @@ class ConstructionManagerUI {
     if (!this.state.isDesktop && collapseMobile) this.toggleSidebar(false);
   }
 
+  async checkAuth() {
+    const token = localStorage.getItem('cm_token');
+    if (!token) {
+      this.showLoginScreen();
+      return false;
+    }
+    // Проверяем токен — дёргаем /objects (закрытый GET, сработает только с токеном)
+    try {
+      const resp = await fetch('/api/v1/objects', {
+        headers: { 'Authorization': \`Bearer \${token}\` },
+      });
+      if (resp.ok) return true;
+    } catch (_) {}
+    // Токен невалидный — показываем логин
+    localStorage.removeItem('cm_token');
+    this.showLoginScreen();
+    return false;
+  }
+
+  showLoginScreen() {
+    const content = document.getElementById('contentArea');
+    const headerTitle = document.getElementById('pageTitle');
+    if (headerTitle) headerTitle.textContent = 'Вход';
+    content.innerHTML = \`
+      <article class="card col-12" style="max-width: 400px; margin: 60px auto;">
+        <h3 style="text-align: center; margin-bottom: 24px;">Construction Manager</h3>
+        <form id="loginForm" style="display: flex; flex-direction: column; gap: 12px;">
+          <input type="text" id="loginField" placeholder="Логин" required
+            style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1em;">
+          <input type="password" id="passwordField" placeholder="Пароль" required
+            style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1em;">
+          <button type="submit" class="primary" style="padding: 10px; font-size: 1em;">Войти</button>
+          <div id="loginError" style="color: var(--danger-color, #e53e3e); font-size: 0.9em; text-align: center;"></div>
+        </form>
+      </article>
+    \`;
+    document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const login = document.getElementById('loginField')?.value?.trim();
+      const password = document.getElementById('passwordField')?.value?.trim();
+      const errorEl = document.getElementById('loginError');
+      if (!login || !password) {
+        errorEl.textContent = 'Введите логин и пароль';
+        return;
+      }
+      try {
+        const resp = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login, password }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || 'Неверные данные');
+        }
+        const data = await resp.json();
+        localStorage.setItem('cm_token', data.access_token);
+        localStorage.setItem('cm_role', data.role);
+        const expiresDate = new Date(Date.now() + (data.expires_in || 86400) * 1000);
+        localStorage.setItem('cm_token_expires', expiresDate.toLocaleString('ru-RU'));
+        // Перезагружаем приложение
+        window.location.reload();
+      } catch (e) {
+        errorEl.textContent = e.message;
+      }
+    });
+  }
+
   renderAuthView() {
     const currentToken = localStorage.getItem('cm_token') || '';
     const currentRole = localStorage.getItem('cm_role') || '';
     const expiresAt = localStorage.getItem('cm_token_expires') || '';
     
-    document.getElementById('contentArea').innerHTML = `
+    document.getElementById('contentArea').innerHTML = \`
       <article class="card col-12">
         <h3>Авторизация</h3>
-        <p class="metric">Введите ключ API для получения токена или используйте демо-режим.</p>
-        
         <div style="margin-top: 16px;">
-          <label style="display: block; margin-bottom: 6px; font-weight: 500;">API-ключ (сервисный)</label>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <input type="password" id="authApiKey" placeholder="Введите SERVICE_API_KEY" 
-              style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px;">
-            <button class="primary" id="authLoginBtn">Войти</button>
-            <button class="ghost" id="authDemoBtn">Демо-доступ</button>
-          </div>
-          <div id="authStatus" style="margin-top: 8px; font-size: 0.9em;"></div>
-        </div>
-
-        <div style="margin-top: 24px;" id="authTokenInfo">
-          <h4 style="margin-bottom: 8px;">Текущий токен</h4>
           <table style="width: 100%; border-collapse: collapse;">
             <tr><td style="padding: 4px 8px; font-weight: 500;">Токен:</td><td style="padding: 4px 8px;">
-              <code style="word-break: break-all; font-size: 0.8em;">${currentToken ? currentToken.substring(0, 60) + '…' : '—'}</code>
+              <code style="word-break: break-all; font-size: 0.8em;">\${currentToken ? currentToken.substring(0, 60) + '…' : '—'}</code>
             </td></tr>
-            <tr><td style="padding: 4px 8px; font-weight: 500;">Роль:</td><td style="padding: 4px 8px;">${currentRole || '—'}</td></tr>
-            <tr><td style="padding: 4px 8px; font-weight: 500;">Истекает:</td><td style="padding: 4px 8px;">${expiresAt || '—'}</td></tr>
+            <tr><td style="padding: 4px 8px; font-weight: 500;">Роль:</td><td style="padding: 4px 8px;">\${currentRole || '—'}</td></tr>
+            <tr><td style="padding: 4px 8px; font-weight: 500;">Истекает:</td><td style="padding: 4px 8px;">\${expiresAt || '—'}</td></tr>
           </table>
           <button class="ghost" id="authClearBtn" style="margin-top: 8px; color: var(--danger-color, #e53e3e);">
-            Очистить токен
+            Выйти (очистить токен)
           </button>
         </div>
       </article>
-    `;
-
-    document.getElementById('authLoginBtn')?.addEventListener('click', async () => {
-      const apiKey = document.getElementById('authApiKey')?.value?.trim();
-      const status = document.getElementById('authStatus');
-      if (!apiKey) {
-        status.textContent = 'Введите API-ключ';
-        status.style.color = 'var(--danger-color, #e53e3e)';
-        return;
-      }
-      try {
-        status.textContent = 'Получение токена…';
-        status.style.color = 'inherit';
-        const payload = await fetch('/api/v1/auth/service-token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ api_key: apiKey }),
-        });
-        if (!payload.ok) {
-          const err = await payload.json().catch(() => ({}));
-          throw new Error(err.error || \`Ошибка \${payload.status}\`);
-        }
-        const data = await payload.json();
-        localStorage.setItem('cm_token', data.access_token);
-        localStorage.setItem('cm_role', data.role);
-        const expiresDate = new Date(Date.now() + (data.expires_in || 86400) * 1000);
-        localStorage.setItem('cm_token_expires', expiresDate.toLocaleString('ru-RU'));
-        status.textContent = \`Токен получен. Роль: \${data.role}\`;
-        status.style.color = 'var(--success-color, #38a169)';
-        this.renderAuthView();
-        this.showToast('Авторизация выполнена', 'success');
-      } catch (e) {
-        status.textContent = \`Ошибка: \${e.message}\`;
-        status.style.color = 'var(--danger-color, #e53e3e)';
-      }
-    });
-
-    document.getElementById('authDemoBtn')?.addEventListener('click', async () => {
-      const status = document.getElementById('authStatus');
-      try {
-        status.textContent = 'Получение демо-токена…';
-        status.style.color = 'inherit';
-        await issueDemoToken('admin');
-        localStorage.setItem('cm_role', 'admin');
-        const expiresDate = new Date(Date.now() + 86400 * 1000);
-        localStorage.setItem('cm_token_expires', expiresDate.toLocaleString('ru-RU'));
-        status.textContent = 'Демо-токен получен (admin)';
-        status.style.color = 'var(--success-color, #38a169)';
-        this.renderAuthView();
-        this.showToast('Демо-доступ активирован', 'success');
-      } catch (e) {
-        status.textContent = \`Ошибка: \${e.message}\`;
-        status.style.color = 'var(--danger-color, #e53e3e)';
-      }
-    });
+    \`;
 
     document.getElementById('authClearBtn')?.addEventListener('click', () => {
       localStorage.removeItem('cm_token');
       localStorage.removeItem('cm_role');
       localStorage.removeItem('cm_token_expires');
-      this.renderAuthView();
-      this.showToast('Токен очищен', 'info');
+      this.showLoginScreen();
+      this.showToast('Выход выполнен', 'info');
     });
   }
 

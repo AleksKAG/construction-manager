@@ -9,29 +9,47 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// IssueToken — выдаёт JWT по user_id + role (без проверки, для отладки / внутренних нужд).
-func IssueToken() gin.HandlerFunc {
+// LoginInput — тело запроса /auth/login
+type LoginInput struct {
+	Login    string `json:"login" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+// Login — проверяет логин/пароль из env AUTH_LOGIN / AUTH_PASSWORD и выдаёт JWT.
+func Login() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var input struct {
-			UserID string `json:"user_id"`
-			Role   string `json:"role"`
-		}
+		var input LoginInput
 		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "login and password required"})
 			return
 		}
-		if input.UserID == "" {
-			input.UserID = "demo-user"
+
+		expectedLogin := os.Getenv("AUTH_LOGIN")
+		if expectedLogin == "" {
+			expectedLogin = "admin"
 		}
-		if input.Role == "" {
-			input.Role = "admin"
+		expectedPassword := os.Getenv("AUTH_PASSWORD")
+		if expectedPassword == "" {
+			expectedPassword = "admin"
 		}
-		token, err := middleware.GenerateToken(input.UserID, input.Role, 24*time.Hour)
+
+		if input.Login != expectedLogin || input.Password != expectedPassword {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			return
+		}
+
+		token, err := middleware.GenerateToken(input.Login, "admin", 24*time.Hour)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"access_token": token, "token_type": "Bearer", "expires_in": 86400, "role": input.Role})
+		c.JSON(http.StatusOK, gin.H{
+			"access_token": token,
+			"token_type":   "Bearer",
+			"expires_in":   86400,
+			"role":         "admin",
+			"user_id":      input.Login,
+		})
 	}
 }
 

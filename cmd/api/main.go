@@ -139,8 +139,8 @@ func main() {
 			})
 		})
 
-		// Auth endpoints — без JWT
-		api.POST("/auth/token", handlers.IssueToken())
+		// Auth endpoints — открытые (без JWT)
+		api.POST("/auth/login", handlers.Login())
 		api.POST("/auth/service-token", handlers.IssueServiceToken())
 
 		// Все остальные API-роуты — под JWT
