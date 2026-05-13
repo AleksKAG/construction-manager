@@ -110,6 +110,10 @@ class ConstructionManagerUI {
   }
 
   async bootstrap() {
+    // Скрываем основной layout до завершения проверки токена
+    const appLayout = document.getElementById('appLayout');
+    if (appLayout) appLayout.style.visibility = 'hidden';
+
     const token = localStorage.getItem('cm_token');
     if (!token) {
       this.showLoginScreen();
@@ -129,7 +133,8 @@ class ConstructionManagerUI {
       this.showLoginScreen();
       return;
     }
-    // Токен валидный — загружаем приложение
+    // Токен валидный — показываем layout и загружаем приложение
+    if (appLayout) appLayout.style.visibility = '';
     await this.loadObjects();
     if (!this.state.dashboards.length) this.seedDashboards();
     this.renderProjectTree();
@@ -2673,31 +2678,31 @@ class ConstructionManagerUI {
   }
 
   showLoginScreen() {
-    const content = document.getElementById('contentArea');
-    const headerTitle = document.getElementById('pageTitle');
-    if (headerTitle) headerTitle.textContent = 'Вход';
-    content.innerHTML = \`
-      <article class="card col-12" style="max-width: 400px; margin: 60px auto;">
-        <h3 style="text-align: center; margin-bottom: 24px;">Construction Manager</h3>
-        <form id="loginForm" style="display: flex; flex-direction: column; gap: 12px;">
-          <input type="text" id="loginField" placeholder="Логин" required
-            style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1em;">
-          <input type="password" id="passwordField" placeholder="Пароль" required
-            style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1em;">
-          <button type="submit" class="primary" style="padding: 10px; font-size: 1em;">Войти</button>
-          <div id="loginError" style="color: var(--danger-color, #e53e3e); font-size: 0.9em; text-align: center;"></div>
-        </form>
-      </article>
-    \`;
-    document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
+    // Скрываем основной layout, показываем overlay поверх всего
+    const appLayout = document.getElementById('appLayout');
+    if (appLayout) appLayout.style.visibility = 'hidden';
+    const overlay = document.getElementById('loginOverlay');
+    if (overlay) {
+      overlay.style.display = 'flex';
+      // Фокус на поле логина
+      setTimeout(() => document.getElementById('loginOverlayField')?.focus(), 50);
+    }
+    // Вешаем обработчик формы только один раз
+    const form = document.getElementById('loginOverlayForm');
+    if (!form || form.dataset.bound) return;
+    form.dataset.bound = '1';
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const login = document.getElementById('loginField')?.value?.trim();
-      const password = document.getElementById('passwordField')?.value?.trim();
-      const errorEl = document.getElementById('loginError');
+      const login = document.getElementById('loginOverlayField')?.value?.trim();
+      const password = document.getElementById('passwordOverlayField')?.value?.trim();
+      const errorEl = document.getElementById('loginOverlayError');
+      errorEl.textContent = '';
       if (!login || !password) {
         errorEl.textContent = 'Введите логин и пароль';
         return;
       }
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Вход...'; }
       try {
         const resp = await fetch('/api/v1/auth/login', {
           method: 'POST',
@@ -2713,10 +2718,12 @@ class ConstructionManagerUI {
         localStorage.setItem('cm_role', data.role);
         const expiresDate = new Date(Date.now() + (data.expires_in || 86400) * 1000);
         localStorage.setItem('cm_token_expires', expiresDate.toLocaleString('ru-RU'));
-        // Перезагружаем приложение
+        // Скрываем overlay и перезапускаем приложение
+        if (overlay) overlay.style.display = 'none';
         window.location.reload();
-      } catch (e) {
-        errorEl.textContent = e.message;
+      } catch (err) {
+        errorEl.textContent = err.message;
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Войти'; }
       }
     });
   }
