@@ -1,4 +1,4 @@
-import { api, issueDemoToken } from './api.js';
+import { api } from './api.js';
 import {
   listTemplates,
   getTemplate,
@@ -2141,8 +2141,7 @@ class ConstructionManagerUI {
     if (this.currentView === 'svorDashboard') return this.renderSvorDashboard();
     if (this.currentView === 'svorHistory') return this.renderSvorHistoryList();
     if (this.currentView === 'auth') {
-      await issueDemoToken('admin');
-      return this.showToast('Demo token обновлён.', 'success');
+      return this.renderAuthView();
     }
     if (['protocolInternal', 'protocolDesign', 'protocolSMR'].includes(this.currentView)) {
       // Для протоколов — заглушка, в будущем можно открыть форму создания поручения
@@ -2707,6 +2706,76 @@ class ConstructionManagerUI {
     document.querySelectorAll('.menu-item[data-view]').forEach((btn) => btn.classList.toggle('active', btn.dataset.view === view));
     this.renderContent();
     if (!this.state.isDesktop && collapseMobile) this.toggleSidebar(false);
+  }
+
+  async checkAuth() {
+    const token = localStorage.getItem('cm_token');
+    if (!token) {
+      this.showLoginScreen();
+      return false;
+    }
+    // Проверяем токен — дёргаем /objects (закрытый GET, сработает только с токеном)
+    try {
+      const resp = await fetch('/api/v1/objects', {
+        headers: { 'Authorization': \`Bearer \${token}\` },
+      });
+      if (resp.ok) return true;
+    } catch (_) {}
+    // Токен невалидный — показываем логин
+    localStorage.removeItem('cm_token');
+    this.showLoginScreen();
+    return false;
+  }
+
+  showLoginScreen() {
+    // Скрываем основной layout, показываем overlay поверх всего
+    const appLayout = document.getElementById('appLayout');
+    if (appLayout) appLayout.style.visibility = 'hidden';
+    const overlay = document.getElementById('loginOverlay');
+    if (overlay) {
+      overlay.style.display = 'flex';
+      // Фокус на поле логина
+      setTimeout(() => document.getElementById('loginOverlayField')?.focus(), 50);
+    }
+    // Вешаем обработчик формы только один раз
+    const form = document.getElementById('loginOverlayForm');
+    if (!form || form.dataset.bound) return;
+    form.dataset.bound = '1';
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const login = document.getElementById('loginOverlayField')?.value?.trim();
+      const password = document.getElementById('passwordOverlayField')?.value?.trim();
+      const errorEl = document.getElementById('loginOverlayError');
+      errorEl.textContent = '';
+      if (!login || !password) {
+        errorEl.textContent = 'Введите логин и пароль';
+        return;
+      }
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Вход...'; }
+      try {
+        const resp = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login, password }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || 'Неверные данные');
+        }
+        const data = await resp.json();
+        localStorage.setItem('cm_token', data.access_token);
+        localStorage.setItem('cm_role', data.role);
+        const expiresDate = new Date(Date.now() + (data.expires_in || 86400) * 1000);
+        localStorage.setItem('cm_token_expires', expiresDate.toLocaleString('ru-RU'));
+        // Скрываем overlay и перезапускаем приложение
+        if (overlay) overlay.style.display = 'none';
+        window.location.reload();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Войти'; }
+      }
+    });
   }
 
   renderAuthView() {

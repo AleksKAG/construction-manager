@@ -13,25 +13,34 @@ import (
 func IssueToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var input struct {
-			UserID string `json:"user_id"`
-			Role   string `json:"role"`
+			APIKey string `json:"api_key"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing api_key in body"})
 			return
 		}
-		if input.UserID == "" {
-			input.UserID = "demo-user"
+
+		expected := os.Getenv("SERVICE_API_KEY")
+		if expected == "" {
+			expected = "dev-service-key"
 		}
-		if input.Role == "" {
-			input.Role = "admin"
+		if input.APIKey != expected {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid api_key"})
+			return
 		}
-		token, err := middleware.GenerateToken(input.UserID, input.Role, 24*time.Hour)
+
+		token, err := middleware.GenerateToken("service-agent", "admin", 365*24*time.Hour)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"access_token": token, "token_type": "Bearer", "expires_in": 86400, "role": input.Role})
+		c.JSON(http.StatusOK, gin.H{
+			"access_token": token,
+			"token_type":   "Bearer",
+			"expires_in":   365 * 24 * 3600,
+			"user_id":      "service-agent",
+			"role":         "admin",
+		})
 	}
 }
 
