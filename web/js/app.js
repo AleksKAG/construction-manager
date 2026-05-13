@@ -110,7 +110,8 @@ class ConstructionManagerUI {
   }
 
   async bootstrap() {
-    await this.checkAuth();
+    const authed = await this.checkAuth();
+    if (!authed) return;
     await this.loadObjects();
     if (!this.state.dashboards.length) this.seedDashboards();
     this.renderProjectTree();
