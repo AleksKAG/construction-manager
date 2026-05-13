@@ -139,16 +139,18 @@ func main() {
 			})
 		})
 
-		// Auth endpoints — открытые (без JWT)
+		api.GET("/menu", handlers.MenuHandler)
+
+		// Авторизация — открытые эндпоинты (без JWT)
+		api.POST("/auth/token", handlers.IssueToken())
 		api.POST("/auth/login", handlers.Login())
 		api.POST("/auth/service-token", handlers.IssueServiceToken())
 
-		// Все остальные API-роуты — под JWT
+		// Все защищённые роуты — под JWT
 		secured := api.Group("/")
 		secured.Use(middleware.JWTAuthMiddleware())
 		{
-			secured.GET("/menu", handlers.MenuHandler)
-
+			// Шаблоны и ИРД
 			secured.GET("/templates", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplates(repo))
 			secured.GET("/templates/input_design_data", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetIrdTemplate())
 			secured.GET("/templates/:code", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetTemplate(repo))
@@ -177,12 +179,14 @@ func main() {
 			secured.PATCH("/tep/:id", handlers.PatchTEPRow(repo))
 			secured.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
 
+			// Docs Stage P
 			secured.GET("/projects/:id/docs/p", handlers.ListDocsP(repo))
 			secured.POST("/projects/:id/docs/p", handlers.CreateDocP(repo))
 			secured.PUT("/projects/:id/docs/p/:docId", handlers.UpdateDocP(repo))
 			secured.DELETE("/projects/:id/docs/p/:docId", handlers.DeleteDocP(repo))
 			secured.GET("/projects/:id/docs/p/export.xlsx", handlers.ExportDocsPXLSX(repo))
 
+			// Docs Stage R
 			secured.GET("/projects/:id/docs/r", handlers.ListDocsR(repo))
 			secured.POST("/projects/:id/docs/r", handlers.CreateDocR(repo))
 			secured.PUT("/projects/:id/docs/r/:docId", handlers.UpdateDocR(repo))
@@ -190,14 +194,17 @@ func main() {
 			secured.GET("/projects/:id/docs/r/:docId/revisions", handlers.ListDocRRevisions(repo))
 			secured.POST("/projects/:id/docs/r/:docId/revisions", handlers.AddDocRRevision(repo))
 
+			// Registry
 			secured.GET("/projects/:id/design/:stage/registry", handlers.ListRegistry(repo))
 			secured.POST("/projects/:id/design/:stage/registry", handlers.UpsertRegistry(repo))
 			secured.POST("/projects/:id/design/:stage/registry/import", handlers.ImportRegistryBatch(repo))
 			secured.DELETE("/projects/:id/design/:stage/registry/:rowId", handlers.DeleteRegistry(repo))
 
+			// Workforce
 			secured.GET("/projects/:id/smr/workforce", handlers.ListWorkforceByProject(repo))
 			secured.POST("/projects/:id/smr/workforce", handlers.CreateWorkforceRecord(repo))
 
+			// СВОР
 			secured.GET("/projects/:id/svor", handlers.ListSvor(repo))
 			secured.POST("/projects/:id/svor", handlers.CreateSvor(repo))
 			secured.PATCH("/projects/:id/svor/:svorId", handlers.PatchSvor(repo))
@@ -206,12 +213,14 @@ func main() {
 			secured.POST("/projects/:id/svor/import", handlers.ImportSvor(repo))
 			secured.GET("/projects/:id/svor/report.xlsx", handlers.ExportSvorReportXLSX(repo))
 
+			// IRD
 			secured.GET("/objects/:id/ird", handlers.ListIrdDocuments(repo))
 			secured.POST("/objects/:id/ird", handlers.CreateIrdDocument(repo))
 			secured.GET("/ird/:irdId", handlers.GetIrdDocument(repo))
 			secured.PUT("/ird/:irdId", handlers.UpdateIrdDocument(repo))
 			secured.DELETE("/ird/:irdId", handlers.DeleteIrdDocument(repo))
 
+			// Tasks
 			secured.GET("/tasks", handlers.ListTasks(repo))
 			secured.POST("/tasks", handlers.CreateTask(repo))
 			secured.GET("/tasks/:id", handlers.GetTask(repo))
@@ -219,6 +228,7 @@ func main() {
 			secured.DELETE("/tasks/:id", handlers.DeleteTask(repo))
 			secured.GET("/tasks/by-object", handlers.ListTasksByObject(repo))
 
+			// Objects
 			secured.GET("/objects", handlers.ListObjects(repo))
 			secured.POST("/objects", handlers.CreateObject(repo))
 			secured.GET("/objects/:id", handlers.GetObject(repo))

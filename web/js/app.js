@@ -110,30 +110,33 @@ class ConstructionManagerUI {
   }
 
   async bootstrap() {
-    // Скрываем основной layout до завершения проверки токена
+    // Скрываем layout до проверки токена
     const appLayout = document.getElementById('appLayout');
     if (appLayout) appLayout.style.visibility = 'hidden';
 
     const token = localStorage.getItem('cm_token');
     if (!token) {
-      this.showLoginScreen();
+      this.showLoginOverlay();
       return;
     }
-    // Проверим токен — /objects вернёт 401 если невалидный
+    // Проверяем токен: /objects вернёт 401 если невалидный
     try {
       const resp = await fetch('/api/v1/objects', {
         headers: { 'Authorization': \`Bearer \${token}\` },
       });
       if (!resp.ok) {
         localStorage.removeItem('cm_token');
-        this.showLoginScreen();
+        localStorage.removeItem('cm_role');
+        localStorage.removeItem('cm_token_expires');
+        this.showLoginOverlay();
         return;
       }
     } catch (e) {
-      this.showLoginScreen();
+      // Нет связи — показываем логин
+      this.showLoginOverlay();
       return;
     }
-    // Токен валидный — показываем layout и загружаем приложение
+    // Токен валидный — показываем приложение
     if (appLayout) appLayout.style.visibility = '';
     await this.loadObjects();
     if (!this.state.dashboards.length) this.seedDashboards();
@@ -143,6 +146,53 @@ class ConstructionManagerUI {
     this.setupAutoRefresh();
     this.initAIAssistantWidget();
     await this.renderContent();
+  }
+
+  showLoginOverlay() {
+    const appLayout = document.getElementById('appLayout');
+    if (appLayout) appLayout.style.visibility = 'hidden';
+    const overlay = document.getElementById('loginOverlay');
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+    setTimeout(() => document.getElementById('loginOverlayField')?.focus(), 50);
+
+    const form = document.getElementById('loginOverlayForm');
+    if (!form || form.dataset.bound) return;
+    form.dataset.bound = '1';
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const login = document.getElementById('loginOverlayField')?.value?.trim();
+      const password = document.getElementById('passwordOverlayField')?.value?.trim();
+      const errorEl = document.getElementById('loginOverlayError');
+      errorEl.textContent = '';
+      if (!login || !password) {
+        errorEl.textContent = 'Введите логин и пароль';
+        return;
+      }
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn) { btn.disabled = true; btn.textContent = 'Вход...'; }
+      try {
+        const resp = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login, password }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || 'Неверный логин или пароль');
+        }
+        const data = await resp.json();
+        localStorage.setItem('cm_token', data.access_token);
+        localStorage.setItem('cm_role', data.role || 'admin');
+        const expires = new Date(Date.now() + (data.expires_in || 86400) * 1000);
+        localStorage.setItem('cm_token_expires', expires.toLocaleString('ru-RU'));
+        overlay.style.display = 'none';
+        window.location.reload();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        if (btn) { btn.disabled = false; btn.textContent = 'Войти'; }
+      }
+    });
   }
 
   bind() {
@@ -2729,34 +2779,27 @@ class ConstructionManagerUI {
   }
 
   renderAuthView() {
-    const currentToken = localStorage.getItem('cm_token') || '';
-    const currentRole = localStorage.getItem('cm_role') || '';
-    const expiresAt = localStorage.getItem('cm_token_expires') || '';
-    
+    const token = localStorage.getItem('cm_token') || '';
+    const role = localStorage.getItem('cm_role') || '';
+    const expires = localStorage.getItem('cm_token_expires') || '';
     document.getElementById('contentArea').innerHTML = \`
-      <article class="card col-12">
+      <article class="card col-12" style="max-width:500px;">
         <h3>Авторизация</h3>
-        <div style="margin-top: 16px;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr><td style="padding: 4px 8px; font-weight: 500;">Токен:</td><td style="padding: 4px 8px;">
-              <code style="word-break: break-all; font-size: 0.8em;">\${currentToken ? currentToken.substring(0, 60) + '…' : '—'}</code>
-            </td></tr>
-            <tr><td style="padding: 4px 8px; font-weight: 500;">Роль:</td><td style="padding: 4px 8px;">\${currentRole || '—'}</td></tr>
-            <tr><td style="padding: 4px 8px; font-weight: 500;">Истекает:</td><td style="padding: 4px 8px;">\${expiresAt || '—'}</td></tr>
-          </table>
-          <button class="ghost" id="authClearBtn" style="margin-top: 8px; color: var(--danger-color, #e53e3e);">
-            Выйти (очистить токен)
-          </button>
-        </div>
+        <table style="width:100%; border-collapse:collapse; margin-top:16px;">
+          <tr><td style="padding:6px 8px; font-weight:500;">Пользователь:</td><td style="padding:6px 8px;">\${role || '—'}</td></tr>
+          <tr><td style="padding:6px 8px; font-weight:500;">Токен:</td><td style="padding:6px 8px; font-size:0.8em; word-break:break-all;"><code>\${token ? token.substring(0,50)+'…' : '—'}</code></td></tr>
+          <tr><td style="padding:6px 8px; font-weight:500;">Истекает:</td><td style="padding:6px 8px;">\${expires || '—'}</td></tr>
+        </table>
+        <button class="ghost" id="authLogoutBtn" style="margin-top:16px; color:var(--danger-color,#e53e3e);">
+          Выйти из аккаунта
+        </button>
       </article>
     \`;
-
-    document.getElementById('authClearBtn')?.addEventListener('click', () => {
+    document.getElementById('authLogoutBtn')?.addEventListener('click', () => {
       localStorage.removeItem('cm_token');
       localStorage.removeItem('cm_role');
       localStorage.removeItem('cm_token_expires');
-      this.showLoginScreen();
-      this.showToast('Выход выполнен', 'info');
+      this.showLoginOverlay();
     });
   }
 
