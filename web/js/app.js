@@ -110,8 +110,26 @@ class ConstructionManagerUI {
   }
 
   async bootstrap() {
-    const authed = await this.checkAuth();
-    if (!authed) return;
+    const token = localStorage.getItem('cm_token');
+    if (!token) {
+      this.showLoginScreen();
+      return;
+    }
+    // Проверим токен — /objects вернёт 401 если невалидный
+    try {
+      const resp = await fetch('/api/v1/objects', {
+        headers: { 'Authorization': \`Bearer \${token}\` },
+      });
+      if (!resp.ok) {
+        localStorage.removeItem('cm_token');
+        this.showLoginScreen();
+        return;
+      }
+    } catch (e) {
+      this.showLoginScreen();
+      return;
+    }
+    // Токен валидный — загружаем приложение
     await this.loadObjects();
     if (!this.state.dashboards.length) this.seedDashboards();
     this.renderProjectTree();
