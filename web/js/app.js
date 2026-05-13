@@ -2636,12 +2636,103 @@ class ConstructionManagerUI {
   }
 
   renderAuthView() {
+    const currentToken = localStorage.getItem('cm_token') || '';
+    const currentRole = localStorage.getItem('cm_role') || '';
+    const expiresAt = localStorage.getItem('cm_token_expires') || '';
+    
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
-        <h3>Авторизация и роли</h3>
-        <p class="metric">Приложение использует demo JWT-токен для работы вкладок шаблонов.</p>
+        <h3>Авторизация</h3>
+        <p class="metric">Введите ключ API для получения токена или используйте демо-режим.</p>
+        
+        <div style="margin-top: 16px;">
+          <label style="display: block; margin-bottom: 6px; font-weight: 500;">API-ключ (сервисный)</label>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <input type="password" id="authApiKey" placeholder="Введите SERVICE_API_KEY" 
+              style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px;">
+            <button class="primary" id="authLoginBtn">Войти</button>
+            <button class="ghost" id="authDemoBtn">Демо-доступ</button>
+          </div>
+          <div id="authStatus" style="margin-top: 8px; font-size: 0.9em;"></div>
+        </div>
+
+        <div style="margin-top: 24px;" id="authTokenInfo">
+          <h4 style="margin-bottom: 8px;">Текущий токен</h4>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr><td style="padding: 4px 8px; font-weight: 500;">Токен:</td><td style="padding: 4px 8px;">
+              <code style="word-break: break-all; font-size: 0.8em;">${currentToken ? currentToken.substring(0, 60) + '…' : '—'}</code>
+            </td></tr>
+            <tr><td style="padding: 4px 8px; font-weight: 500;">Роль:</td><td style="padding: 4px 8px;">${currentRole || '—'}</td></tr>
+            <tr><td style="padding: 4px 8px; font-weight: 500;">Истекает:</td><td style="padding: 4px 8px;">${expiresAt || '—'}</td></tr>
+          </table>
+          <button class="ghost" id="authClearBtn" style="margin-top: 8px; color: var(--danger-color, #e53e3e);">
+            Очистить токен
+          </button>
+        </div>
       </article>
     `;
+
+    document.getElementById('authLoginBtn')?.addEventListener('click', async () => {
+      const apiKey = document.getElementById('authApiKey')?.value?.trim();
+      const status = document.getElementById('authStatus');
+      if (!apiKey) {
+        status.textContent = 'Введите API-ключ';
+        status.style.color = 'var(--danger-color, #e53e3e)';
+        return;
+      }
+      try {
+        status.textContent = 'Получение токена…';
+        status.style.color = 'inherit';
+        const payload = await fetch('/api/v1/auth/service-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: apiKey }),
+        });
+        if (!payload.ok) {
+          const err = await payload.json().catch(() => ({}));
+          throw new Error(err.error || \`Ошибка \${payload.status}\`);
+        }
+        const data = await payload.json();
+        localStorage.setItem('cm_token', data.access_token);
+        localStorage.setItem('cm_role', data.role);
+        const expiresDate = new Date(Date.now() + (data.expires_in || 86400) * 1000);
+        localStorage.setItem('cm_token_expires', expiresDate.toLocaleString('ru-RU'));
+        status.textContent = \`Токен получен. Роль: \${data.role}\`;
+        status.style.color = 'var(--success-color, #38a169)';
+        this.renderAuthView();
+        this.showToast('Авторизация выполнена', 'success');
+      } catch (e) {
+        status.textContent = \`Ошибка: \${e.message}\`;
+        status.style.color = 'var(--danger-color, #e53e3e)';
+      }
+    });
+
+    document.getElementById('authDemoBtn')?.addEventListener('click', async () => {
+      const status = document.getElementById('authStatus');
+      try {
+        status.textContent = 'Получение демо-токена…';
+        status.style.color = 'inherit';
+        await issueDemoToken('admin');
+        localStorage.setItem('cm_role', 'admin');
+        const expiresDate = new Date(Date.now() + 86400 * 1000);
+        localStorage.setItem('cm_token_expires', expiresDate.toLocaleString('ru-RU'));
+        status.textContent = 'Демо-токен получен (admin)';
+        status.style.color = 'var(--success-color, #38a169)';
+        this.renderAuthView();
+        this.showToast('Демо-доступ активирован', 'success');
+      } catch (e) {
+        status.textContent = \`Ошибка: \${e.message}\`;
+        status.style.color = 'var(--danger-color, #e53e3e)';
+      }
+    });
+
+    document.getElementById('authClearBtn')?.addEventListener('click', () => {
+      localStorage.removeItem('cm_token');
+      localStorage.removeItem('cm_role');
+      localStorage.removeItem('cm_token_expires');
+      this.renderAuthView();
+      this.showToast('Токен очищен', 'info');
+    });
   }
 
   openModal() {
