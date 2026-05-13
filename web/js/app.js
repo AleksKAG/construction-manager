@@ -1,4 +1,4 @@
-import { api, issueDemoToken } from './api.js';
+import { api } from './api.js';
 import {
   listTemplates,
   getTemplate,
@@ -2067,8 +2067,7 @@ class ConstructionManagerUI {
     if (this.currentView === 'svorDashboard') return this.renderSvorDashboard();
     if (this.currentView === 'svorHistory') return this.renderSvorHistoryList();
     if (this.currentView === 'auth') {
-      await issueDemoToken('admin');
-      return this.showToast('Demo token обновлён.', 'success');
+      return this.renderAuthView();
     }
     if (['protocolInternal', 'protocolDesign', 'protocolSMR'].includes(this.currentView)) {
       // Для протоколов — заглушка, в будущем можно открыть форму создания поручения
