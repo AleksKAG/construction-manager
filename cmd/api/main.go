@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/bcrypt"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -92,6 +93,10 @@ func main() {
 		logger.Info("Minimum migrations done")
 	}
 
+	if err := ensureAuthSchemaAndDefaultAdmin(db, logger); err != nil {
+		logger.Fatal("Auth schema migration failed: ", err)
+	}
+
 	// Репозиторий + sample data
 	repo := repository.NewGormRepository(db)
 	if err := services.LoadSampleData(repo, logger); err != nil {
@@ -143,13 +148,19 @@ func main() {
 
 		// Авторизация — открытые эндпоинты (без JWT)
 		api.POST("/auth/token", handlers.IssueToken())
-		api.POST("/auth/login", handlers.Login())
+		api.POST("/auth/login", handlers.Login(db))
 		api.POST("/auth/service-token", handlers.IssueServiceToken())
 
 		// Все защищённые роуты — под JWT
 		secured := api.Group("/")
 		secured.Use(middleware.JWTAuthMiddleware())
 		{
+			secured.GET("/auth/me", handlers.CurrentUser(db))
+			secured.GET("/users", middleware.RequireRoles("admin"), handlers.ListUsers(db))
+			secured.POST("/users", middleware.RequireRoles("admin"), handlers.CreateUser(db))
+			secured.PUT("/users/:id", middleware.RequireRoles("admin"), handlers.UpdateUser(db))
+			secured.DELETE("/users/:id", middleware.RequireRoles("admin"), handlers.DeleteUser(db))
+
 			// Шаблоны и ИРД
 			secured.GET("/templates", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplates(repo))
 			secured.GET("/templates/input_design_data", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetIrdTemplate())
@@ -277,6 +288,93 @@ func getEnv(key, fallback string) string {
 
 func shouldRunAutoMigrate() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("RUN_DB_MIGRATIONS")), "true")
+}
+
+func ensureAuthSchemaAndDefaultAdmin(db *gorm.DB, logger *logrus.Logger) error {
+	statements := []string{
+		`CREATE EXTENSION IF NOT EXISTS pgcrypto`,
+		`CREATE TABLE IF NOT EXISTS roles (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			code VARCHAR(50) UNIQUE NOT NULL,
+			name VARCHAR(100) NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE TABLE IF NOT EXISTS users (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			username VARCHAR(255),
+			email VARCHAR(255) UNIQUE NOT NULL,
+			full_name VARCHAR(255) NOT NULL,
+			password_hash TEXT,
+			is_active BOOLEAN NOT NULL DEFAULT TRUE,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+		)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users (LOWER(username)) WHERE username IS NOT NULL AND username <> ''`,
+		`CREATE TABLE IF NOT EXISTS user_roles (
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+			assigned_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (user_id, role_id)
+		)`,
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	if err := db.Exec(`
+		INSERT INTO roles (code, name) VALUES
+			('admin', 'Администратор'),
+			('editor', 'Редактор'),
+			('viewer', 'Наблюдатель')
+		ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+	`).Error; err != nil {
+		return err
+	}
+
+	adminLogin := getEnv("AUTH_LOGIN", "admin")
+	adminPassword := getEnv("AUTH_PASSWORD", "admin")
+	adminEmail := getEnv("AUTH_EMAIL", "admin@example.local")
+	adminName := getEnv("AUTH_FULL_NAME", "Администратор")
+	adminHash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	var existingID string
+	if err := db.Raw(`SELECT id::text FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?) LIMIT 1`, adminLogin, adminEmail).Scan(&existingID).Error; err != nil {
+		return err
+	}
+	if existingID == "" {
+		if err := db.Raw(`
+			INSERT INTO users (username, email, full_name, password_hash, is_active, created_at, updated_at)
+			VALUES (?, ?, ?, ?, true, NOW(), NOW())
+			RETURNING id::text
+		`, adminLogin, adminEmail, adminName, string(adminHash)).Scan(&existingID).Error; err != nil {
+			return err
+		}
+		logger.Infof("Created default admin user %q", adminLogin)
+	} else {
+		if err := db.Exec(`
+			UPDATE users
+			SET username = COALESCE(NULLIF(username, ''), ?),
+			    password_hash = COALESCE(NULLIF(password_hash, ''), ?),
+			    is_active = true,
+			    updated_at = NOW()
+			WHERE id::text = ?
+		`, adminLogin, string(adminHash), existingID).Error; err != nil {
+			return err
+		}
+	}
+
+	var adminRoleID string
+	if err := db.Raw(`SELECT id::text FROM roles WHERE code = 'admin' LIMIT 1`).Scan(&adminRoleID).Error; err != nil {
+		return err
+	}
+	return db.Exec(`INSERT INTO user_roles (user_id, role_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, existingID, adminRoleID).Error
 }
 
 func resolveDatabaseDSN() string {
