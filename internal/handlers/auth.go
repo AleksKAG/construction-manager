@@ -146,8 +146,8 @@ func CreateUser(db *gorm.DB) gin.HandlerFunc {
 		tx := db.Begin()
 		var userID string
 		if err := tx.Raw(`
-			INSERT INTO users (username, email, full_name, password_hash, is_active, created_at, updated_at)
-			VALUES (?, ?, ?, ?, true, NOW(), NOW())
+			INSERT INTO users (id, username, email, full_name, password_hash, is_active, created_at, updated_at)
+			VALUES (gen_random_uuid()::text, ?, ?, ?, ?, true, NOW(), NOW())
 			RETURNING id::text
 		`, input.Username, strings.TrimSpace(input.Email), strings.TrimSpace(input.FullName), string(hash)).Scan(&userID).Error; err != nil {
 			tx.Rollback()
