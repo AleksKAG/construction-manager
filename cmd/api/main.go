@@ -307,13 +307,13 @@ func ensureAuthSchemaAndDefaultAdmin(db *gorm.DB, logger *logrus.Logger) error {
 	statements := []string{
 		`CREATE EXTENSION IF NOT EXISTS pgcrypto`,
 		`CREATE TABLE IF NOT EXISTS roles (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
 			code VARCHAR(50) UNIQUE NOT NULL,
 			name VARCHAR(100) NOT NULL,
 			created_at TIMESTAMP NOT NULL DEFAULT NOW()
 		)`,
 		`CREATE TABLE IF NOT EXISTS users (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
 			username VARCHAR(255),
 			email VARCHAR(255) UNIQUE NOT NULL,
 			full_name VARCHAR(255) NOT NULL,
@@ -325,10 +325,12 @@ func ensureAuthSchemaAndDefaultAdmin(db *gorm.DB, logger *logrus.Logger) error {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255)`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
+		`ALTER TABLE roles ALTER COLUMN id SET DEFAULT gen_random_uuid()::text`,
+		`ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid()::text`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users (LOWER(username)) WHERE username IS NOT NULL AND username <> ''`,
 		`CREATE TABLE IF NOT EXISTS user_roles (
-			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-			role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
 			assigned_at TIMESTAMP NOT NULL DEFAULT NOW(),
 			PRIMARY KEY (user_id, role_id)
 		)`,
@@ -339,10 +341,10 @@ func ensureAuthSchemaAndDefaultAdmin(db *gorm.DB, logger *logrus.Logger) error {
 		}
 	}
 	if err := db.Exec(`
-		INSERT INTO roles (code, name) VALUES
-			('admin', 'Администратор'),
-			('editor', 'Редактор'),
-			('viewer', 'Наблюдатель')
+		INSERT INTO roles (id, code, name) VALUES
+			(gen_random_uuid()::text, 'admin', 'Администратор'),
+			(gen_random_uuid()::text, 'editor', 'Редактор'),
+			(gen_random_uuid()::text, 'viewer', 'Наблюдатель')
 		ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
 	`).Error; err != nil {
 		return err
@@ -363,8 +365,8 @@ func ensureAuthSchemaAndDefaultAdmin(db *gorm.DB, logger *logrus.Logger) error {
 	}
 	if existingID == "" {
 		if err := db.Raw(`
-			INSERT INTO users (username, email, full_name, password_hash, is_active, created_at, updated_at)
-			VALUES (?, ?, ?, ?, true, NOW(), NOW())
+			INSERT INTO users (id, username, email, full_name, password_hash, is_active, created_at, updated_at)
+			VALUES (gen_random_uuid()::text, ?, ?, ?, ?, true, NOW(), NOW())
 			RETURNING id::text
 		`, adminLogin, adminEmail, adminName, string(adminHash)).Scan(&existingID).Error; err != nil {
 			return err
