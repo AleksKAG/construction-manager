@@ -124,7 +124,7 @@ class ConstructionManagerUI {
     // Проверяем токен: /objects вернёт 401 если невалидный
     try {
       const resp = await fetch('/api/v1/objects', {
-        headers: { 'Authorization': \`Bearer \${token}\` },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!resp.ok) {
         localStorage.removeItem('cm_token');
@@ -388,6 +388,7 @@ class ConstructionManagerUI {
         this.selectedObjectId = pid;
         this.expandedProjects.clear();
         this.expandedProjects.add(pid);
+        this.expandedMenuNodes.clear();
         await this.loadProjectMenu(pid);
         this.renderProjectTree();
         this.renderContent();
@@ -400,6 +401,9 @@ class ConstructionManagerUI {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         const view = this.normalizeMenuViewKey(item.dataset.viewLink, item.dataset.viewTitle);
+        if (!view) return;
+        this.keepOnlyMenuPath(item.dataset.menuPath || '');
+        this.renderProjectTree();
         this.switchView(view, item.dataset.viewTitle, { collapseMobile: item.dataset.hasChildren !== 'true' });
       });
     });
@@ -409,8 +413,8 @@ class ConstructionManagerUI {
         e.stopPropagation();
         const key = item.dataset.menuToggle;
         if (!key) return;
-        if (this.expandedMenuNodes.has(key)) this.expandedMenuNodes.delete(key);
-        else this.expandedMenuNodes.add(key);
+        if (this.expandedMenuNodes.has(key)) this.collapseMenuNode(key);
+        else this.expandOnlyMenuPath(item.dataset.menuPath || key);
         this.renderProjectTree();
       });
     });
@@ -418,7 +422,26 @@ class ConstructionManagerUI {
 
   renderProjectSubmenu(projectId) {
     const menu = this.sanitizeProjectMenu(this.projectMenus[projectId] || []);
-    return this.renderMenuNodes(projectId, menu || [], 1);
+    return this.renderMenuNodes(projectId, menu || [], 1, []);
+  }
+
+  keepOnlyMenuPath(serializedPath) {
+    const path = String(serializedPath || '').split('|').filter(Boolean);
+    this.expandedMenuNodes = new Set(path);
+  }
+
+  expandOnlyMenuPath(serializedPath) {
+    this.keepOnlyMenuPath(serializedPath);
+  }
+
+  collapseMenuNode(key) {
+    const prefix = `${key}:`;
+    this.expandedMenuNodes = new Set([...this.expandedMenuNodes].filter((nodeKey) => nodeKey !== key && !nodeKey.startsWith(prefix)));
+  }
+
+  menuNodeKey(projectId, node, indexPath) {
+    const stableID = String(node.id || node.view_key || node.title || indexPath || '').trim();
+    return `${projectId}:${stableID}`;
   }
 
   sanitizeProjectMenu(nodes = []) {
@@ -447,17 +470,20 @@ class ConstructionManagerUI {
     return cloned;
   }
 
-  renderMenuNodes(projectId, nodes, level = 1) {
-    return (nodes || []).map((node) => {
-      const nodeKey = `${projectId}:${node.id}`;
+  renderMenuNodes(projectId, nodes, level = 1, parentPath = []) {
+    return (nodes || []).map((node, index) => {
+      const nodeKey = this.menuNodeKey(projectId, node, `${parentPath.join('/')}/${index}`);
+      const nodePath = [...parentPath, nodeKey];
+      const pathAttr = nodePath.join('|');
+      const parentPathAttr = parentPath.join('|');
       const hasChildren = Array.isArray(node.children) && node.children.length > 0;
       const expanded = hasChildren && this.expandedMenuNodes.has(nodeKey);
       const marker = hasChildren ? (expanded ? '▼ ' : '▶ ') : '';
       const resolvedView = this.normalizeMenuViewKey(node.view_key, node.title);
-      const attrs = (resolvedView && !hasChildren) ? `data-view-link="${resolvedView}" data-view-title="${node.title}" data-has-children="false"` : '';
-      const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}"` : '';
+      const attrs = (resolvedView && !hasChildren) ? `data-view-link="${resolvedView}" data-view-title="${node.title}" data-has-children="false" data-menu-path="${parentPathAttr}"` : '';
+      const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}" data-menu-path="${pathAttr}"` : '';
       const row = `<div class="tree-row level-${Math.min(level, 4)}" ${attrs} ${toggleAttrs}>${marker}${node.title}</div>`;
-      const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1) : '';
+      const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1, nodePath) : '';
       return `${row}${children}`;
     }).join('');
   }
@@ -477,6 +503,10 @@ class ConstructionManagerUI {
       design_schedule: titleView || 'designSchedule',
       schedule: titleView || 'smrSchedule',
       smr_schedule: 'smrSchedule',
+      svor: 'svorMain',
+      svor_main: 'svorMain',
+      svor_dashboard: 'svorDashboard',
+      svor_history: 'svorHistory',
       ssr: 'estimate',
       ird: 'template:ird',
       docs: 'docsTemplates',
@@ -1087,8 +1117,14 @@ class ConstructionManagerUI {
   async renderSvorMain() {
     const project = this.currentProject();
     if (!project) return;
-    const statusQ = this.svorFilters.status ? `&status=${encodeURIComponent(this.svorFilters.status)}` : '';
-    const payload = await api(`/projects/${project.id}/svor?page=${this.svorPagination.page}&page_size=${this.svorPagination.page_size}${statusQ}`);
+    let payload;
+    try {
+      const statusQ = this.svorFilters.status ? `&status=${encodeURIComponent(this.svorFilters.status)}` : '';
+      payload = await api(`/projects/${project.id}/svor?page=${this.svorPagination.page}&page_size=${this.svorPagination.page_size}${statusQ}`);
+    } catch (error) {
+      document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>СВОР</h3><p>${error.message || 'Не удалось загрузить СВОР'}</p></article>`;
+      return;
+    }
     this.svorRows = payload.data || [];
     this.svorPagination = payload.pagination || this.svorPagination;
     const body = this.svorRows.map((entry, i) => {
@@ -1152,7 +1188,13 @@ class ConstructionManagerUI {
   async renderSvorDashboard() {
     const project = this.currentProject();
     if (!project) return;
-    const dash = await api(`/projects/${project.id}/svor/dashboard`);
+    let dash;
+    try {
+      dash = await api(`/projects/${project.id}/svor/dashboard`);
+    } catch (error) {
+      document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>Сводный дашборд по СВОР</h3><p>${error.message || 'Не удалось загрузить дашборд СВОР'}</p></article>`;
+      return;
+    }
     this.svorDashboard = dash;
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
@@ -2762,7 +2804,7 @@ class ConstructionManagerUI {
     // Проверяем токен — дёргаем /objects (закрытый GET, сработает только с токеном)
     try {
       const resp = await fetch('/api/v1/objects', {
-        headers: { 'Authorization': \`Bearer \${token}\` },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       if (resp.ok) return true;
     } catch (_) {}

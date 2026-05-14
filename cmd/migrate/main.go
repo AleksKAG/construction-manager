@@ -34,6 +34,7 @@ func main() {
 
 	fmt.Println("Running GORM AutoMigrate...")
 	if err := db.AutoMigrate(
+		&models.Project{},
 		&models.ProjectObject{},
 		&models.GanttTask{},
 		&models.DocumentRegistry{},

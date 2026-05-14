@@ -56,6 +56,7 @@ func main() {
 	if shouldRunAutoMigrate() {
 		logger.Info("RUN_DB_MIGRATIONS=true, running full GORM AutoMigrate")
 		if err := db.AutoMigrate(
+			&models.Project{},
 			&models.ProjectObject{},
 			&models.GanttTask{},
 			&models.DocumentRegistry{},
@@ -83,10 +84,17 @@ func main() {
 	} else {
 		logger.Info("RUN_DB_MIGRATIONS!=true, running safe minimum migrations for critical tables")
 		if err := db.AutoMigrate(
+			&models.Project{},
+			&models.ProjectObject{},
 			&models.MenuItem{},
 			&models.TemplateDefinition{},
 			&models.TemplateColumn{},
 			&models.ProjectTemplateRow{},
+			&models.DocStageP{},
+			&models.DocStageR{},
+			&models.DocStageRRevision{},
+			&models.SvorRecord{},
+			&models.SvorHistory{},
 		); err != nil {
 			logger.Fatal("Minimum migration failed: ", err)
 		}

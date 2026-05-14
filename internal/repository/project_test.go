@@ -19,6 +19,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 	// Миграция всех необходимых таблиц
 	err = db.AutoMigrate(
+		&models.Project{},
 		&models.ProjectObject{},
 		&models.GanttTask{},
 		&models.TemplateDefinition{},
@@ -566,7 +567,7 @@ func TestGetProjectProgress_WithTasks(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, float64(70), design) // (80+60)/2
-	assert.Equal(t, float64(30), smr)     // (40+20)/2
+	assert.Equal(t, float64(30), smr)    // (40+20)/2
 }
 
 func TestGetUpcomingTasks(t *testing.T) {

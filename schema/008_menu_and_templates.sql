@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS template_definitions (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_template_definitions_code ON template_definitions(code);
+CREATE INDEX IF NOT EXISTS idx_template_definitions_code ON template_definitions(code);
 COMMENT ON TABLE template_definitions IS 'Определения шаблонов: теп, сср, schedule, ird';
 COMMENT ON COLUMN template_definitions.code IS 'Код шаблона: tep, ssr, schedule, ird';
 COMMENT ON COLUMN template_definitions.structure_json IS 'JSON со структурой полей шаблона';
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS template_columns (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(template_code, field_key)
 );
-CREATE INDEX idx_template_columns_template ON template_columns(template_code);
+CREATE INDEX IF NOT EXISTS idx_template_columns_template ON template_columns(template_code);
 COMMENT ON TABLE template_columns IS 'Колонки шаблонов';
 
 -- Таблица элементов меню проекта
@@ -50,8 +50,8 @@ CREATE TABLE IF NOT EXISTS menu_items (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_menu_items_project ON menu_items(project_id, sort_order);
-CREATE INDEX idx_menu_items_parent ON menu_items(parent_id);
+CREATE INDEX IF NOT EXISTS idx_menu_items_project ON menu_items(project_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_menu_items_parent ON menu_items(parent_id);
 
 -- Таблица строк шаблонов (ТЭП, сметы, графики)
 CREATE TABLE IF NOT EXISTS project_template_rows (
@@ -65,8 +65,8 @@ CREATE TABLE IF NOT EXISTS project_template_rows (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(project_id, template_code, row_number)
 );
-CREATE INDEX idx_template_rows_lookup ON project_template_rows(project_id, template_code);
-CREATE INDEX idx_template_rows_project ON project_template_rows(project_id);
+CREATE INDEX IF NOT EXISTS idx_template_rows_lookup ON project_template_rows(project_id, template_code);
+CREATE INDEX IF NOT EXISTS idx_template_rows_project ON project_template_rows(project_id);
 
 -- Комментарии для документации
 COMMENT ON TABLE menu_items IS 'Элементы навигационного меню проекта';

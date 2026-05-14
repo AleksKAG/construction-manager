@@ -19,6 +19,16 @@ type GormRepository struct {
 
 type ProjectRepositoryAlias = GormRepository
 
+type messageError string
+
+func (e messageError) Error() string {
+	return string(e)
+}
+
+func (e messageError) Is(target error) bool {
+	return target != nil && target.Error() == string(e)
+}
+
 func NewGormRepository(db *gorm.DB) *GormRepository {
 	return &GormRepository{DB: db}
 }
@@ -80,7 +90,7 @@ func (r *GormRepository) GetProjectByID(ctx context.Context, id string) (*models
 	var project models.ProjectObject
 	err := r.DB.WithContext(ctx).First(&project, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.New("not found")
+		return nil, messageError("not found")
 	}
 	return &project, err
 }
@@ -115,7 +125,7 @@ func (r *GormRepository) GetTaskByID(ctx context.Context, id string) (*models.Ga
 	var task models.GanttTask
 	err := r.DB.WithContext(ctx).First(&task, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.New("task not found")
+		return nil, messageError("task not found")
 	}
 	return &task, err
 }
@@ -146,7 +156,7 @@ func (r *GormRepository) GetTemplateRowByID(ctx context.Context, id string) (*mo
 	var row models.ProjectTemplateRow
 	err := r.DB.WithContext(ctx).First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.New("row not found")
+		return nil, messageError("row not found")
 	}
 	return &row, err
 }
@@ -253,7 +263,7 @@ func (r *GormRepository) GetIrdDocumentByID(ctx context.Context, id string) (*mo
 	var doc models.IrdDocument
 	err := r.DB.WithContext(ctx).First(&doc, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.New("ird document not found")
+		return nil, messageError("ird document not found")
 	}
 	return &doc, err
 }
