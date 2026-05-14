@@ -9,6 +9,23 @@ import (
 	"gorm.io/gorm"
 )
 
+// Project — верхнеуровневая запись проекта, на которую ссылаются строительные объекты.
+type Project struct {
+	ID        string    `gorm:"primaryKey;type:text" json:"id"`
+	Code      string    `gorm:"type:text;uniqueIndex;not null" json:"code"`
+	Name      string    `gorm:"type:text;not null" json:"name"`
+	Status    string    `gorm:"type:text;default:'active'" json:"status"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (p *Project) BeforeCreate(tx *gorm.DB) error {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
+	}
+	return nil
+}
+
 // ProjectObject — строительный объект
 type ProjectObject struct {
 	ID              string             `gorm:"primaryKey;type:text" json:"id"`
