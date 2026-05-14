@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AleksKAG/construction-manager/internal/database"
 	"github.com/AleksKAG/construction-manager/internal/handlers"
 	"github.com/AleksKAG/construction-manager/internal/middleware"
 	"github.com/AleksKAG/construction-manager/internal/models"
@@ -52,6 +53,10 @@ func main() {
 		logger.Fatal("PostgreSQL connection failed: ", err)
 	}
 	logger.Info("PostgreSQL connected")
+
+	if err := database.EnsureTextIDCompatibility(db); err != nil {
+		logger.Fatal("Database compatibility migration failed: ", err)
+	}
 
 	if shouldRunAutoMigrate() {
 		logger.Info("RUN_DB_MIGRATIONS=true, running full GORM AutoMigrate")
