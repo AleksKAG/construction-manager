@@ -12,7 +12,7 @@ import (
 // Project — верхнеуровневая запись проекта, на которую ссылаются строительные объекты.
 type Project struct {
 	ID        string    `gorm:"primaryKey;type:text" json:"id"`
-	Code      string    `gorm:"type:text;uniqueIndex;not null" json:"code"`
+	Code      string    `gorm:"type:text;unique;not null" json:"code"`
 	Name      string    `gorm:"type:text;not null" json:"name"`
 	Status    string    `gorm:"type:text;default:'active'" json:"status"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
@@ -125,9 +125,9 @@ func (t *GanttTask) BeforeCreate(tx *gorm.DB) error {
 // User + RBAC
 type User struct {
 	ID           string    `gorm:"primaryKey;type:text" json:"id"`
-	Username     string    `gorm:"type:text;uniqueIndex" json:"username"`
+	Username     string    `gorm:"type:text;unique" json:"username"`
 	FullName     string    `gorm:"type:text;not null" json:"full_name"`
-	Email        string    `gorm:"type:text;uniqueIndex;not null" json:"email"`
+	Email        string    `gorm:"type:text;unique;not null" json:"email"`
 	PasswordHash string    `gorm:"type:text" json:"-"`
 	IsActive     bool      `gorm:"default:true" json:"is_active"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
@@ -143,7 +143,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 
 type Role struct {
 	ID   string `gorm:"primaryKey;type:text" json:"id"`
-	Code string `gorm:"type:text;uniqueIndex;not null" json:"code"`
+	Code string `gorm:"type:text;unique;not null" json:"code"`
 	Name string `gorm:"type:text;not null" json:"name"`
 }
 
@@ -225,7 +225,7 @@ func (dw *DashboardWidget) BeforeCreate(tx *gorm.DB) error {
 // TemplateDefinition describes standard tabular templates (ТЭП, графики, ИДП и т.д.)
 type TemplateDefinition struct {
 	ID          string `gorm:"primaryKey;type:text" json:"id"`
-	Code        string `gorm:"type:text;uniqueIndex;not null" json:"code"`
+	Code        string `gorm:"type:text;unique;not null" json:"code"`
 	Name        string `gorm:"type:text;not null" json:"name"`
 	Description string `gorm:"type:text" json:"description,omitempty"`
 }
