@@ -107,12 +107,14 @@ func (t *GanttTask) BeforeCreate(tx *gorm.DB) error {
 
 // User + RBAC
 type User struct {
-	ID        string    `gorm:"primaryKey;type:text" json:"id"`
-	FullName  string    `gorm:"type:text;not null" json:"full_name"`
-	Email     string    `gorm:"type:text;uniqueIndex;not null" json:"email"`
-	Status    string    `gorm:"type:text;default:'active'" json:"status"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
+	ID           string    `gorm:"primaryKey;type:text" json:"id"`
+	Username     string    `gorm:"type:text;uniqueIndex" json:"username"`
+	FullName     string    `gorm:"type:text;not null" json:"full_name"`
+	Email        string    `gorm:"type:text;uniqueIndex;not null" json:"email"`
+	PasswordHash string    `gorm:"type:text" json:"-"`
+	IsActive     bool      `gorm:"default:true" json:"is_active"`
+	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
 }
 
 func (u *User) BeforeCreate(tx *gorm.DB) error {
@@ -149,17 +151,10 @@ func (p *Permission) BeforeCreate(tx *gorm.DB) error {
 }
 
 type UserRole struct {
-	ID        string `gorm:"primaryKey;type:text" json:"id"`
-	UserID    string `gorm:"type:text;index;not null" json:"user_id"`
-	RoleID    string `gorm:"type:text;index;not null" json:"role_id"`
-	ProjectID string `gorm:"type:text;index" json:"project_id,omitempty"`
-}
-
-func (ur *UserRole) BeforeCreate(tx *gorm.DB) error {
-	if ur.ID == "" {
-		ur.ID = uuid.New().String()
-	}
-	return nil
+	UserID     string    `gorm:"primaryKey;type:text;not null" json:"user_id"`
+	RoleID     string    `gorm:"primaryKey;type:text;not null" json:"role_id"`
+	ProjectID  string    `gorm:"type:text;index" json:"project_id,omitempty"`
+	AssignedAt time.Time `gorm:"autoCreateTime" json:"assigned_at,omitempty"`
 }
 
 // Project-level menu and dashboards
