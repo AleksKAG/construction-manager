@@ -7,14 +7,13 @@ import (
 )
 
 // EnsureApplicationConstraints keeps constraints that are required by the
-// application but intentionally not declared on GORM models. Some legacy
-// PostgreSQL databases have the project-code uniqueness as a table constraint
-// (for example projects_code_key) rather than the GORM-generated constraint
-// name (uni_projects_code). Declaring that uniqueness in the model makes
-// AutoMigrate try to drop a non-existent constraint on those databases, which
-// aborts container startup. Keeping the constraint in explicit SQL makes the
-// startup migration idempotent across both schema.sql-created and GORM-created
-// databases.
+// application and makes startup idempotent across both schema.sql-created and
+// GORM-created databases. Project.Code also declares its uniqueness in the
+// GORM model so AutoMigrate treats existing legacy unique constraints (for
+// example projects_code_key) as desired instead of attempting to drop the
+// non-existent GORM-generated constraint name (uni_projects_code). The explicit
+// SQL below still backfills uniqueness for databases created before that model
+// tag existed.
 func EnsureApplicationConstraints(db *gorm.DB) error {
 	if db == nil || db.Dialector == nil {
 		return nil
