@@ -77,7 +77,7 @@ func LoadSampleData(repo repository.Repository, logger *logrus.Logger) error {
 	}
 
 	for i, project := range sampleProjects {
-		if err := repo.CreateProject(ctx, project); err != nil {
+		if err := repo.CreateProjectLegacy(ctx, project); err != nil {
 			return fmt.Errorf("failed to create sample project %d (%s): %w", i+1, project.Name, err)
 		}
 		logger.Infof("Created sample project: %s", project.Name)

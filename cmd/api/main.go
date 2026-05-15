@@ -40,6 +40,9 @@ func main() {
 		logger.Fatal("DATABASE_URL is required (or set POSTGRES*/POSTGRESQL* variables)")
 	}
 
+	// Проверка обязательных переменных окружения
+	validateRequiredEnv(logger)
+
 	logger.Info("Connecting to PostgreSQL")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: gormLogger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), gormLogger.Config{
@@ -150,19 +153,27 @@ func main() {
 	{
 		// Health check — БЕЗ auth middleware!
 		api.GET("/health", func(c *gin.Context) {
+			sqlDB, err := repo.RawDB().DB()
+			dbStatus := "ok"
+			if err != nil || sqlDB.Ping() != nil {
+				dbStatus = "error"
+			}
 			c.JSON(http.StatusOK, gin.H{
 				"status":    "ok",
-				"database":  "postgres",
-				"timestamp": time.Now(),
+				"database":  dbStatus,
+				"db_driver": "postgres",
+				"timestamp": time.Now().UTC(),
 			})
 		})
 
 		api.GET("/menu", handlers.MenuHandler)
 
-		// Авторизация — открытые эндпоинты (без JWT)
-		api.POST("/auth/token", handlers.IssueToken())
-		api.POST("/auth/login", handlers.Login(db))
-		api.POST("/auth/service-token", handlers.IssueServiceToken())
+		// Projects — верхний уровень
+		api.GET("/projects", handlers.ListProjects(repo))
+		api.POST("/projects", handlers.CreateProject(repo))
+		api.GET("/projects/:id", handlers.GetProject(repo))
+		api.PUT("/projects/:id", handlers.UpdateProject(repo))
+		api.DELETE("/projects/:id", handlers.DeleteProject(repo))
 
 		// Все защищённые роуты — под JWT
 		secured := api.Group("/")
@@ -429,4 +440,23 @@ func firstNonEmptyEnv(keys ...string) string {
 		}
 	}
 	return ""
+}
+
+// validateRequiredEnv проверяет обязательные переменные окружения.
+// Завершает процесс с ошибкой, если критически важные переменные отсутствуют.
+func validateRequiredEnv(logger *logrus.Logger) {
+	required := []string{
+		"JWT_SECRET",
+		"SERVICE_API_KEY",
+	}
+	missing := make([]string, 0)
+	for _, key := range required {
+		if strings.TrimSpace(os.Getenv(key)) == "" {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) > 0 {
+		logger.Fatalf("Missing required environment variables: %s\nSet them in .env file or environment", strings.Join(missing, ", "))
+	}
+	logger.Info("Environment validation passed")
 }

@@ -41,7 +41,38 @@ func (r *GormRepository) RawDB() *gorm.DB {
 	return r.DB
 }
 
-func (r *GormRepository) CreateProject(ctx context.Context, project *models.ProjectObject) error {
+// ======================== Project (верхний уровень) ========================
+
+func (r *GormRepository) CreateProject(ctx context.Context, project *models.Project) error {
+	return r.DB.WithContext(ctx).Create(project).Error
+}
+
+func (r *GormRepository) ListProjects(ctx context.Context) ([]models.Project, error) {
+	var projects []models.Project
+	err := r.DB.WithContext(ctx).Order("created_at desc").Find(&projects).Error
+	return projects, err
+}
+
+func (r *GormRepository) GetProjectByID(ctx context.Context, id string) (*models.Project, error) {
+	var project models.Project
+	err := r.DB.WithContext(ctx).First(&project, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errors.New("project not found")
+	}
+	return &project, err
+}
+
+func (r *GormRepository) UpdateProject(ctx context.Context, project *models.Project) error {
+	return r.DB.WithContext(ctx).Save(project).Error
+}
+
+func (r *GormRepository) DeleteProject(ctx context.Context, id string) error {
+	return r.DB.WithContext(ctx).Delete(&models.Project{}, "id = ?", id).Error
+}
+
+// ======================== ProjectObject (legacy — будет удалено) ========================
+
+func (r *GormRepository) CreateProjectLegacy(ctx context.Context, project *models.ProjectObject) error {
 	return r.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if project.ID == "" {
 			project.ID = uuid.NewString()
@@ -80,13 +111,13 @@ func (r *GormRepository) CreateProject(ctx context.Context, project *models.Proj
 	})
 }
 
-func (r *GormRepository) ListProjects(ctx context.Context) ([]models.ProjectObject, error) {
+func (r *GormRepository) ListProjectsLegacy(ctx context.Context) ([]models.ProjectObject, error) {
 	var projects []models.ProjectObject
 	err := r.DB.WithContext(ctx).Find(&projects).Error
 	return projects, err
 }
 
-func (r *GormRepository) GetProjectByID(ctx context.Context, id string) (*models.ProjectObject, error) {
+func (r *GormRepository) GetProjectByIDLegacy(ctx context.Context, id string) (*models.ProjectObject, error) {
 	var project models.ProjectObject
 	err := r.DB.WithContext(ctx).First(&project, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -95,11 +126,11 @@ func (r *GormRepository) GetProjectByID(ctx context.Context, id string) (*models
 	return &project, err
 }
 
-func (r *GormRepository) UpdateProject(ctx context.Context, project *models.ProjectObject) error {
+func (r *GormRepository) UpdateProjectLegacy(ctx context.Context, project *models.ProjectObject) error {
 	return r.DB.WithContext(ctx).Save(project).Error
 }
 
-func (r *GormRepository) DeleteProject(ctx context.Context, id string) error {
+func (r *GormRepository) DeleteProjectLegacy(ctx context.Context, id string) error {
 	return r.DB.WithContext(ctx).Delete(&models.ProjectObject{}, "id = ?", id).Error
 }
 
