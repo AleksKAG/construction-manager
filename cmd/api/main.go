@@ -172,6 +172,9 @@ func main() {
 
 		api.GET("/menu", handlers.MenuHandler)
 
+		// Auth — публичный логин (БЕЗ JWT middleware)
+		api.POST("/auth/login", handlers.Login(db))
+
 		// Projects — верхний уровень
 		api.GET("/projects", handlers.ListProjects(repo))
 		api.POST("/projects", handlers.CreateProject(repo))
@@ -388,15 +391,30 @@ func ensureAuthSchemaAndDefaultAdmin(db *gorm.DB, logger *logrus.Logger) error {
 		}
 		logger.Infof("Created default admin user %q", adminLogin)
 	} else {
-		if err := db.Exec(`
-			UPDATE users
-			SET username = COALESCE(NULLIF(username, ''), ?),
-			    password_hash = COALESCE(NULLIF(password_hash, ''), ?),
-			    is_active = true,
-			    updated_at = NOW()
-			WHERE id::text = ?
-		`, adminLogin, string(adminHash), existingID).Error; err != nil {
-			return err
+		forceReset := strings.EqualFold(strings.TrimSpace(os.Getenv("AUTH_FORCE_RESET_PASSWORD")), "true")
+		if forceReset {
+			if err := db.Exec(`
+				UPDATE users
+				SET username = ?,
+				    password_hash = ?,
+				    is_active = true,
+				    updated_at = NOW()
+				WHERE id::text = ?
+			`, adminLogin, string(adminHash), existingID).Error; err != nil {
+				return err
+			}
+			logger.Warnf("AUTH_FORCE_RESET_PASSWORD=true: admin password forcibly reset for user %q", adminLogin)
+		} else {
+			if err := db.Exec(`
+				UPDATE users
+				SET username = COALESCE(NULLIF(username, ''), ?),
+				    password_hash = COALESCE(NULLIF(password_hash, ''), ?),
+				    is_active = true,
+				    updated_at = NOW()
+				WHERE id::text = ?
+			`, adminLogin, string(adminHash), existingID).Error; err != nil {
+				return err
+			}
 		}
 	}
 
