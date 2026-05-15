@@ -9,7 +9,34 @@ import (
 	"gorm.io/gorm"
 )
 
-// ProjectObject — строительный объект
+// Project — проект (верхний уровень). Соответствует SQL-таблице projects.
+type Project struct {
+	ID             string     `gorm:"primaryKey;type:text" json:"id"`
+	Code           string     `gorm:"type:text;uniqueIndex;not null" json:"code"`
+	Name           string     `gorm:"type:text;not null" json:"name"`
+	CustomerName   string     `gorm:"type:text" json:"customer_name,omitempty"`
+	Location       string     `gorm:"type:text" json:"location,omitempty"`
+	Status         string     `gorm:"type:text;default:'draft';index" json:"status"`
+	StartDate      *time.Time `json:"start_date,omitempty"`
+	PlannedEndDate *time.Time `json:"planned_end_date,omitempty"`
+	ActualEndDate  *time.Time `json:"actual_end_date,omitempty"`
+	CreatedBy      *string    `gorm:"type:text;index" json:"created_by,omitempty"`
+	CreatedAt      time.Time  `gorm:"autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt      time.Time  `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (p *Project) BeforeCreate(tx *gorm.DB) error {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
+	}
+	if p.Status == "" {
+		p.Status = "draft"
+	}
+	return nil
+}
+
+// ProjectObject — строительный объект (корпус) внутри проекта.
+// Соответствует SQL-таблице project_objects.
 type ProjectObject struct {
 	ID              string             `gorm:"primaryKey;type:text" json:"id"`
 	ProjectID       string             `gorm:"type:text;not null;index" json:"project_id,omitempty"`
@@ -107,12 +134,13 @@ func (t *GanttTask) BeforeCreate(tx *gorm.DB) error {
 
 // User + RBAC
 type User struct {
-	ID        string    `gorm:"primaryKey;type:text" json:"id"`
-	FullName  string    `gorm:"type:text;not null" json:"full_name"`
-	Email     string    `gorm:"type:text;uniqueIndex;not null" json:"email"`
-	Status    string    `gorm:"type:text;default:'active'" json:"status"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
+	ID           string    `gorm:"primaryKey;type:text" json:"id"`
+	FullName     string    `gorm:"type:text;not null" json:"full_name"`
+	Email        string    `gorm:"type:text;uniqueIndex;not null" json:"email"`
+	PasswordHash string    `gorm:"type:text" json:"-"`
+	IsActive     bool      `gorm:"type:boolean;default:true" json:"is_active"`
+	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
 }
 
 func (u *User) BeforeCreate(tx *gorm.DB) error {

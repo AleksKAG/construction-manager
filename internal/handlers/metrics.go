@@ -85,7 +85,7 @@ func GetTEPByProject(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 		
-		project, err := repo.GetProjectByID(c.Request.Context(), projectID)
+		project, err := repo.GetProjectByIDLegacy(c.Request.Context(), projectID)
 		if err != nil {
 			// При отсутствии проекта возвращаем 200 OK с флагом projectNotFound
 			c.JSON(http.StatusOK, gin.H{
@@ -197,7 +197,7 @@ func GetDashboardMetrics(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 		
-		project, err := repo.GetProjectByID(c.Request.Context(), projectID)
+		project, err := repo.GetProjectByIDLegacy(c.Request.Context(), projectID)
 		if err != nil {
 			// При отсутствии проекта возвращаем 200 OK с флагом projectNotFound
 			// вместо 404, чтобы фронтенд не падал

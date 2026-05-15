@@ -56,7 +56,7 @@ func GetAgentSummary(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		project, err := repo.GetProjectByID(c.Request.Context(), input.ProjectID)
+		project, err := repo.GetProjectByIDLegacy(c.Request.Context(), input.ProjectID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
 			return

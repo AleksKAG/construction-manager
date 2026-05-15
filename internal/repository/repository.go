@@ -17,13 +17,19 @@ type Repository interface {
 	RawDB() *gorm.DB
 }
 
-// ======================== Project ========================
+// ======================== Project (верхний уровень) ========================
 type ProjectRepository interface {
-	CreateProject(ctx context.Context, p *models.ProjectObject) error
-	ListProjects(ctx context.Context) ([]models.ProjectObject, error)
-	GetProjectByID(ctx context.Context, id string) (*models.ProjectObject, error)
-	UpdateProject(ctx context.Context, p *models.ProjectObject) error
+	CreateProject(ctx context.Context, p *models.Project) error
+	ListProjects(ctx context.Context) ([]models.Project, error)
+	GetProjectByID(ctx context.Context, id string) (*models.Project, error)
+	UpdateProject(ctx context.Context, p *models.Project) error
 	DeleteProject(ctx context.Context, id string) error
+	// Устаревшие методы (используют ProjectObject как проект, будут удалены)
+	CreateProjectLegacy(ctx context.Context, p *models.ProjectObject) error
+	ListProjectsLegacy(ctx context.Context) ([]models.ProjectObject, error)
+	GetProjectByIDLegacy(ctx context.Context, id string) (*models.ProjectObject, error)
+	UpdateProjectLegacy(ctx context.Context, p *models.ProjectObject) error
+	DeleteProjectLegacy(ctx context.Context, id string) error
 }
 
 // ======================== Task (Gantt) ========================

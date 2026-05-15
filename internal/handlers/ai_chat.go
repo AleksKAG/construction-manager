@@ -49,7 +49,7 @@ func GetAIChatStream(repo repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		project, err := repo.GetProjectByID(c.Request.Context(), projectID)
+		project, err := repo.GetProjectByIDLegacy(c.Request.Context(), projectID)
 		if err != nil {
 			fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", toJSONLine(`{"message":"project not found"}`))
 			flusher.Flush()

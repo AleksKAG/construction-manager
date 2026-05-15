@@ -37,7 +37,7 @@ func TestGetProjectByID_NotFound(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewGormRepository(db)
 
-	project, err := repo.GetProjectByID(context.Background(), "non-existent-id")
+	project, err := repo.GetProjectByIDLegacy(context.Background(), "non-existent-id")
 
 	assert.Error(t, err)
 	assert.Nil(t, project)
@@ -55,7 +55,7 @@ func TestGetProjectByID_Found(t *testing.T) {
 	err := db.Create(expected).Error
 	assert.NoError(t, err)
 
-	project, err := repo.GetProjectByID(context.Background(), expected.ID)
+	project, err := repo.GetProjectByIDLegacy(context.Background(), expected.ID)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, project)
@@ -72,7 +72,7 @@ func TestCreateProject(t *testing.T) {
 		Status: "planning",
 	}
 
-	err := repo.CreateProject(context.Background(), project)
+	err := repo.CreateProjectLegacy(context.Background(), project)
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, project.ID)
@@ -83,7 +83,7 @@ func TestListProjects_Empty(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewGormRepository(db)
 
-	projects, err := repo.ListProjects(context.Background())
+	projects, err := repo.ListProjectsLegacy(context.Background())
 
 	assert.NoError(t, err)
 	assert.Empty(t, projects)
@@ -102,7 +102,7 @@ func TestListProjects_WithData(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	projects, err := repo.ListProjects(context.Background())
+	projects, err := repo.ListProjectsLegacy(context.Background())
 
 	assert.NoError(t, err)
 	assert.Len(t, projects, 2)
@@ -120,7 +120,7 @@ func TestUpdateProject(t *testing.T) {
 	assert.NoError(t, err)
 
 	project.Name = "Updated Name"
-	err = repo.UpdateProject(context.Background(), project)
+	err = repo.UpdateProjectLegacy(context.Background(), project)
 
 	assert.NoError(t, err)
 
@@ -141,7 +141,7 @@ func TestDeleteProject(t *testing.T) {
 	err := db.Create(project).Error
 	assert.NoError(t, err)
 
-	err = repo.DeleteProject(context.Background(), project.ID)
+	err = repo.DeleteProjectLegacy(context.Background(), project.ID)
 
 	assert.NoError(t, err)
 
@@ -597,7 +597,7 @@ func TestGetProjectByID_RecordNotFound_ErrorIs(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewGormRepository(db)
 
-	_, err := repo.GetProjectByID(context.Background(), "non-existent")
+	_, err := repo.GetProjectByIDLegacy(context.Background(), "non-existent")
 
 	assert.True(t, errors.Is(err, errors.New("not found")))
 }
