@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/AleksKAG/construction-manager/internal/database"
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
@@ -32,8 +33,15 @@ func main() {
 	}
 	fmt.Println("PostgreSQL connected successfully")
 
+	fmt.Println("Running database compatibility migrations...")
+	if err := database.EnsureTextIDCompatibility(db); err != nil {
+		fmt.Printf("ERROR: Database compatibility migration failed: %v\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Println("Running GORM AutoMigrate...")
 	if err := db.AutoMigrate(
+		&models.Project{},
 		&models.ProjectObject{},
 		&models.GanttTask{},
 		&models.DocumentRegistry{},

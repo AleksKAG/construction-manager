@@ -152,7 +152,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 
 type Role struct {
 	ID   string `gorm:"primaryKey;type:text" json:"id"`
-	Code string `gorm:"type:text;uniqueIndex;not null" json:"code"`
+	Code string `gorm:"type:text;unique;not null" json:"code"`
 	Name string `gorm:"type:text;not null" json:"name"`
 }
 
@@ -177,17 +177,10 @@ func (p *Permission) BeforeCreate(tx *gorm.DB) error {
 }
 
 type UserRole struct {
-	ID        string `gorm:"primaryKey;type:text" json:"id"`
-	UserID    string `gorm:"type:text;index;not null" json:"user_id"`
-	RoleID    string `gorm:"type:text;index;not null" json:"role_id"`
-	ProjectID string `gorm:"type:text;index" json:"project_id,omitempty"`
-}
-
-func (ur *UserRole) BeforeCreate(tx *gorm.DB) error {
-	if ur.ID == "" {
-		ur.ID = uuid.New().String()
-	}
-	return nil
+	UserID     string    `gorm:"primaryKey;type:text;not null" json:"user_id"`
+	RoleID     string    `gorm:"primaryKey;type:text;not null" json:"role_id"`
+	ProjectID  string    `gorm:"type:text;index" json:"project_id,omitempty"`
+	AssignedAt time.Time `gorm:"autoCreateTime" json:"assigned_at,omitempty"`
 }
 
 // Project-level menu and dashboards
@@ -241,7 +234,7 @@ func (dw *DashboardWidget) BeforeCreate(tx *gorm.DB) error {
 // TemplateDefinition describes standard tabular templates (ТЭП, графики, ИДП и т.д.)
 type TemplateDefinition struct {
 	ID          string `gorm:"primaryKey;type:text" json:"id"`
-	Code        string `gorm:"type:text;uniqueIndex;not null" json:"code"`
+	Code        string `gorm:"type:text;unique;not null" json:"code"`
 	Name        string `gorm:"type:text;not null" json:"name"`
 	Description string `gorm:"type:text" json:"description,omitempty"`
 }

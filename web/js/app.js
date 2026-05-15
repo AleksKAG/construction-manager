@@ -1,4 +1,4 @@
-import { api, issueDemoToken } from './api.js';
+import { api } from './api.js';
 import {
   listTemplates,
   getTemplate,
@@ -103,6 +103,8 @@ class ConstructionManagerUI {
     this.importDraft = null;
     this.aiClipboardBound = false;
     this.renderNonce = 0;
+    this.currentUser = null;
+    this.authUsers = [];
 
     this.bind();
     this.setupResponsiveSidebar();
@@ -110,8 +112,56 @@ class ConstructionManagerUI {
   }
 
   async bootstrap() {
-    if (!localStorage.getItem('cm_token')) await issueDemoToken('admin');
+    // Скрываем layout до проверки токена
+    const appLayout = document.getElementById('appLayout');
+    if (appLayout) appLayout.style.visibility = 'hidden';
+
+    const token = localStorage.getItem('cm_token');
+    if (!token) {
+      this.showLoginOverlay();
+      return;
+    }
+    // Проверяем токен: /objects вернёт 401 если невалидный
+    try {
+      const resp = await fetch('/api/v1/objects', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        localStorage.removeItem('cm_token');
+        localStorage.removeItem('cm_role');
+        localStorage.removeItem('cm_token_expires');
+        this.showLoginOverlay();
+        return;
+      }
+    } catch (e) {
+      // Нет связи — показываем логин
+      this.showLoginOverlay();
+      return;
+    }
+    await this.startApplication();
+  }
+
+  async startApplication() {
+    const appLayout = document.getElementById('appLayout');
+    const overlay = document.getElementById('loginOverlay');
+    if (overlay) overlay.style.display = 'none';
+    if (appLayout) appLayout.style.visibility = '';
+
+    try {
+      this.currentUser = await api('/auth/me');
+      localStorage.setItem('cm_role', this.currentUser.role || 'viewer');
+      localStorage.setItem('cm_user_id', this.currentUser.id || '');
+      localStorage.setItem('cm_user_name', this.currentUser.full_name || this.currentUser.username || '');
+    } catch (_) {
+      this.currentUser = null;
+      if (!localStorage.getItem('cm_token')) return;
+    }
+
     await this.loadObjects();
+    if (this.selectedObjectId) {
+      this.expandedProjects.add(String(this.selectedObjectId));
+      await this.loadProjectMenu(this.selectedObjectId);
+    }
     if (!this.state.dashboards.length) this.seedDashboards();
     this.renderProjectTree();
     this.applySidebarState();
@@ -119,6 +169,55 @@ class ConstructionManagerUI {
     this.setupAutoRefresh();
     this.initAIAssistantWidget();
     await this.renderContent();
+  }
+
+  showLoginOverlay() {
+    const appLayout = document.getElementById('appLayout');
+    if (appLayout) appLayout.style.visibility = 'hidden';
+    const overlay = document.getElementById('loginOverlay');
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+    setTimeout(() => document.getElementById('loginOverlayField')?.focus(), 50);
+
+    const form = document.getElementById('loginOverlayForm');
+    if (!form || form.dataset.bound) return;
+    form.dataset.bound = '1';
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const login = document.getElementById('loginOverlayField')?.value?.trim();
+      const password = document.getElementById('passwordOverlayField')?.value?.trim();
+      const errorEl = document.getElementById('loginOverlayError');
+      errorEl.textContent = '';
+      if (!login || !password) {
+        errorEl.textContent = 'Введите логин и пароль';
+        return;
+      }
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn) { btn.disabled = true; btn.textContent = 'Вход...'; }
+      try {
+        const resp = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login, password }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || 'Неверный логин или пароль');
+        }
+        const data = await resp.json();
+        localStorage.setItem('cm_token', data.access_token);
+        localStorage.setItem('cm_role', data.role || 'viewer');
+        localStorage.setItem('cm_user_id', data.user_id || '');
+        localStorage.setItem('cm_user_name', data.full_name || data.username || login);
+        const expires = new Date(Date.now() + (data.expires_in || 86400) * 1000);
+        localStorage.setItem('cm_token_expires', expires.toLocaleString('ru-RU'));
+        if (btn) { btn.disabled = false; btn.textContent = 'Войти'; }
+        await this.startApplication();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        if (btn) { btn.disabled = false; btn.textContent = 'Войти'; }
+      }
+    });
   }
 
   bind() {
@@ -289,6 +388,7 @@ class ConstructionManagerUI {
         this.selectedObjectId = pid;
         this.expandedProjects.clear();
         this.expandedProjects.add(pid);
+        this.expandedMenuNodes.clear();
         await this.loadProjectMenu(pid);
         this.renderProjectTree();
         this.renderContent();
@@ -301,6 +401,9 @@ class ConstructionManagerUI {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         const view = this.normalizeMenuViewKey(item.dataset.viewLink, item.dataset.viewTitle);
+        if (!view) return;
+        this.keepOnlyMenuPath(item.dataset.menuPath || '');
+        this.renderProjectTree();
         this.switchView(view, item.dataset.viewTitle, { collapseMobile: item.dataset.hasChildren !== 'true' });
       });
     });
@@ -310,8 +413,8 @@ class ConstructionManagerUI {
         e.stopPropagation();
         const key = item.dataset.menuToggle;
         if (!key) return;
-        if (this.expandedMenuNodes.has(key)) this.expandedMenuNodes.delete(key);
-        else this.expandedMenuNodes.add(key);
+        if (this.expandedMenuNodes.has(key)) this.collapseMenuNode(key);
+        else this.expandOnlyMenuPath(item.dataset.menuPath || key);
         this.renderProjectTree();
       });
     });
@@ -319,7 +422,26 @@ class ConstructionManagerUI {
 
   renderProjectSubmenu(projectId) {
     const menu = this.sanitizeProjectMenu(this.projectMenus[projectId] || []);
-    return this.renderMenuNodes(projectId, menu || [], 1);
+    return this.renderMenuNodes(projectId, menu || [], 1, []);
+  }
+
+  keepOnlyMenuPath(serializedPath) {
+    const path = String(serializedPath || '').split('|').filter(Boolean);
+    this.expandedMenuNodes = new Set(path);
+  }
+
+  expandOnlyMenuPath(serializedPath) {
+    this.keepOnlyMenuPath(serializedPath);
+  }
+
+  collapseMenuNode(key) {
+    const prefix = `${key}:`;
+    this.expandedMenuNodes = new Set([...this.expandedMenuNodes].filter((nodeKey) => nodeKey !== key && !nodeKey.startsWith(prefix)));
+  }
+
+  menuNodeKey(projectId, node, indexPath) {
+    const stableID = String(node.id || node.view_key || node.title || indexPath || '').trim();
+    return `${projectId}:${stableID}`;
   }
 
   sanitizeProjectMenu(nodes = []) {
@@ -348,17 +470,20 @@ class ConstructionManagerUI {
     return cloned;
   }
 
-  renderMenuNodes(projectId, nodes, level = 1) {
-    return (nodes || []).map((node) => {
-      const nodeKey = `${projectId}:${node.id}`;
+  renderMenuNodes(projectId, nodes, level = 1, parentPath = []) {
+    return (nodes || []).map((node, index) => {
+      const nodeKey = this.menuNodeKey(projectId, node, `${parentPath.join('/')}/${index}`);
+      const nodePath = [...parentPath, nodeKey];
+      const pathAttr = nodePath.join('|');
+      const parentPathAttr = parentPath.join('|');
       const hasChildren = Array.isArray(node.children) && node.children.length > 0;
       const expanded = hasChildren && this.expandedMenuNodes.has(nodeKey);
       const marker = hasChildren ? (expanded ? '▼ ' : '▶ ') : '';
       const resolvedView = this.normalizeMenuViewKey(node.view_key, node.title);
-      const attrs = (resolvedView && !hasChildren) ? `data-view-link="${resolvedView}" data-view-title="${node.title}" data-has-children="false"` : '';
-      const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}"` : '';
+      const attrs = (resolvedView && !hasChildren) ? `data-view-link="${resolvedView}" data-view-title="${node.title}" data-has-children="false" data-menu-path="${parentPathAttr}"` : '';
+      const toggleAttrs = hasChildren ? `data-menu-toggle="${nodeKey}" data-menu-path="${pathAttr}"` : '';
       const row = `<div class="tree-row level-${Math.min(level, 4)}" ${attrs} ${toggleAttrs}>${marker}${node.title}</div>`;
-      const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1) : '';
+      const children = expanded ? this.renderMenuNodes(projectId, node.children || [], level + 1, nodePath) : '';
       return `${row}${children}`;
     }).join('');
   }
@@ -378,6 +503,10 @@ class ConstructionManagerUI {
       design_schedule: titleView || 'designSchedule',
       schedule: titleView || 'smrSchedule',
       smr_schedule: 'smrSchedule',
+      svor: 'svorMain',
+      svor_main: 'svorMain',
+      svor_dashboard: 'svorDashboard',
+      svor_history: 'svorHistory',
       ssr: 'estimate',
       ird: 'template:ird',
       docs: 'docsTemplates',
@@ -449,7 +578,7 @@ class ConstructionManagerUI {
       svorMain: { primary: '+ Создать СВОР', secondary: 'Экспорт отчета XLSX' },
       svorHistory: { primary: 'Обновить', secondary: '' },
       svorDashboard: { primary: 'Обновить', secondary: '' },
-      auth: { primary: 'Выдать demo token', secondary: '' },
+      auth: { primary: '+ Добавить пользователя', secondary: 'Обновить' },
     };
 
     let cfg = map[this.currentView] || map.home;
@@ -988,8 +1117,14 @@ class ConstructionManagerUI {
   async renderSvorMain() {
     const project = this.currentProject();
     if (!project) return;
-    const statusQ = this.svorFilters.status ? `&status=${encodeURIComponent(this.svorFilters.status)}` : '';
-    const payload = await api(`/projects/${project.id}/svor?page=${this.svorPagination.page}&page_size=${this.svorPagination.page_size}${statusQ}`);
+    let payload;
+    try {
+      const statusQ = this.svorFilters.status ? `&status=${encodeURIComponent(this.svorFilters.status)}` : '';
+      payload = await api(`/projects/${project.id}/svor?page=${this.svorPagination.page}&page_size=${this.svorPagination.page_size}${statusQ}`);
+    } catch (error) {
+      document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>СВОР</h3><p>${error.message || 'Не удалось загрузить СВОР'}</p></article>`;
+      return;
+    }
     this.svorRows = payload.data || [];
     this.svorPagination = payload.pagination || this.svorPagination;
     const body = this.svorRows.map((entry, i) => {
@@ -1053,7 +1188,13 @@ class ConstructionManagerUI {
   async renderSvorDashboard() {
     const project = this.currentProject();
     if (!project) return;
-    const dash = await api(`/projects/${project.id}/svor/dashboard`);
+    let dash;
+    try {
+      dash = await api(`/projects/${project.id}/svor/dashboard`);
+    } catch (error) {
+      document.getElementById('contentArea').innerHTML = `<article class="card col-12"><h3>Сводный дашборд по СВОР</h3><p>${error.message || 'Не удалось загрузить дашборд СВОР'}</p></article>`;
+      return;
+    }
     this.svorDashboard = dash;
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
@@ -2067,8 +2208,7 @@ class ConstructionManagerUI {
     if (this.currentView === 'svorDashboard') return this.renderSvorDashboard();
     if (this.currentView === 'svorHistory') return this.renderSvorHistoryList();
     if (this.currentView === 'auth') {
-      await issueDemoToken('admin');
-      return this.showToast('Demo token обновлён.', 'success');
+      return this.openUserModal();
     }
     if (['protocolInternal', 'protocolDesign', 'protocolSMR'].includes(this.currentView)) {
       // Для протоколов — заглушка, в будущем можно открыть форму создания поручения
@@ -2381,6 +2521,26 @@ class ConstructionManagerUI {
       return this.renderSvorMain();
     }
 
+    if (this.modalMode === 'createUser' || this.modalMode === 'editUser') {
+      const data = this.collectUserPayload();
+      if (!data.email || !data.full_name) return this.showToast('Заполните email и ФИО', 'error');
+      if (this.modalMode === 'createUser' && !data.password) return this.showToast('Введите пароль', 'error');
+      const saveBtn = document.getElementById('saveEntity');
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Сохранение...'; }
+      try {
+        if (this.modalMode === 'editUser') await api(`/users/${this.editRowId}`, 'PUT', data);
+        else await api('/users', 'POST', data);
+        this.closeModal();
+        this.showToast('Пользователь сохранён', 'success');
+        return this.renderAuthView();
+      } catch (e) {
+        this.showToast(e.message || 'Ошибка сохранения пользователя', 'error');
+      } finally {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Сохранить'; }
+      }
+      return;
+    }
+
     if (this.modalMode === 'createProject') {
       // Блокировка повторных кликов
       if (this.isCreatingProject) return;
@@ -2635,13 +2795,204 @@ class ConstructionManagerUI {
     if (!this.state.isDesktop && collapseMobile) this.toggleSidebar(false);
   }
 
-  renderAuthView() {
-    document.getElementById('contentArea').innerHTML = `
+  async checkAuth() {
+    const token = localStorage.getItem('cm_token');
+    if (!token) {
+      this.showLoginScreen();
+      return false;
+    }
+    // Проверяем токен — дёргаем /objects (закрытый GET, сработает только с токеном)
+    try {
+      const resp = await fetch('/api/v1/objects', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (resp.ok) return true;
+    } catch (_) {}
+    // Токен невалидный — показываем логин
+    localStorage.removeItem('cm_token');
+    this.showLoginScreen();
+    return false;
+  }
+
+  showLoginScreen() {
+    // Скрываем основной layout, показываем overlay поверх всего
+    const appLayout = document.getElementById('appLayout');
+    if (appLayout) appLayout.style.visibility = 'hidden';
+    const overlay = document.getElementById('loginOverlay');
+    if (overlay) {
+      overlay.style.display = 'flex';
+      // Фокус на поле логина
+      setTimeout(() => document.getElementById('loginOverlayField')?.focus(), 50);
+    }
+    // Вешаем обработчик формы только один раз
+    const form = document.getElementById('loginOverlayForm');
+    if (!form || form.dataset.bound) return;
+    form.dataset.bound = '1';
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const login = document.getElementById('loginOverlayField')?.value?.trim();
+      const password = document.getElementById('passwordOverlayField')?.value?.trim();
+      const errorEl = document.getElementById('loginOverlayError');
+      errorEl.textContent = '';
+      if (!login || !password) {
+        errorEl.textContent = 'Введите логин и пароль';
+        return;
+      }
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Вход...'; }
+      try {
+        const resp = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login, password }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || 'Неверные данные');
+        }
+        const data = await resp.json();
+        localStorage.setItem('cm_token', data.access_token);
+        localStorage.setItem('cm_role', data.role);
+        const expiresDate = new Date(Date.now() + (data.expires_in || 86400) * 1000);
+        localStorage.setItem('cm_token_expires', expiresDate.toLocaleString('ru-RU'));
+        // Скрываем overlay и перезапускаем приложение
+        if (overlay) overlay.style.display = 'none';
+        window.location.reload();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Войти'; }
+      }
+    });
+  }
+
+  async renderAuthView() {
+    const token = localStorage.getItem('cm_token') || '';
+    const role = localStorage.getItem('cm_role') || '';
+    const expires = localStorage.getItem('cm_token_expires') || '';
+    const userName = localStorage.getItem('cm_user_name') || '';
+    const isAdmin = role === 'admin';
+    const content = document.getElementById('contentArea');
+
+    if (isAdmin) {
+      try {
+        const payload = await api('/users');
+        this.authUsers = payload.data || [];
+      } catch (err) {
+        this.authUsers = [];
+        this.showToast?.(err.message || 'Не удалось загрузить пользователей', 'error');
+      }
+    }
+
+    const userRows = this.authUsers.map((user) => `
+      <tr>
+        <td><strong>${this.escapeHtml(user.full_name)}</strong><br><span style="color:var(--muted);">${this.escapeHtml(user.username || user.email)}</span></td>
+        <td>${this.escapeHtml(user.email)}</td>
+        <td><span class="tag">${this.roleLabel(user.role)}</span></td>
+        <td>${user.is_active ? 'Активен' : 'Отключён'}</td>
+        <td style="text-align:right; white-space:nowrap;">
+          <button class="mini" data-edit-user="${user.id}">Изменить</button>
+          <button class="mini" data-disable-user="${user.id}" ${user.is_active ? '' : 'disabled'}>Отключить</button>
+        </td>
+      </tr>
+    `).join('');
+
+    content.innerHTML = `
       <article class="card col-12">
-        <h3>Авторизация и роли</h3>
-        <p class="metric">Приложение использует demo JWT-токен для работы вкладок шаблонов.</p>
+        <h3>Авторизация</h3>
+        <p style="color:var(--muted);">Вход выполняется по пользователям из базы данных. По умолчанию создаётся администратор <code>admin</code> / <code>admin</code> или значения из переменных <code>AUTH_LOGIN</code> и <code>AUTH_PASSWORD</code>.</p>
+        <table style="width:100%; border-collapse:collapse; margin-top:16px;">
+          <tr><td style="padding:6px 8px; font-weight:500;">Пользователь:</td><td style="padding:6px 8px;">${this.escapeHtml(userName || '—')}</td></tr>
+          <tr><td style="padding:6px 8px; font-weight:500;">Роль:</td><td style="padding:6px 8px;">${this.roleLabel(role)}</td></tr>
+          <tr><td style="padding:6px 8px; font-weight:500;">Токен:</td><td style="padding:6px 8px; font-size:0.8em; word-break:break-all;"><code>${token ? `${token.substring(0, 50)}…` : '—'}</code></td></tr>
+          <tr><td style="padding:6px 8px; font-weight:500;">Истекает:</td><td style="padding:6px 8px;">${this.escapeHtml(expires || '—')}</td></tr>
+        </table>
+        <button class="ghost" id="authLogoutBtn" style="margin-top:16px; color:var(--danger-color,#e53e3e);">Выйти из аккаунта</button>
       </article>
+
+      ${isAdmin ? `
+        <article class="card col-12">
+          <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:12px;">
+            <div>
+              <h3 style="margin:0;">Пользователи</h3>
+              <p style="color:var(--muted); margin:4px 0 0;">Создавайте пользователей и назначайте роли: просмотр, редактирование или администратор.</p>
+            </div>
+            <button class="primary" id="addUserBtn">+ Добавить пользователя</button>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Имя / логин</th><th>Email</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
+              <tbody>${userRows || '<tr><td colspan="5" style="color:var(--muted);">Пользователей пока нет</td></tr>'}</tbody>
+            </table>
+          </div>
+        </article>
+      ` : `
+        <article class="card col-12"><h3>Пользователи</h3><p style="color:var(--muted);">Управление пользователями доступно только администратору.</p></article>
+      `}
     `;
+
+    document.getElementById('authLogoutBtn')?.addEventListener('click', () => {
+      localStorage.removeItem('cm_token');
+      localStorage.removeItem('cm_role');
+      localStorage.removeItem('cm_token_expires');
+      localStorage.removeItem('cm_user_id');
+      localStorage.removeItem('cm_user_name');
+      this.showLoginOverlay();
+    });
+    document.getElementById('addUserBtn')?.addEventListener('click', () => this.openUserModal());
+    content.querySelectorAll('[data-edit-user]').forEach((btn) => btn.addEventListener('click', () => this.openUserModal(this.authUsers.find((u) => u.id === btn.dataset.editUser))));
+    content.querySelectorAll('[data-disable-user]').forEach((btn) => btn.addEventListener('click', async () => {
+      if (!confirm('Отключить пользователя?')) return;
+      await api(`/users/${btn.dataset.disableUser}`, 'DELETE');
+      await this.renderAuthView();
+    }));
+  }
+
+  openUserModal(user = null) {
+    if ((localStorage.getItem('cm_role') || '') !== 'admin') {
+      this.showToast?.('Добавлять пользователей может только администратор', 'error');
+      return;
+    }
+    this.modalMode = user ? 'editUser' : 'createUser';
+    this.editRowId = user?.id || null;
+    document.getElementById('modalTitle').textContent = user ? 'Изменить пользователя' : 'Добавить пользователя';
+    document.getElementById('modalBody').innerHTML = `
+      <div class="form-grid">
+      <label>Логин<input id="userUsername" value="${this.escapeHtml(user?.username || '')}" placeholder="ivanov" /></label>
+      <label>Email<input id="userEmail" type="email" value="${this.escapeHtml(user?.email || '')}" placeholder="user@example.com" required /></label>
+      <label>ФИО<input id="userFullName" value="${this.escapeHtml(user?.full_name || '')}" placeholder="Иванов Иван" required /></label>
+      <label>Роль
+        <select id="userRole">
+          <option value="viewer" ${user?.role === 'viewer' ? 'selected' : ''}>Просмотр</option>
+          <option value="editor" ${user?.role === 'editor' ? 'selected' : ''}>Редактор</option>
+          <option value="admin" ${user?.role === 'admin' ? 'selected' : ''}>Администратор</option>
+        </select>
+      </label>
+      <label>${user ? 'Новый пароль (оставьте пустым, чтобы не менять)' : 'Пароль'}<input id="userPassword" type="password" autocomplete="new-password" placeholder="минимум 6 символов" ${user ? '' : 'required'} /></label>
+      ${user ? `<label style="display:flex; gap:8px; align-items:center;"><input id="userIsActive" type="checkbox" ${user.is_active ? 'checked' : ''} /> Активен</label>` : ''}
+      </div>
+    `;
+    this.openModal();
+  }
+
+  collectUserPayload() {
+    const isActiveField = document.getElementById('userIsActive');
+    const payload = {
+      username: document.getElementById('userUsername')?.value?.trim() || '',
+      email: document.getElementById('userEmail')?.value?.trim() || '',
+      full_name: document.getElementById('userFullName')?.value?.trim() || '',
+      role: document.getElementById('userRole')?.value || 'viewer',
+      password: document.getElementById('userPassword')?.value || '',
+    };
+    if (isActiveField) payload.is_active = isActiveField.checked;
+    return payload;
+  }
+
+  roleLabel(role) {
+    return { admin: 'Администратор', editor: 'Редактор', viewer: 'Просмотр' }[role] || '—';
+  }
+
+  escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
   }
 
   openModal() {

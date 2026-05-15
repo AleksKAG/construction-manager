@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AleksKAG/construction-manager/internal/database"
 	"github.com/AleksKAG/construction-manager/internal/handlers"
 	"github.com/AleksKAG/construction-manager/internal/middleware"
 	"github.com/AleksKAG/construction-manager/internal/models"
@@ -18,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/bcrypt"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -55,6 +57,10 @@ func main() {
 	}
 	logger.Info("PostgreSQL connected")
 
+	if err := database.EnsureTextIDCompatibility(db); err != nil {
+		logger.Fatal("Database compatibility migration failed: ", err)
+	}
+
 	if shouldRunAutoMigrate() {
 		logger.Info("RUN_DB_MIGRATIONS=true, running full GORM AutoMigrate")
 		if err := db.AutoMigrate(
@@ -86,14 +92,25 @@ func main() {
 	} else {
 		logger.Info("RUN_DB_MIGRATIONS!=true, running safe minimum migrations for critical tables")
 		if err := db.AutoMigrate(
+			&models.Project{},
+			&models.ProjectObject{},
 			&models.MenuItem{},
 			&models.TemplateDefinition{},
 			&models.TemplateColumn{},
 			&models.ProjectTemplateRow{},
+			&models.DocStageP{},
+			&models.DocStageR{},
+			&models.DocStageRRevision{},
+			&models.SvorRecord{},
+			&models.SvorHistory{},
 		); err != nil {
 			logger.Fatal("Minimum migration failed: ", err)
 		}
 		logger.Info("Minimum migrations done")
+	}
+
+	if err := ensureAuthSchemaAndDefaultAdmin(db, logger); err != nil {
+		logger.Fatal("Auth schema migration failed: ", err)
 	}
 
 	// Репозиторий + sample data
@@ -158,103 +175,102 @@ func main() {
 		api.PUT("/projects/:id", handlers.UpdateProject(repo))
 		api.DELETE("/projects/:id", handlers.DeleteProject(repo))
 
-		// Группа с JWT — шаблоны и ИРД
-		templates := api.Group("/")
-		templates.Use(middleware.JWTAuthMiddleware())
+		// Все защищённые роуты — под JWT
+		secured := api.Group("/")
+		secured.Use(middleware.JWTAuthMiddleware())
 		{
-			templates.GET("/templates", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplates(repo))
-			// ИРД: роут на схему шаблона — перехватывает ДО общего /templates/:code
-			// Возвращает колонки прямо из кода, без обращения к БД (работает на чистой базе)
-			templates.GET("/templates/input_design_data", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetIrdTemplate())
-			templates.GET("/templates/:code", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetTemplate(repo))
+			secured.GET("/auth/me", handlers.CurrentUser(db))
+			secured.GET("/users", middleware.RequireRoles("admin"), handlers.ListUsers(db))
+			secured.POST("/users", middleware.RequireRoles("admin"), handlers.CreateUser(db))
+			secured.PUT("/users/:id", middleware.RequireRoles("admin"), handlers.UpdateUser(db))
+			secured.DELETE("/users/:id", middleware.RequireRoles("admin"), handlers.DeleteUser(db))
 
-			// ИРД: специальные роуты ПЕРЕХВАТЫВАЮТ input_design_data ДО общих роутов.
-			// Важно: статические сегменты (input_design_data) в Gin имеют приоритет над
-			// параметрическими (:code), поэтому порядок здесь не критичен, но для ясности
-			// оставляем их перед общими.
-			templates.GET("/objects/:id/templates/input_design_data/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListIrdAsTemplateRows(repo))
-			templates.POST("/objects/:id/templates/input_design_data/rows", middleware.RequireRoles("editor", "admin"), handlers.CreateIrdFromTemplateRow(repo))
-			templates.POST("/objects/:id/templates/input_design_data/import", middleware.RequireRoles("editor", "admin"), handlers.ImportIrdTemplateRows(repo))
+			// Шаблоны и ИРД
+			secured.GET("/templates", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplates(repo))
+			secured.GET("/templates/input_design_data", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetIrdTemplate())
+			secured.GET("/templates/:code", middleware.RequireRoles("viewer", "editor", "admin"), handlers.GetTemplate(repo))
 
-			// Общие роуты шаблонов (для всех кодов кроме input_design_data)
-			templates.GET("/objects/:id/templates/:code/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplateRows(repo))
-			templates.POST("/objects/:id/templates/:code/rows", middleware.RequireRoles("editor", "admin"), handlers.CreateTemplateRow(repo))
-			templates.POST("/objects/:id/templates/:code/import", middleware.RequireRoles("editor", "admin"), handlers.ImportTemplateRowsBatch(repo))
-			templates.PUT("/template-rows/:rowId", middleware.RequireRoles("editor", "admin"), handlers.UpdateTemplateRow(repo))
-			templates.DELETE("/template-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteTemplateRow(repo))
-			templates.GET("/objects/:id/templates/:code/export.csv", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ExportTemplateRowsXLSX(repo))
+			secured.GET("/objects/:id/templates/input_design_data/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListIrdAsTemplateRows(repo))
+			secured.POST("/objects/:id/templates/input_design_data/rows", middleware.RequireRoles("editor", "admin"), handlers.CreateIrdFromTemplateRow(repo))
+			secured.POST("/objects/:id/templates/input_design_data/import", middleware.RequireRoles("editor", "admin"), handlers.ImportIrdTemplateRows(repo))
 
-			// ИРД: обновление и удаление через адаптер (отдельный префикс /ird-rows/)
-			templates.PUT("/ird-rows/:rowId", middleware.RequireRoles("editor", "admin"), handlers.UpdateIrdFromTemplateRow(repo))
-			templates.DELETE("/ird-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteIrdAsTemplateRow(repo))
+			secured.GET("/objects/:id/templates/:code/rows", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplateRows(repo))
+			secured.POST("/objects/:id/templates/:code/rows", middleware.RequireRoles("editor", "admin"), handlers.CreateTemplateRow(repo))
+			secured.POST("/objects/:id/templates/:code/import", middleware.RequireRoles("editor", "admin"), handlers.ImportTemplateRowsBatch(repo))
+			secured.PUT("/template-rows/:rowId", middleware.RequireRoles("editor", "admin"), handlers.UpdateTemplateRow(repo))
+			secured.DELETE("/template-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteTemplateRow(repo))
+			secured.GET("/objects/:id/templates/:code/export.csv", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ExportTemplateRowsXLSX(repo))
+
+			secured.PUT("/ird-rows/:rowId", middleware.RequireRoles("editor", "admin"), handlers.UpdateIrdFromTemplateRow(repo))
+			secured.DELETE("/ird-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteIrdAsTemplateRow(repo))
+
+			// Dashboard & Agent
+			secured.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
+			secured.GET("/dashboard/metrics/:projectId", handlers.GetDashboardMetrics(repo))
+			secured.POST("/agent/summary", handlers.GetAgentSummary(repo))
+			secured.POST("/ai/chat", handlers.GetAIChatStream(repo))
+			secured.GET("/estimates/:projectId/summary", handlers.GetEstimateSummary(repo))
+			secured.GET("/tep/:projectId", handlers.GetTEPByProject(repo))
+			secured.PATCH("/tep/:id", handlers.PatchTEPRow(repo))
+			secured.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
+
+			// Docs Stage P
+			secured.GET("/projects/:id/docs/p", handlers.ListDocsP(repo))
+			secured.POST("/projects/:id/docs/p", handlers.CreateDocP(repo))
+			secured.PUT("/projects/:id/docs/p/:docId", handlers.UpdateDocP(repo))
+			secured.DELETE("/projects/:id/docs/p/:docId", handlers.DeleteDocP(repo))
+			secured.GET("/projects/:id/docs/p/export.xlsx", handlers.ExportDocsPXLSX(repo))
+
+			// Docs Stage R
+			secured.GET("/projects/:id/docs/r", handlers.ListDocsR(repo))
+			secured.POST("/projects/:id/docs/r", handlers.CreateDocR(repo))
+			secured.PUT("/projects/:id/docs/r/:docId", handlers.UpdateDocR(repo))
+			secured.DELETE("/projects/:id/docs/r/:docId", handlers.DeleteDocR(repo))
+			secured.GET("/projects/:id/docs/r/:docId/revisions", handlers.ListDocRRevisions(repo))
+			secured.POST("/projects/:id/docs/r/:docId/revisions", handlers.AddDocRRevision(repo))
+
+			// Registry
+			secured.GET("/projects/:id/design/:stage/registry", handlers.ListRegistry(repo))
+			secured.POST("/projects/:id/design/:stage/registry", handlers.UpsertRegistry(repo))
+			secured.POST("/projects/:id/design/:stage/registry/import", handlers.ImportRegistryBatch(repo))
+			secured.DELETE("/projects/:id/design/:stage/registry/:rowId", handlers.DeleteRegistry(repo))
+
+			// Workforce
+			secured.GET("/projects/:id/smr/workforce", handlers.ListWorkforceByProject(repo))
+			secured.POST("/projects/:id/smr/workforce", handlers.CreateWorkforceRecord(repo))
+
+			// СВОР
+			secured.GET("/projects/:id/svor", handlers.ListSvor(repo))
+			secured.POST("/projects/:id/svor", handlers.CreateSvor(repo))
+			secured.PATCH("/projects/:id/svor/:svorId", handlers.PatchSvor(repo))
+			secured.GET("/projects/:id/svor/:svorId/history", handlers.GetSvorHistory(repo))
+			secured.GET("/projects/:id/svor/dashboard", handlers.GetSvorDashboard(repo))
+			secured.POST("/projects/:id/svor/import", handlers.ImportSvor(repo))
+			secured.GET("/projects/:id/svor/report.xlsx", handlers.ExportSvorReportXLSX(repo))
+
+			// IRD
+			secured.GET("/objects/:id/ird", handlers.ListIrdDocuments(repo))
+			secured.POST("/objects/:id/ird", handlers.CreateIrdDocument(repo))
+			secured.GET("/ird/:irdId", handlers.GetIrdDocument(repo))
+			secured.PUT("/ird/:irdId", handlers.UpdateIrdDocument(repo))
+			secured.DELETE("/ird/:irdId", handlers.DeleteIrdDocument(repo))
+
+			// Tasks
+			secured.GET("/tasks", handlers.ListTasks(repo))
+			secured.POST("/tasks", handlers.CreateTask(repo))
+			secured.GET("/tasks/:id", handlers.GetTask(repo))
+			secured.PUT("/tasks/:id", handlers.UpdateTask(repo))
+			secured.DELETE("/tasks/:id", handlers.DeleteTask(repo))
+			secured.GET("/tasks/by-object", handlers.ListTasksByObject(repo))
+
+			// Objects
+			secured.GET("/objects", handlers.ListObjects(repo))
+			secured.POST("/objects", handlers.CreateObject(repo))
+			secured.GET("/objects/:id", handlers.GetObject(repo))
+			secured.GET("/objects/:id/menu", handlers.ListProjectMenu(repo))
+			secured.PUT("/objects/:id", handlers.UpdateObject(repo))
+			secured.DELETE("/objects/:id", handlers.DeleteObject(repo))
 		}
-
-		// Dashboard & Agent
-		api.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
-		api.GET("/dashboard/metrics/:projectId", handlers.GetDashboardMetrics(repo))
-		api.POST("/agent/summary", handlers.GetAgentSummary(repo))
-		api.POST("/ai/chat", handlers.GetAIChatStream(repo))
-		api.GET("/estimates/:projectId/summary", handlers.GetEstimateSummary(repo))
-		api.GET("/tep/:projectId", handlers.GetTEPByProject(repo))
-		api.PATCH("/tep/:id", handlers.PatchTEPRow(repo))
-		api.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
-
-		// Docs Stage P — полный CRUD
-		api.GET("/projects/:id/docs/p", handlers.ListDocsP(repo))
-		api.POST("/projects/:id/docs/p", handlers.CreateDocP(repo))
-		api.PUT("/projects/:id/docs/p/:docId", handlers.UpdateDocP(repo))
-		api.DELETE("/projects/:id/docs/p/:docId", handlers.DeleteDocP(repo))
-		api.GET("/projects/:id/docs/p/export.xlsx", handlers.ExportDocsPXLSX(repo))
-
-		// Docs Stage R — полный CRUD
-		api.GET("/projects/:id/docs/r", handlers.ListDocsR(repo))
-		api.POST("/projects/:id/docs/r", handlers.CreateDocR(repo))
-		api.PUT("/projects/:id/docs/r/:docId", handlers.UpdateDocR(repo))
-		api.DELETE("/projects/:id/docs/r/:docId", handlers.DeleteDocR(repo))
-		api.GET("/projects/:id/docs/r/:docId/revisions", handlers.ListDocRRevisions(repo))
-		api.POST("/projects/:id/docs/r/:docId/revisions", handlers.AddDocRRevision(repo))
-
-		// Registry
-		api.GET("/projects/:id/design/:stage/registry", handlers.ListRegistry(repo))
-		api.POST("/projects/:id/design/:stage/registry", handlers.UpsertRegistry(repo))
-		api.POST("/projects/:id/design/:stage/registry/import", handlers.ImportRegistryBatch(repo))
-		api.DELETE("/projects/:id/design/:stage/registry/:rowId", handlers.DeleteRegistry(repo))
-
-		// Workforce
-		api.GET("/projects/:id/smr/workforce", handlers.ListWorkforceByProject(repo))
-		api.POST("/projects/:id/smr/workforce", handlers.CreateWorkforceRecord(repo))
-
-		// СВОР
-		api.GET("/projects/:id/svor", handlers.ListSvor(repo))
-		api.POST("/projects/:id/svor", handlers.CreateSvor(repo))
-		api.PATCH("/projects/:id/svor/:svorId", handlers.PatchSvor(repo))
-		api.GET("/projects/:id/svor/:svorId/history", handlers.GetSvorHistory(repo))
-		api.GET("/projects/:id/svor/dashboard", handlers.GetSvorDashboard(repo))
-		api.POST("/projects/:id/svor/import", handlers.ImportSvor(repo))
-		api.GET("/projects/:id/svor/report.xlsx", handlers.ExportSvorReportXLSX(repo))
-
-		// IRD — прямые endpoints (используются если нужен прямой доступ без template-обёртки)
-		api.GET("/objects/:id/ird", handlers.ListIrdDocuments(repo))
-		api.POST("/objects/:id/ird", handlers.CreateIrdDocument(repo))
-		api.GET("/ird/:irdId", handlers.GetIrdDocument(repo))
-		api.PUT("/ird/:irdId", handlers.UpdateIrdDocument(repo))
-		api.DELETE("/ird/:irdId", handlers.DeleteIrdDocument(repo))
-
-		// Tasks — ПЕРЕД /objects/:id чтобы избежать конфликта роутов
-		api.GET("/tasks", handlers.ListTasks(repo))
-		api.POST("/tasks", handlers.CreateTask(repo))
-		api.GET("/tasks/:id", handlers.GetTask(repo))
-		api.PUT("/tasks/:id", handlers.UpdateTask(repo))
-		api.DELETE("/tasks/:id", handlers.DeleteTask(repo))
-		api.GET("/tasks/by-object", handlers.ListTasksByObject(repo))
-
-		// Objects — ПОСЛЕ /tasks
-		api.GET("/objects", handlers.ListObjects(repo))
-		api.POST("/objects", handlers.CreateObject(repo))
-		api.GET("/objects/:id", handlers.GetObject(repo))
-		api.GET("/objects/:id/menu", handlers.ListProjectMenu(repo))
-		api.PUT("/objects/:id", handlers.UpdateObject(repo))
-		api.DELETE("/objects/:id", handlers.DeleteObject(repo))
 	}
 
 	// Запуск
@@ -296,6 +312,95 @@ func getEnv(key, fallback string) string {
 
 func shouldRunAutoMigrate() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("RUN_DB_MIGRATIONS")), "true")
+}
+
+func ensureAuthSchemaAndDefaultAdmin(db *gorm.DB, logger *logrus.Logger) error {
+	statements := []string{
+		`CREATE EXTENSION IF NOT EXISTS pgcrypto`,
+		`CREATE TABLE IF NOT EXISTS roles (
+			id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			code VARCHAR(50) UNIQUE NOT NULL,
+			name VARCHAR(100) NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE TABLE IF NOT EXISTS users (
+			id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			username VARCHAR(255),
+			email VARCHAR(255) UNIQUE NOT NULL,
+			full_name VARCHAR(255) NOT NULL,
+			password_hash TEXT,
+			is_active BOOLEAN NOT NULL DEFAULT TRUE,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+		)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
+		`ALTER TABLE roles ALTER COLUMN id SET DEFAULT gen_random_uuid()::text`,
+		`ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid()::text`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users (LOWER(username)) WHERE username IS NOT NULL AND username <> ''`,
+		`CREATE TABLE IF NOT EXISTS user_roles (
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+			assigned_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (user_id, role_id)
+		)`,
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	if err := db.Exec(`
+		INSERT INTO roles (id, code, name) VALUES
+			(gen_random_uuid()::text, 'admin', 'Администратор'),
+			(gen_random_uuid()::text, 'editor', 'Редактор'),
+			(gen_random_uuid()::text, 'viewer', 'Наблюдатель')
+		ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+	`).Error; err != nil {
+		return err
+	}
+
+	adminLogin := getEnv("AUTH_LOGIN", "admin")
+	adminPassword := getEnv("AUTH_PASSWORD", "admin")
+	adminEmail := getEnv("AUTH_EMAIL", "admin@example.local")
+	adminName := getEnv("AUTH_FULL_NAME", "Администратор")
+	adminHash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	var existingID string
+	if err := db.Raw(`SELECT id::text FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?) LIMIT 1`, adminLogin, adminEmail).Scan(&existingID).Error; err != nil {
+		return err
+	}
+	if existingID == "" {
+		if err := db.Raw(`
+			INSERT INTO users (id, username, email, full_name, password_hash, is_active, created_at, updated_at)
+			VALUES (gen_random_uuid()::text, ?, ?, ?, ?, true, NOW(), NOW())
+			RETURNING id::text
+		`, adminLogin, adminEmail, adminName, string(adminHash)).Scan(&existingID).Error; err != nil {
+			return err
+		}
+		logger.Infof("Created default admin user %q", adminLogin)
+	} else {
+		if err := db.Exec(`
+			UPDATE users
+			SET username = COALESCE(NULLIF(username, ''), ?),
+			    password_hash = COALESCE(NULLIF(password_hash, ''), ?),
+			    is_active = true,
+			    updated_at = NOW()
+			WHERE id::text = ?
+		`, adminLogin, string(adminHash), existingID).Error; err != nil {
+			return err
+		}
+	}
+
+	var adminRoleID string
+	if err := db.Raw(`SELECT id::text FROM roles WHERE code = 'admin' LIMIT 1`).Scan(&adminRoleID).Error; err != nil {
+		return err
+	}
+	return db.Exec(`INSERT INTO user_roles (user_id, role_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, existingID, adminRoleID).Error
 }
 
 func resolveDatabaseDSN() string {
