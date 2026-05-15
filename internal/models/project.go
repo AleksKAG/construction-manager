@@ -12,7 +12,7 @@ import (
 // Project — проект (верхний уровень). Соответствует SQL-таблице projects.
 type Project struct {
 	ID             string     `gorm:"primaryKey;type:text" json:"id"`
-	Code           string     `gorm:"type:text;not null" json:"code"`
+	Code           string     `gorm:"type:text;unique;not null" json:"code"`
 	Name           string     `gorm:"type:text;not null" json:"name"`
 	CustomerName   string     `gorm:"type:text" json:"customer_name,omitempty"`
 	Location       string     `gorm:"type:text" json:"location,omitempty"`
