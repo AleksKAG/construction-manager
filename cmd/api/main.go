@@ -109,6 +109,10 @@ func main() {
 		logger.Info("Minimum migrations done")
 	}
 
+	if err := database.EnsureApplicationConstraints(db); err != nil {
+		logger.Fatal("Application constraint migration failed: ", err)
+	}
+
 	if err := ensureAuthSchemaAndDefaultAdmin(db, logger); err != nil {
 		logger.Fatal("Auth schema migration failed: ", err)
 	}
