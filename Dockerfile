@@ -19,8 +19,6 @@ WORKDIR /app
 COPY --from=builder /app/main .
 COPY --from=builder /app/web ./web 
 COPY --from=builder /app/schema ./schema
-COPY scripts/backup_postgres_to_s3.sh /backup_postgres_to_s3.sh
-RUN chmod +x /backup_postgres_to_s3.sh
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 EXPOSE 8080

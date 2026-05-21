@@ -15,7 +15,6 @@ services:
       - RUN_DB_MIGRATIONS=${RUN_DB_MIGRATIONS:-true}
       - DB_WAIT_MAX_ATTEMPTS=${DB_WAIT_MAX_ATTEMPTS:-40}
       - DB_WAIT_DELAY_SECONDS=${DB_WAIT_DELAY_SECONDS:-2}
-      # PostgreSQL backup to S3 settings
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -26,16 +25,11 @@ services:
       - S3_ACCESS_KEY=${S3_ACCESS_KEY}
       - S3_SECRET_KEY=${S3_SECRET_KEY}
       - S3_REGION=${S3_REGION:-ru-1}
-      - BACKUP_PREFIX=${BACKUP_PREFIX:-postgres_backup}
-      - UPLOAD_INTERVAL=${UPLOAD_INTERVAL:-86400}
-      - RETENTION_DAYS=${RETENTION_DAYS:-7}
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
     command: ["./main"]
-    # Uncomment the following lines to enable automatic PostgreSQL backups to S3
-    # entrypoint: ["/bin/sh", "-c", "/backup_postgres_to_s3.sh & exec /entrypoint.sh ./main"]
 
   postgres:
     image: postgres:16-alpine

@@ -12,6 +12,7 @@ import (
 
 	"github.com/AleksKAG/construction-manager/internal/database"
 	"github.com/AleksKAG/construction-manager/internal/handlers"
+	"github.com/AleksKAG/construction-manager/internal/integration/s3"
 	"github.com/AleksKAG/construction-manager/internal/middleware"
 	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
@@ -85,6 +86,7 @@ func main() {
 			&models.SvorRecord{},
 			&models.SvorHistory{},
 			&models.IrdDocument{},
+			&models.Document{},
 		); err != nil {
 			logger.Fatal("Migration failed: ", err)
 		}
@@ -119,6 +121,14 @@ func main() {
 
 	// Репозиторий + sample data
 	repo := repository.NewGormRepository(db)
+	docRepo := repository.NewDocumentRepository(db)
+	var docHandler *handlers.DocumentHandler
+	if s3Client, err := s3.NewClient(); err == nil {
+		docService := services.NewDocumentService(s3Client, docRepo)
+		docHandler = handlers.NewDocumentHandler(docService)
+	} else {
+		logger.Warn("S3 client disabled: ", err)
+	}
 	if err := services.LoadSampleData(repo, logger); err != nil {
 		logger.Warn("Failed to load sample data: ", err)
 	}
@@ -277,6 +287,14 @@ func main() {
 			secured.GET("/objects/:id/menu", handlers.ListProjectMenu(repo))
 			secured.PUT("/objects/:id", handlers.UpdateObject(repo))
 			secured.DELETE("/objects/:id", handlers.DeleteObject(repo))
+
+			if docHandler != nil {
+				documents := secured.Group("/documents")
+				documents.POST("/presigned-url", docHandler.RequestPresignedURL)
+				documents.POST("/confirm", docHandler.ConfirmUpload)
+				documents.GET("/download", docHandler.GetDownloadURL)
+				documents.POST("/compare", docHandler.CompareVersions)
+			}
 		}
 	}
 
