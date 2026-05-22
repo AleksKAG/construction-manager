@@ -1,74 +1,17 @@
 # Construction Manager
 
-Веб-приложение для **технического заказчика в строительстве**: управление проектами, задачами, шаблонами (ТЭП/сметы/графики), базовыми дашбордами и структурой проектной информации.
+## Что обновлено (S3 + документооборот)
 
-## Текущее состояние (на 24.04.2026)
+В проекте добавлен production-ready контур документооборота:
+- presigned upload (клиент загружает файл сразу в S3, backend не проксирует тело файла);
+- подтверждение загрузки с фиксацией `storage_key` и SHA-256 (`file_hash`) в PostgreSQL;
+- версионирование по `project_id + designation`;
+- история изменений и отдельная таблица версий.
 
-### Что уже реализовано
-- Backend на Go (`Gin` + `GORM`) уже работает через PostgreSQL runtime (`cmd/api/main.go`), включая docker-compose/entrypoint и SQL schema bootstrap.
-- Базовые сущности: проекты, задачи графика, роли/пользователи, шаблоны и строки шаблонов.
-- API для CRUD проектов и задач.
-- API для шаблонов (`template definitions`, `columns`, `project rows`).
-- Web UI (SPA на vanilla JS), подключенный к backend API.
-- Dockerfile + docker-compose для запуска контейнера.
+## Быстрый запуск
 
-### Ограничения
-- Полноценная JWT-авторизация пока не реализована.
-- Нет Swagger/OpenAPI описания.
-- Нет e2e/unit-тестов бизнес-логики.
-- JWT-авторизация и OpenAPI пока не реализованы полностью.
-
----
-
-## Целевая архитектура
-
-```text
-construction-manager/
-├── cmd/api/main.go              # точка входа
-├── internal/
-│   ├── handlers/                # HTTP handlers
-│   ├── models/                  # GORM-модели
-│   ├── repository/              # интерфейс репозитория + GORM реализация
-│   └── services/                # бизнес-логика и инициализация данных
-├── web/                         # frontend (HTML/CSS/JS)
-├── Dockerfile
-├── docker-compose.yml
-└── README.md
-```
-
----
-
-## Быстрый запуск (локально)
-
-### 1) Требования
-- Go 1.22+
-- Доступный PostgreSQL (локальный контейнер или managed instance)
-
-### 2) Настройка env
 ```bash
 cp .env.example .env
-```
-
-Для локального запуска рекомендуется:
-- `PORT=8080`
-- `DATABASE_URL=postgres://postgres:postgres@localhost:5432/construction_manager?sslmode=disable`
-- `APP_DB_ENGINE=postgres` (значение по умолчанию)
-- `RUN_DB_MIGRATIONS=true` (для первого запуска, чтобы применить `schema/*.sql` и `AutoMigrate`)
-
-Для production/managed PostgreSQL рекомендуется детерминированный bootstrap:
-- `RUN_DB_MIGRATIONS=true` — `entrypoint.sh` гарантированно применяет все `schema/*.sql` при старте контейнера.
-- Если в вашем окружении миграции выполняются отдельным deploy-step (вне контейнера), только тогда можно ставить `RUN_DB_MIGRATIONS=false`.
-
-Альтернатива для managed PostgreSQL (когда включён `APP_DB_ENGINE=postgres`, если удобнее хранить поля отдельно, без ручной сборки DSN):
-- `POSTGRESQL_HOST=5.42.122.236`
-- `POSTGRESQL_PORT=5432`
-- `POSTGRESQL_USER=gen_user`
-- `POSTGRESQL_PASSWORD=********`
-- `POSTGRESQL_DBNAME=default_db`
-- `POSTGRESQL_SSLMODE=require` (по умолчанию именно `require`, если не задан)
-
-### 3) Старт API + UI
-```bash
 go run ./cmd/api
 ```
 
@@ -77,155 +20,64 @@ go run ./cmd/api
 curl http://localhost:8080/api/v1/health
 ```
 
-UI:
-```text
-http://localhost:8080/
-```
-
----
-
-## Запуск через Docker Compose
+## Обязательные env для документов/S3
 
 ```bash
-cp .env.example .env
-docker compose up --build -d
-curl http://localhost:8080/api/v1/health
-docker compose down
+# Auth/API
+JWT_SECRET=change_me
+SERVICE_API_KEY=change_me
+
+# S3
+S3_ENDPOINT=https://storage.teamweb.ru
+S3_BUCKET=your-bucket
+S3_SECRET_KEY=your-secret
+S3_PREP_URL_TTL=1h
+S3_GET_URL_TTL=24h
+
+# Важно: для инициализации таблиц документов
+RUN_DB_MIGRATIONS=true
 ```
 
-> `entrypoint.sh` запускает PostgreSQL bootstrap при `APP_DB_ENGINE=postgres` (это значение по умолчанию).
+> Если `RUN_DB_MIGRATIONS=false`, API всё равно выполняет безопасную проверку и создаёт `documents/document_versions/document_changes` при старте.
 
-### Troubleshooting PostgreSQL startup
+## Документные API
 
-- Ошибка вида `connection to server on socket "/run/postgresql/.s.PGSQL.5432" failed` обычно означает, что в `DATABASE_URL` не указан `host` (или DSN разобрался некорректно из-за спецсимволов в логине/пароле).  
-  Используйте URL формата `postgres://user:pass@host:5432/dbname?sslmode=...` и URL-encoding для спецсимволов (например, `%40` для `@`).
-- Если API запускается **в контейнере** через `docker-compose`, не используйте `localhost` как хост БД — нужен `postgres` (имя сервиса).
-- Для PostgreSQL 17+ метрики `checkpoints_timed/checkpoints_req` перенесены из `pg_stat_bgwriter` в `pg_stat_checkpointer`, поэтому старый SQL-мониторинг нужно обновить.
-  Пример совместимого запроса:
-  ```sql
-  WITH bg AS (
-    SELECT
-      buffers_checkpoint,
-      buffers_clean,
-      maxwritten_clean,
-      buffers_backend,
-      buffers_backend_fsync,
-      buffers_alloc,
-      stats_reset
-    FROM pg_stat_bgwriter
-  ),
-  cp AS (
-    SELECT
-      checkpoints_timed,
-      checkpoints_req,
-      checkpoint_write_time,
-      checkpoint_sync_time,
-      stats_reset
-    FROM pg_stat_checkpointer
-  )
-  SELECT
-    cp.checkpoints_timed,
-    cp.checkpoints_req,
-    cp.checkpoint_write_time,
-    cp.checkpoint_sync_time,
-    bg.buffers_checkpoint,
-    bg.buffers_clean,
-    bg.maxwritten_clean,
-    bg.buffers_backend,
-    bg.buffers_backend_fsync,
-    bg.buffers_alloc,
-    COALESCE(cp.stats_reset, bg.stats_reset) AS stats_reset
-  FROM bg
-  CROSS JOIN cp;
-  ```
-  Для PostgreSQL 16 и ниже оставьте старый запрос к `pg_stat_bgwriter`.
+Все роуты находятся в защищённой группе `/api/v1/documents`:
+- `POST /presigned-url`
+- `POST /confirm`
+- `GET /download`
+- `POST /compare`
 
----
+Пример запроса presigned URL:
+```json
+{
+  "project_id": "cc82c3b2-992e-4f08-8da1-f35c2bd34755",
+  "doc_type": "ird",
+  "designation": "AR-001",
+  "filename": "specification.pdf",
+  "content_type": "application/pdf",
+  "size": 73400320
+}
+```
 
-## Ключевые API endpoints
+## Разбор ошибки «Network error during S3 PUT»
 
-### Проекты
-- `GET /api/v1/objects`
-- `POST /api/v1/objects`
-- `GET /api/v1/objects/:id`
-- `PUT /api/v1/objects/:id`
-- `DELETE /api/v1/objects/:id`
+Если в UI после шага `PUT в S3` появляется browser-level ошибка:
 
-### Задачи (график)
-- `GET /api/v1/objects/:id/tasks`
-- `POST /api/v1/tasks`
-- `GET /api/v1/tasks/:id`
-- `PUT /api/v1/tasks/:id`
-- `DELETE /api/v1/tasks/:id`
+1. Проверьте, что `S3_ENDPOINT` доступен из браузера (не только из backend контейнера).
+2. Проверьте CORS на бакете TeamWeb S3 для методов `PUT, GET, HEAD, OPTIONS` и заголовков `Content-Type, Authorization, x-amz-*`.
+3. Убедитесь, что `project_id` в presigned запросе — это **ID объекта/проекта**, а не название (иначе ключ и версия строятся некорректно).
+4. Убедитесь, что таблица `documents` создана (иначе `/presigned-url` не сможет корректно считать версию).
 
-### Шаблоны/таблицы проекта (ТЭП, сметы, графики)
-- `GET /api/v1/templates/:code`
-- `GET /api/v1/objects/:id/templates/:code/rows`
-- `POST /api/v1/objects/:id/templates/:code/rows`
-- `PUT /api/v1/objects/:id/templates/:code/rows/:rowId`
-- `DELETE /api/v1/objects/:id/templates/:code/rows/:rowId`
+## Типовые причины ошибки из логов
 
+- `relation "documents" does not exist` — не применены миграции/инициализация схемы.
+- `project_id = '«Онкологический центр...` — на фронт отправляется имя проекта вместо ID.
 
-### Реестр П/Р и синхронизация с задачами
-- `GET /api/v1/projects/:id/design/:stage/registry` — получить строки реестра по стадии (`phase-p`/`phase-r`).
-- `POST /api/v1/projects/:id/design/:stage/registry` — создать/обновить строку реестра и синхронизировать связанную задачу графика.
-
-### Сводка рабочей силы (СМР)
-- `GET /api/v1/projects/:id/smr/workforce` — список дневных записей по рабочей силе в проекте.
-- `POST /api/v1/projects/:id/smr/workforce` — добавить дневную запись план/факт по задаче.
-
-### AI-агент (сводка проекта)
-- `POST /api/v1/agent/summary`
-- Тело запроса:
-  ```json
-  {
-    "project_id": "1",
-    "question": "Какие риски на 2 недели?"
-  }
-  ```
-- Если заданы `YANDEX_AI_API_KEY`, `YANDEX_AI_FOLDER_ID`, `YANDEX_AI_PROMPT_ID`, endpoint использует AI Manager от Yandex (`/v1/responses`).
-- Если ключи не заданы или Yandex недоступен, endpoint возвращает локально рассчитанную сводку.
-
-Пример переменных окружения для AI Manager Yandex:
+## Разработка через Docker
 
 ```bash
-YANDEX_AI_API_KEY=your_key
-YANDEX_AI_FOLDER_ID=your_folder_id
-YANDEX_AI_PROMPT_ID=your_prompt_id
-YANDEX_AI_BASE_URL=https://ai.api.cloud.yandex.net/v1/responses
+docker compose up --build
 ```
 
----
-
-## План развития
-
-- Базовый runtime уже переведён на PostgreSQL и требует `DATABASE_URL`.
-- Следующий шаг миграции: полностью убрать SQLite-следы из legacy-скриптов и документации.
-- Добавьте мониторинг, ротацию логов и бэкапы volume.
-
-Подробный пошаговый план и команды миграции: `docs/POSTGRES_MIGRATION_PLAN.md`.
-
-## TEP шаблоны и миграция (добавлено)
-
-В репозиторий добавлены примеры для следующего этапа:
-
-- `seed/tep_templates.json` — стандартные шаблоны ТЭП (участок, онкоцентр, пансионат).
-- `schema/004_tep_tables.sql` — PostgreSQL-миграция таблиц `tep_templates`, `tep_indicators`, `project_tep_values`.
-
-> Примечание: SQL-файлы в `schema/`, runtime `cmd/api/main.go` и контейнерный контур уже ориентированы на PostgreSQL.
-1. Завершить auth слой: JWT + middleware + роли (`viewer/editor/admin`).
-2. Добавить модуль документов и протоколов с загрузкой файлов.
-3. Добавить OpenAPI/Swagger.
-4. Покрыть сервисы тестами.
-5. Улучшить дашборды и отчеты.
-
-
-## AI-ассистент с RAG (добавлено)
-
-Добавлены заготовки для внедрения контекстного AI-ассистента под строительные проекты:
-
-- `docs/ai_assistant_integration.md` — архитектура (React ↔ Gin ↔ pgvector ↔ YandexGPT), чек-лист и рекомендации по безопасности.
-- `schema/007_ai_rag.sql` — PostgreSQL-миграция для `pgvector` и таблицы `ai_document_chunks`.
-- `scripts/embed_existing_data.go` — one-shot backfill скрипт для чанкинга и загрузки эмбеддингов из таблиц `ird/stage_p/stage_r/estimates/protocols`.
-
-> Скрипт в `scripts/embed_existing_data.go` помечен build-тегом `ignore` и запускается отдельно через `go run scripts/embed_existing_data.go`.
+`entrypoint.sh` применяет `schema/*.sql` при `RUN_DB_MIGRATIONS=true`.

@@ -111,6 +111,10 @@ func main() {
 		logger.Info("Minimum migrations done")
 	}
 
+	if err := database.EnsureDocumentSchema(db); err != nil {
+		logger.Fatal("Document schema migration failed: ", err)
+	}
+
 	if err := database.EnsureApplicationConstraints(db); err != nil {
 		logger.Fatal("Application constraint migration failed: ", err)
 	}

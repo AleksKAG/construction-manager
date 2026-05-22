@@ -1,5 +1,13 @@
 import { api } from './api.js';
 
+let knownObjects = [];
+
+function getPickedProjectId() {
+  const select = document.getElementById('s3ProjectSelect');
+  const manual = document.getElementById('s3ProjectId');
+  return (select?.value || manual?.value || '').trim();
+}
+
 function ensureUploaderUI() {
   if (document.getElementById('s3UploaderCard')) return;
   const content = document.getElementById('contentArea');
@@ -9,9 +17,14 @@ function ensureUploaderUI() {
   card.id = 's3UploaderCard';
   card.innerHTML = `
     <h3>Проверка S3 загрузки</h3>
-    <div class="notice" style="margin-bottom:12px;">Выберите файл, получите presigned URL, загрузите напрямую в S3 и подтвердите хеш на бэкенде.</div>
+    <div class="notice" style="margin-bottom:12px;">Выберите проект и файл: загрузка идёт напрямую в S3, затем подтверждается на backend.</div>
     <div class="form-grid two">
-      <label>Project ID<input id="s3ProjectId" placeholder="project text id"></label>
+      <label>Проект (рекомендуется из списка)
+        <select id="s3ProjectSelect"><option value="">Загрузка списка проектов...</option></select>
+      </label>
+      <label>Project ID (ручной ввод)
+        <input id="s3ProjectId" placeholder="uuid/text project id">
+      </label>
       <label>Тип документа
         <select id="s3DocType">
           <option value="ird">ird</option><option value="pd">pd</option><option value="rd">rd</option>
@@ -21,8 +34,8 @@ function ensureUploaderUI() {
       <label>Обозначение<input id="s3Designation" placeholder="AR-001"></label>
       <label>Файл<input id="s3FileInput" type="file"></label>
     </div>
-    <div style="display:flex; gap:8px; margin-top:12px; align-items:center;">
-      <button id="s3UploadBtn" class="primary">Загрузить </button>
+    <div style="display:flex; gap:8px; margin-top:12px; align-items:center; flex-wrap:wrap;">
+      <button id="s3UploadBtn" class="primary">Загрузить</button>
       <button id="s3CompareBtn" class="ghost">Показать версии</button>
       <progress id="s3Progress" max="100" value="0" style="width:240px;"></progress>
       <span id="s3ProgressText" class="metric">0%</span>
@@ -34,6 +47,35 @@ function ensureUploaderUI() {
 
   card.querySelector('#s3UploadBtn').addEventListener('click', startUpload);
   card.querySelector('#s3CompareBtn').addEventListener('click', loadVersions);
+  card.querySelector('#s3ProjectSelect').addEventListener('change', (e) => {
+    const manual = document.getElementById('s3ProjectId');
+    if (manual && e.target.value) manual.value = e.target.value;
+  });
+
+  void loadObjectsIntoUploader();
+}
+
+async function loadObjectsIntoUploader() {
+  const select = document.getElementById('s3ProjectSelect');
+  if (!select) return;
+  try {
+    const rows = await api('/objects?page=1&page_size=200');
+    knownObjects = Array.isArray(rows) ? rows : (rows?.items || []);
+    const options = ['<option value="">-- выберите проект --</option>'];
+    for (const o of knownObjects) {
+      const id = String(o.id ?? '').trim();
+      const title = String(o.name || o.title || o.project_name || id);
+      if (!id) continue;
+      options.push(`<option value="${escapeHtml(id)}">${escapeHtml(title)} (${escapeHtml(id)})</option>`);
+    }
+    select.innerHTML = options.join('');
+  } catch (_) {
+    select.innerHTML = '<option value="">Не удалось загрузить список проектов</option>';
+  }
+}
+
+function escapeHtml(v) {
+  return String(v).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
 async function sha256Hex(file) {
@@ -51,14 +93,14 @@ async function putWithProgress(url, file, contentType, onProgress) {
       if (evt.lengthComputable) onProgress(Math.round((evt.loaded / evt.total) * 100));
     };
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`PUT failed: ${xhr.status}`)));
-    xhr.onerror = () => reject(new Error('Network error during S3 PUT'));
+    xhr.onerror = () => reject(new Error('Network error during S3 PUT (проверьте CORS/доступность S3 endpoint из браузера)'));
     xhr.send(file);
   });
 }
 
 async function startUpload() {
   const result = document.getElementById('s3Result');
-  const projectId = document.getElementById('s3ProjectId').value.trim();
+  const projectId = getPickedProjectId();
   const docType = document.getElementById('s3DocType').value;
   const designation = document.getElementById('s3Designation').value.trim();
   const file = document.getElementById('s3FileInput').files?.[0];
@@ -66,7 +108,13 @@ async function startUpload() {
   const progressText = document.getElementById('s3ProgressText');
 
   if (!projectId || !designation || !file) {
-    result.textContent = 'Заполните Project ID, Designation и выберите файл.';
+    result.textContent = 'Заполните Project ID/выберите проект, Designation и выберите файл.';
+    return;
+  }
+
+  const obj = knownObjects.find((o) => String(o.id) === projectId);
+  if (obj && String(obj.name || obj.title || '').trim() === projectId) {
+    result.textContent = 'Похоже выбрано имя проекта вместо ID. Используйте ID проекта.';
     return;
   }
 
@@ -76,7 +124,7 @@ async function startUpload() {
     const presigned = await api('/documents/presigned-url', 'POST', {
       project_id: projectId,
       doc_type: docType,
-      designation: designation,
+      designation,
       filename: file.name,
       content_type: file.type || 'application/octet-stream',
       size: file.size,
@@ -104,10 +152,10 @@ async function startUpload() {
 async function loadVersions() {
   const result = document.getElementById('s3Result');
   const wrap = document.getElementById('s3VersionsWrap');
-  const projectId = document.getElementById('s3ProjectId').value.trim();
+  const projectId = getPickedProjectId();
   const designation = document.getElementById('s3Designation').value.trim();
   if (!projectId || !designation) {
-    result.textContent = 'Для сравнения версий заполните Project ID и Designation.';
+    result.textContent = 'Для сравнения версий заполните Project ID/выберите проект и Designation.';
     return;
   }
   try {
@@ -126,8 +174,8 @@ async function loadVersions() {
             ${rows.map((r) => `<tr>
               <td>${r.version ?? ''}</td>
               <td>${r.status ?? ''}</td>
-              <td style="max-width:340px; word-break:break-all;">${r.storage_key ?? ''}</td>
-              <td style="font-family:monospace;">${r.file_hash ?? ''}</td>
+              <td style="max-width:340px; word-break:break-all;">${escapeHtml(r.storage_key ?? '')}</td>
+              <td style="font-family:monospace;">${escapeHtml(r.file_hash ?? '')}</td>
             </tr>`).join('')}
           </tbody>
         </table>
