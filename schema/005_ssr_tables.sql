@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS ssr_chapters (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL,
     chapter_number VARCHAR(10) NOT NULL,
     name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
