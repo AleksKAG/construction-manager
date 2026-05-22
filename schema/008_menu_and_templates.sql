@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS template_definitions (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE template_definitions
+    ADD COLUMN IF NOT EXISTS structure_json TEXT;
 CREATE INDEX IF NOT EXISTS idx_template_definitions_code ON template_definitions(code);
 COMMENT ON TABLE template_definitions IS 'Определения шаблонов: теп, сср, schedule, ird';
 COMMENT ON COLUMN template_definitions.code IS 'Код шаблона: tep, ssr, schedule, ird';
