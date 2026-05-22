@@ -8,7 +8,7 @@ function ensureUploaderUI() {
   card.className = 'card col-12';
   card.id = 's3UploaderCard';
   card.innerHTML = `
-    <h3>Проверка S3 загрузки (Phase 4 partial)</h3>
+    <h3>Проверка S3 загрузки</h3>
     <div class="notice" style="margin-bottom:12px;">Выберите файл, получите presigned URL, загрузите напрямую в S3 и подтвердите хеш на бэкенде.</div>
     <div class="form-grid two">
       <label>Project ID<input id="s3ProjectId" placeholder="project text id"></label>
@@ -22,7 +22,7 @@ function ensureUploaderUI() {
       <label>Файл<input id="s3FileInput" type="file"></label>
     </div>
     <div style="display:flex; gap:8px; margin-top:12px; align-items:center;">
-      <button id="s3UploadBtn" class="primary">Загрузить в S3</button>
+      <button id="s3UploadBtn" class="primary">Загрузить </button>
       <button id="s3CompareBtn" class="ghost">Показать версии</button>
       <progress id="s3Progress" max="100" value="0" style="width:240px;"></progress>
       <span id="s3ProgressText" class="metric">0%</span>
