@@ -44,6 +44,16 @@ CREATE TABLE IF NOT EXISTS project_tep_values (
     UNIQUE(project_id, template_code, indicator_key)
 );
 
+
+
+-- Совместимость со старыми инсталляциями: таблица могла быть создана без template_code
+ALTER TABLE project_tep_values
+    ADD COLUMN IF NOT EXISTS template_code VARCHAR(50);
+
+-- На случай частично применённой схемы гарантируем наличие indicator_key
+ALTER TABLE project_tep_values
+    ADD COLUMN IF NOT EXISTS indicator_key VARCHAR(100);
+
 CREATE INDEX IF NOT EXISTS idx_project_tep_project ON project_tep_values(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_tep_template ON project_tep_values(template_code);
 CREATE INDEX IF NOT EXISTS idx_tep_indicators_template ON tep_indicators(template_id);
