@@ -113,12 +113,19 @@ WHERE t.template_code = dups.template_code
 
 DO $$
 BEGIN
-    ALTER TABLE template_columns
-        ADD CONSTRAINT template_columns_template_code_field_key_key
-        UNIQUE (template_code, field_key);
-EXCEPTION
-    WHEN duplicate_object THEN
-        NULL;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE n.nspname = current_schema()
+          AND t.relname = 'template_columns'
+          AND c.conname = 'template_columns_template_code_field_key_key'
+    ) THEN
+        ALTER TABLE template_columns
+            ADD CONSTRAINT template_columns_template_code_field_key_key
+            UNIQUE (template_code, field_key);
+    END IF;
 END $$;
 
 -- 6. Вставка колонок для шаблона docs (если нет)
