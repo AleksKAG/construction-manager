@@ -26,6 +26,13 @@ CREATE TABLE IF NOT EXISTS template_definitions (
 ALTER TABLE template_definitions
     ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
 CREATE INDEX IF NOT EXISTS idx_template_definitions_code ON template_definitions(code);
+ALTER TABLE template_definitions
+    ALTER COLUMN id SET DEFAULT gen_random_uuid();
+UPDATE template_definitions
+SET id = gen_random_uuid()
+WHERE id IS NULL;
+ALTER TABLE template_definitions
+    ALTER COLUMN id SET NOT NULL;
 COMMENT ON TABLE template_definitions IS 'Определения шаблонов: теп, сср, schedule, ird';
 COMMENT ON COLUMN template_definitions.code IS 'Код шаблона: tep, ssr, schedule, ird';
 
@@ -42,6 +49,13 @@ CREATE TABLE IF NOT EXISTS template_columns (
     UNIQUE(template_code, field_key)
 );
 CREATE INDEX IF NOT EXISTS idx_template_columns_template ON template_columns(template_code);
+ALTER TABLE template_columns
+    ALTER COLUMN id SET DEFAULT gen_random_uuid();
+UPDATE template_columns
+SET id = gen_random_uuid()
+WHERE id IS NULL;
+ALTER TABLE template_columns
+    ALTER COLUMN id SET NOT NULL;
 COMMENT ON TABLE template_columns IS 'Колонки шаблонов';
 
 -- Таблица строк шаблонов проектов
@@ -58,6 +72,13 @@ CREATE TABLE IF NOT EXISTS project_template_rows (
 );
 CREATE INDEX IF NOT EXISTS idx_template_rows_lookup ON project_template_rows(project_id, template_code);
 CREATE INDEX IF NOT EXISTS idx_template_rows_project ON project_template_rows(project_id);
+ALTER TABLE project_template_rows
+    ALTER COLUMN id SET DEFAULT gen_random_uuid();
+UPDATE project_template_rows
+SET id = gen_random_uuid()
+WHERE id IS NULL;
+ALTER TABLE project_template_rows
+    ALTER COLUMN id SET NOT NULL;
 COMMENT ON TABLE project_template_rows IS 'Строки заполненных шаблонов (ТЭП, ССР, графики)';
 COMMENT ON COLUMN project_template_rows.template_code IS 'Код шаблона: tep, ssr, schedule, ird';
 
