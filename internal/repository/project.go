@@ -113,13 +113,17 @@ func (r *GormRepository) CreateProjectLegacy(ctx context.Context, project *model
 
 func (r *GormRepository) ListProjectsLegacy(ctx context.Context) ([]models.ProjectObject, error) {
 	var projects []models.ProjectObject
-	err := r.DB.WithContext(ctx).Find(&projects).Error
+	err := r.DB.WithContext(ctx).
+		Select("id", "project_id", "code", "name", "object_type", "address", "budget", "status", "duration_days", "characteristics", "cost_estimates", "created_at", "updated_at").
+		Find(&projects).Error
 	return projects, err
 }
 
 func (r *GormRepository) GetProjectByIDLegacy(ctx context.Context, id string) (*models.ProjectObject, error) {
 	var project models.ProjectObject
-	err := r.DB.WithContext(ctx).First(&project, "id = ?", id).Error
+	err := r.DB.WithContext(ctx).
+		Select("id", "project_id", "code", "name", "object_type", "address", "budget", "status", "duration_days", "characteristics", "cost_estimates", "created_at", "updated_at").
+		First(&project, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, messageError("not found")
 	}

@@ -136,7 +136,7 @@ func (t *GanttTask) BeforeCreate(tx *gorm.DB) error {
 type User struct {
 	ID           string    `gorm:"primaryKey;type:text" json:"id"`
 	FullName     string    `gorm:"type:text;not null" json:"full_name"`
-	Email        string    `gorm:"type:text;uniqueIndex;not null" json:"email"`
+	Email        string    `gorm:"type:text;unique;not null" json:"email"`
 	PasswordHash string    `gorm:"type:text" json:"-"`
 	IsActive     bool      `gorm:"type:boolean;default:true" json:"is_active"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at,omitempty"`
