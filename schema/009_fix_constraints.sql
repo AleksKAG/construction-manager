@@ -97,6 +97,30 @@ INSERT INTO template_definitions (code, name, description, is_active) VALUES
     ('docs', 'Документы', 'Документы проекта', true)
 ON CONFLICT (code) DO NOTHING;
 
+
+-- Гарантировать уникальность (template_code, field_key) для корректного ON CONFLICT
+-- Удаляем дубликаты детерминированно: оставляем запись с минимальным UUID id.
+DELETE FROM template_columns t
+USING (
+    SELECT template_code, field_key, MIN(id) AS keep_id
+    FROM template_columns
+    GROUP BY template_code, field_key
+    HAVING COUNT(*) > 1
+) dups
+WHERE t.template_code = dups.template_code
+  AND t.field_key = dups.field_key
+  AND t.id <> dups.keep_id;
+
+DO $$
+BEGIN
+    ALTER TABLE template_columns
+        ADD CONSTRAINT template_columns_template_code_field_key_key
+        UNIQUE (template_code, field_key);
+EXCEPTION
+    WHEN duplicate_object THEN
+        NULL;
+END $$;
+
 -- 6. Вставка колонок для шаблона docs (если нет)
 INSERT INTO template_columns (template_code, field_key, title, data_type, required, sort_order) VALUES
     ('docs', 'doc_type', 'Тип документа', 'text', true, 1),
