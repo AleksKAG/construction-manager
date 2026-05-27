@@ -1,49 +1,46 @@
 ```
-# Database schema files are typically version controlled, so no ignores needed for SQL files
-# Only ignore common artifacts if present in project
-
-# Compiled/Binary files
-*.pyc
-*.class
+# Go-specific ignores
 *.o
-*.exe
-*.dll
-*.so
 *.a
-*.obj
 *.out
+*.test
+*.prof
+coverage.out
+go.exe
+_GoProject_
+_Binaries_
 
-# Dependencies
-node_modules/
-venv/
-.venv/
-__pycache__/
-dist/
-build/
-target/
-.gradle/
+# Dependencies and build artifacts
+vendor/
+bin/
+pkg/
 
-# Editor/IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
+# Logs and temp files
+*.log
 *.tmp
 
-# System/Environment files
-.DS_Store
-Thumbs.db
+# Environment
 .env
 .env.local
 *.env.*
 
-# Logs and coverage
-*.log
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
 coverage/
 htmlcov/
 .coverage
 
 # Cache directories
+__pycache__/
 .mypy_cache/
 .pytest_cache/
 ```
