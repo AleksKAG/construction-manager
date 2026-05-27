@@ -32,7 +32,7 @@ func NewClient() (*Client, error) {
 		return nil, fmt.Errorf("missing required S3 env vars")
 	}
 	if r == "" {
-		r = "ru-central-1"
+		r = "ru-1"
 	}
 	c := &Client{
 		endpoint:    strings.TrimSuffix(e, "/"),
@@ -49,25 +49,25 @@ func NewClient() (*Client, error) {
 }
 
 // AWS Signature Version 4 implementation
-func (c *Client) signV4(method, key, ct string, exp time.Time) (url.Values, error) {
+func (c *Client) signV4(_, key, ct string, exp time.Time) (url.Values, error) {
 	now := time.Now().UTC()
-	dateStamp := now.Format("20060102")
-	amzDate := now.Format("20060102T150405Z")
+	dateStamp := now.Format("20260102")
+	amzDate := now.Format("20260102T150405Z")
 
-	escapedKey := strings.TrimPrefix(path.Clean("/"+key), "/")
-	canonicalURI := "/" + url.PathEscape(c.bucket) + "/" + escapedKey
+	_ = strings.TrimPrefix(path.Clean("/"+key), "/")
+	
 
 	query := url.Values{}
 	query.Set("X-Amz-Algorithm", "AWS4-HMAC-SHA256")
 	query.Set("X-Amz-Credential", c.accessKey+"/"+dateStamp+"/"+c.region+"/s3/aws4_request")
 	query.Set("X-Amz-Date", amzDate)
-	query.Set("X-Amz-Expires", fmt.Sprintf("%d", int(ttl.Seconds())))
+	query.Set("X-Amz-Expires", fmt.Sprintf("%d", int(exp.Sub(now).Seconds())))
 	query.Set("X-Amz-SignedHeaders", "host")
 	if ct != "" {
 		query.Set("X-Amz-Content-Type", ct)
 	}
 
-	canonicalQueryString := query.Encode()
+	
 
 	host := strings.TrimPrefix(c.endpoint, "https://")
 	host = strings.TrimPrefix(host, "http://")
