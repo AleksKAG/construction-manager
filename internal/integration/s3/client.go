@@ -48,64 +48,45 @@ func NewClient() (*Client, error) {
 	return c, nil
 }
 
-// AWS Signature Version 4 implementation
-func (c *Client) signV4(_, key, ct string, exp time.Time) (url.Values, error) {
-	now := time.Now().UTC()
-	dateStamp := now.Format("20260102")
-	amzDate := now.Format("20260102T150405Z")
+// AWS Signature Version 4 implementation using AWS SDK
+import (
+    "github.com/aws/aws-sdk-go/aws"
+    "github.com/aws/aws-sdk-go/aws/credentials"
+    "github.com/aws/aws-sdk-go/aws/session"
+    "github.com/aws/aws-sdk-go/service/s3"
+)
 
-	_ = strings.TrimPrefix(path.Clean("/"+key), "/")
-	
+func (c *Client) signV4(method, key, ct string, exp time.Time) (url.Values, error) {
+    sess, err := session.NewSession(&aws.Config{
+        Endpoint:         aws.String(c.endpoint),
+        Region:           aws.String(c.region),
+        S3ForcePathStyle: aws.Bool(true),
+        Credentials: credentials.NewStaticCredentials(
+            c.accessKey,
+            c.secretKey,
+            ""),
+    })
+    if err != nil {
+        return nil, err
+    }
+    svc := s3.New(sess)
+    putReq, _ := svc.PutObjectRequest(&s3.PutObjectInput{
+        Bucket:      aws.String(c.bucket),
+        Key:         aws.String(key),
+        ContentType: aws.String(ct),
+    })
+    urlStr, err := putReq.Presign(exp.Sub(time.Now().UTC()))
+    if err != nil {
+        return nil, err
+    }
 
-	query := url.Values{}
-	query.Set("X-Amz-Algorithm", "AWS4-HMAC-SHA256")
-	query.Set("X-Amz-Credential", c.accessKey+"/"+dateStamp+"/"+c.region+"/s3/aws4_request")
-	query.Set("X-Amz-Date", amzDate)
-	query.Set("X-Amz-Expires", fmt.Sprintf("%d", int(exp.Sub(now).Seconds())))
-	query.Set("X-Amz-SignedHeaders", "host")
-	if ct != "" {
-		query.Set("X-Amz-Content-Type", ct)
-	}
-
-	
-
-	host := strings.TrimPrefix(c.endpoint, "https://")
-	host = strings.TrimPrefix(host, "http://")
-
-	canonicalHeaders := "host:" + host + "\n"
-	if ct != "" {
-		canonicalHeaders += "x-amz-content-type:" + ct + "\n"
-	}
-	signedHeaders := "host"
-	if ct != "" {
-		signedHeaders += ";x-amz-content-type"
-	}
-
-	hashedPayload := "UNSIGNED-PAYLOAD"
-
-	stringToSign := "AWS4-HMAC-SHA256\n"
-	stringToSign += amzDate + "\n"
-	stringToSign += dateStamp + "/" + c.region + "/s3/aws4_request\n"
-
-	sha := sha256.New()
-	sha.Write([]byte(canonicalHeaders + "\n" + signedHeaders + "\n" + hashedPayload))
-	canonicalRequestHash := hex.EncodeToString(sha.Sum(nil))
-	stringToSign += canonicalRequestHash
-
-	signingKey := []byte("AWS4" + c.secretKey)
-	for _, data := range [][]byte{[]byte(dateStamp), []byte(c.region), []byte("s3"), []byte("aws4_request")} {
-		h := hmac.New(sha256.New, signingKey)
-		h.Write(data)
-		signingKey = h.Sum(nil)
-	}
-
-	mac := hmac.New(sha256.New, signingKey)
-	mac.Write([]byte(stringToSign))
-	signature := hex.EncodeToString(mac.Sum(nil))
-
-	query.Set("X-Amz-Signature", signature)
-	return query, nil
+    u, err := url.Parse(urlStr)
+    if err != nil {
+        return nil, err
+    }
+    return u.Query(), nil
 }
+
 
 func (c *Client) objectURL(key string) string {
 	escapedKey := strings.TrimPrefix(path.Clean("/"+key), "/")
