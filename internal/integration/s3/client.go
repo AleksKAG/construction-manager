@@ -143,3 +143,33 @@ func (c *Client) signLegacy(key string, exp time.Time) string {
 
 func (c *Client) VerifyObjectExists(context.Context, string) (bool, error) { return false, nil }
 func (c *Client) DeleteObject(context.Context, string) error               { return nil }
+
+// MoveObject копирует объект из srcKey в dstKey и удаляет исходный.
+// Используется для переноса временных файлов в постоянное хранилище.
+func (c *Client) MoveObject(_ context.Context, srcKey, dstKey string) error {
+	if !c.useAWSSigV4 || c.accessKey == "" {
+		return nil // заглушка: в legacy-режиме просто пропускаем
+	}
+	sess, err := c.newAWSSession()
+	if err != nil {
+		return fmt.Errorf("s3 session: %w", err)
+	}
+	svc := awss3.New(sess)
+	copySource := url.PathEscape(c.bucket+"/"+srcKey)
+	_, err = svc.CopyObject(&awss3.CopyObjectInput{
+		Bucket:     aws.String(c.bucket),
+		CopySource: aws.String(copySource),
+		Key:        aws.String(dstKey),
+	})
+	if err != nil {
+		return fmt.Errorf("s3 copy: %w", err)
+	}
+	_, err = svc.DeleteObject(&awss3.DeleteObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(srcKey),
+	})
+	if err != nil {
+		return fmt.Errorf("s3 delete src: %w", err)
+	}
+	return nil
+}

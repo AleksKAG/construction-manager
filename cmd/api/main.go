@@ -126,12 +126,19 @@ func main() {
 	// Репозиторий + sample data
 	repo := repository.NewGormRepository(db)
 	docRepo := repository.NewDocumentRepository(db)
+	fileRepo := repository.NewFileRepository(db)
 	var docHandler *handlers.DocumentHandler
+	var fileHandler *handlers.FileHandler
 	if s3Client, err := s3.NewClient(); err == nil {
 		docService := services.NewDocumentService(s3Client, docRepo)
 		docHandler = handlers.NewDocumentHandler(docService)
+		fileService := services.NewFileService(s3Client, fileRepo, db)
+		fileHandler = handlers.NewFileHandler(fileService)
 	} else {
 		logger.Warn("S3 client disabled: ", err)
+		// FMS работает и без S3 (для локальной разработки)
+		fileService := services.NewFileService(nil, fileRepo, db)
+		fileHandler = handlers.NewFileHandler(fileService)
 	}
 	if err := services.LoadSampleData(repo, logger); err != nil {
 		logger.Warn("Failed to load sample data: ", err)
@@ -299,6 +306,19 @@ func main() {
 				documents.POST("/confirm", docHandler.ConfirmUpload)
 				documents.GET("/download", docHandler.GetDownloadURL)
 				documents.POST("/compare", docHandler.CompareVersions)
+			}
+
+			// FMS: File Management System
+			files := secured.Group("/files")
+			{
+				files.GET("/tree", fileHandler.GetTree)
+				files.GET("", fileHandler.ListFiles)
+				files.POST("/upload", fileHandler.RequestUpload)
+				files.GET("/events/:id", fileHandler.StreamEvents)
+				files.POST("/:id/confirm", fileHandler.ConfirmUpload)
+				files.GET("/:id/versions", fileHandler.GetVersions)
+				files.PATCH("/:id/move", fileHandler.MoveFile)
+				files.DELETE("/:id", fileHandler.DeleteFile)
 			}
 		}
 	}

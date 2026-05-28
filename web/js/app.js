@@ -598,6 +598,7 @@ class ConstructionManagerUI {
   async renderContent() {
     this.renderNonce += 1;
     this.configureHeader();
+    if (this.currentView === 'fileManager') return this.renderFileManager();
     if (this.currentView === 'projects') return this.renderProjects();
     if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График ПД');
     if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'ТЭП');
@@ -3329,6 +3330,91 @@ class ConstructionManagerUI {
     ].includes(view);
   }
 
+  async renderFileManager() {
+    const content = document.getElementById('contentArea');
+    if (!content) return;
+    content.innerHTML = `
+      <article class="card col-12">
+        <div class="docs-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3>📄 Документация</h3>
+          <div style="display:flex;gap:8px;">
+            <button class="primary" id="fmsUploadBtn">⬆️ Загрузить</button>
+            <button class="ghost" id="fmsRefreshBtn">🔄</button>
+            <input id="fmsSearch" class="input" placeholder="🔍 Поиск..." style="width:200px;">
+          </div>
+        </div>
+        <div id="fmsTree" style="margin-bottom:16px;"></div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th>Имя</th><th>Тип</th><th>Размер</th>
+              <th>Версия</th><th>Статус</th><th>Обновлено</th><th></th>
+            </tr></thead>
+            <tbody id="fmsTableBody"><tr><td colspan="7" class="muted">Загрузка...</td></tr></tbody>
+          </table>
+        </div>
+      </article>`;
+    if (this.selectedObjectId) {
+      const { DocsTree } = await import('./docsTree.js');
+      const tree = new DocsTree(this.selectedObjectId, 'fmsTree', (path) => this.loadFmsFiles(path));
+      await tree.loadNode('/');
+      await this.loadFmsFiles('/');
+    } else {
+      const tbody = document.getElementById('fmsTableBody');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="muted">Выберите проект для работы с документацией</td></tr>';
+    }
+    document.getElementById('fmsUploadBtn')?.addEventListener('click', async () => {
+      const { AIUploadModal } = await import('./docsUpload.js');
+      const modal = new AIUploadModal(this.selectedObjectId, () => this.renderFileManager());
+      modal.show();
+    });
+    document.getElementById('fmsRefreshBtn')?.addEventListener('click', () => this.renderFileManager());
+    document.getElementById('fmsSearch')?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      document.querySelectorAll('#fmsTableBody tr').forEach(tr => {
+        tr.style.display = !q || tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+  }
+
+  async loadFmsFiles(path = '/') {
+    const tbody = document.getElementById('fmsTableBody');
+    if (!tbody || !this.selectedObjectId) return;
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token') || '';
+      const res = await fetch(`/api/v1/files?project_id=${encodeURIComponent(this.selectedObjectId)}&path=${encodeURIComponent(path)}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const data = res.ok ? await res.json() : [];
+      const rows = Array.isArray(data) ? data : (data?.items || []);
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="muted">Файлов нет</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(f => `
+        <tr>
+          <td>${f.name}</td>
+          <td><span class="tag">${f.doc_type || '—'}</span></td>
+          <td>${formatBytes(f.size_bytes)}</td>
+          <td>v${f.version}</td>
+          <td><span class="tag tag-${f.status}">${statusLabel(f.status)}</span></td>
+          <td>${f.updated_at ? new Date(f.updated_at).toLocaleDateString('ru') : '—'}</td>
+          <td>
+            <button class="ghost sm" data-fms-download="${f.id}">📥</button>
+            <button class="ghost sm" data-fms-versions="${f.id}" data-name="${f.name}">📜</button>
+          </td>
+        </tr>`).join('');
+      tbody.querySelectorAll('[data-fms-versions]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const { VersionHistoryModal } = await import('./docsVersions.js');
+          const m = new VersionHistoryModal();
+          m.show(btn.dataset.fmsVersions, btn.dataset.name);
+        });
+      });
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="muted">Ошибка: ${e.message}</td></tr>`;
+    }
+  }
+
   resolveTemplateView(view) {
     if (view === 'tep') return { code: 'tep', title: 'ТЭП' };
     if (view === 'designSchedule') return { code: 'design_schedule', title: 'График ПД' };
@@ -3351,3 +3437,19 @@ class ConstructionManagerUI {
 window.addEventListener('DOMContentLoaded', () => {
   window.ui = new ConstructionManagerUI();
 });
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 Б';
+  if (bytes < 1024) return bytes + ' Б';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' КБ';
+  return (bytes / 1048576).toFixed(1) + ' МБ';
+}
+
+function statusLabel(s) {
+  const map = {
+    pending: '⏳ Ожидает', analyzing: '🔍 Анализ',
+    requires_confirmation: '⚠️ Подтверждение', approved: '✅ Принят',
+    archived: '📦 Архив', deleted: '🗑️ Удалён'
+  };
+  return map[s] || s;
+}
