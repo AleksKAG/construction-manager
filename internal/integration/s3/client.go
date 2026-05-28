@@ -48,14 +48,6 @@ func NewClient() (*Client, error) {
 	return c, nil
 }
 
-// AWS Signature Version 4 implementation using AWS SDK
-import (
-    "github.com/aws/aws-sdk-go/aws"
-    "github.com/aws/aws-sdk-go/aws/credentials"
-    "github.com/aws/aws-sdk-go/aws/session"
-    "github.com/aws/aws-sdk-go/service/s3"
-)
-
 func (c *Client) signV4(method, key, ct string, exp time.Time) (url.Values, error) {
     sess, err := session.NewSession(&aws.Config{
         Endpoint:         aws.String(c.endpoint),
