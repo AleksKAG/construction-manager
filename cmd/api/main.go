@@ -159,6 +159,7 @@ func main() {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
+		c.Next()
 	})
 
 	// Static files

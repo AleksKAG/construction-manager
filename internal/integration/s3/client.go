@@ -11,6 +11,11 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	awss3 "github.com/aws/aws-sdk-go/service/s3"
 )
 
 type Client struct {
@@ -48,37 +53,53 @@ func NewClient() (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) signV4(method, key, ct string, exp time.Time) (url.Values, error) {
-    sess, err := session.NewSession(&aws.Config{
-        Endpoint:         aws.String(c.endpoint),
-        Region:           aws.String(c.region),
-        S3ForcePathStyle: aws.Bool(true),
-        Credentials: credentials.NewStaticCredentials(
-            c.accessKey,
-            c.secretKey,
-            ""),
-    })
-    if err != nil {
-        return nil, err
-    }
-    svc := s3.New(sess)
-    putReq, _ := svc.PutObjectRequest(&s3.PutObjectInput{
-        Bucket:      aws.String(c.bucket),
-        Key:         aws.String(key),
-        ContentType: aws.String(ct),
-    })
-    urlStr, err := putReq.Presign(exp.Sub(time.Now().UTC()))
-    if err != nil {
-        return nil, err
-    }
-
-    u, err := url.Parse(urlStr)
-    if err != nil {
-        return nil, err
-    }
-    return u.Query(), nil
+func (c *Client) newAWSSession() (*session.Session, error) {
+	return session.NewSession(&aws.Config{
+		Endpoint:         aws.String(c.endpoint),
+		Region:           aws.String(c.region),
+		S3ForcePathStyle: aws.Bool(true),
+		Credentials: credentials.NewStaticCredentials(
+			c.accessKey,
+			c.secretKey,
+			"",
+		),
+	})
 }
 
+func (c *Client) signV4PUT(key, ct string, ttl time.Duration) (string, error) {
+	sess, err := c.newAWSSession()
+	if err != nil {
+		return "", fmt.Errorf("s3 session: %w", err)
+	}
+	svc := awss3.New(sess)
+	req, _ := svc.PutObjectRequest(&awss3.PutObjectInput{
+		Bucket:      aws.String(c.bucket),
+		Key:         aws.String(key),
+		ContentType: aws.String(ct),
+	})
+	urlStr, err := req.Presign(ttl)
+	if err != nil {
+		return "", fmt.Errorf("presign PUT: %w", err)
+	}
+	return urlStr, nil
+}
+
+func (c *Client) signV4GET(key string, ttl time.Duration) (string, error) {
+	sess, err := c.newAWSSession()
+	if err != nil {
+		return "", fmt.Errorf("s3 session: %w", err)
+	}
+	svc := awss3.New(sess)
+	req, _ := svc.GetObjectRequest(&awss3.GetObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(key),
+	})
+	urlStr, err := req.Presign(ttl)
+	if err != nil {
+		return "", fmt.Errorf("presign GET: %w", err)
+	}
+	return urlStr, nil
+}
 
 func (c *Client) objectURL(key string) string {
 	escapedKey := strings.TrimPrefix(path.Clean("/"+key), "/")
@@ -87,33 +108,30 @@ func (c *Client) objectURL(key string) string {
 
 func (c *Client) GetPresignedPUTURL(_ context.Context, key, ct string, ttl time.Duration) (string, error) {
 	if c.useAWSSigV4 && c.accessKey != "" {
-		exp := time.Now().Add(ttl)
-		query, err := c.signV4("PUT", key, ct, exp)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s?%s", c.objectURL(key), query.Encode()), nil
+		return c.signV4PUT(key, ct, ttl)
 	}
 
 	// Fallback to legacy format for backward compatibility
 	exp := time.Now().Add(ttl)
-	q := url.Values{"expires": []string{exp.UTC().Format(time.RFC3339)}, "content_type": []string{ct}, "signature": []string{c.signLegacy(key, exp)}}
+	q := url.Values{
+		"expires":      []string{exp.UTC().Format(time.RFC3339)},
+		"content_type": []string{ct},
+		"signature":    []string{c.signLegacy(key, exp)},
+	}
 	return fmt.Sprintf("%s?%s", c.objectURL(key), q.Encode()), nil
 }
 
 func (c *Client) GetPresignedGETURL(_ context.Context, key string, ttl time.Duration) (string, error) {
 	if c.useAWSSigV4 && c.accessKey != "" {
-		exp := time.Now().Add(ttl)
-		query, err := c.signV4("GET", key, "", exp)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s?%s", c.objectURL(key), query.Encode()), nil
+		return c.signV4GET(key, ttl)
 	}
 
 	// Fallback to legacy format for backward compatibility
 	exp := time.Now().Add(ttl)
-	q := url.Values{"expires": []string{exp.UTC().Format(time.RFC3339)}, "signature": []string{c.signLegacy(key, exp)}}
+	q := url.Values{
+		"expires":   []string{exp.UTC().Format(time.RFC3339)},
+		"signature": []string{c.signLegacy(key, exp)},
+	}
 	return fmt.Sprintf("%s?%s", c.objectURL(key), q.Encode()), nil
 }
 

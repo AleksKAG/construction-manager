@@ -14,8 +14,9 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
+require github.com/jmespath/go-jmespath v0.4.0 // indirect
+
 require (
-   
 	github.com/aws/aws-sdk-go v1.55.8
 	github.com/bytedance/gopkg v0.1.4 // indirect
 	github.com/bytedance/sonic v1.15.1 // indirect
