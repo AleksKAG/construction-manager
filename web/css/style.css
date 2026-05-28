@@ -212,3 +212,34 @@ button { font: inherit; }
 .toast-close{position:absolute;top:6px;right:8px;border:0;background:transparent;cursor:pointer;color:#666;}
 .toast.fade-out{opacity:0;transform:translateY(-6px);transition:all .3s;}
 @keyframes toastIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+/* === FMS: File Management System === */
+.docs-header { display: flex; justify-content: space-between; align-items: center; }
+
+.fms-tree { background: var(--card-bg,#fff); border: 1px solid var(--line,#e2e8f0);
+  border-radius: 12px; padding: 12px; margin-bottom: 16px; max-height: 280px; overflow-y: auto; }
+.tree-node { padding: 2px 0; }
+.tree-node-row { display: flex; align-items: center; gap: 4px; padding: 3px 6px;
+  border-radius: 6px; cursor: pointer; transition: background .15s; }
+.tree-node-row:hover { background: var(--accent,#3b82f6); color: #fff; }
+.tree-node-row.selected { background: var(--accent,#3b82f6); color: #fff; }
+.tree-toggle { width: 16px; text-align: center; user-select: none; font-size: 11px; }
+.tree-children { margin-left: 20px; }
+
+.tag-approved { background: #d1fae5; color: #065f46; }
+.tag-analyzing { background: #fef3c7; color: #92400e; }
+.tag-requires_confirmation { background: #fee2e2; color: #991b1b; }
+.tag-archived { background: #f1f5f9; color: #475569; }
+.tag-pending { background: #e0e7ff; color: #3730a3; }
+.tag-deleted { background: #f1f5f9; color: #94a3b8; }
+
+/* AI Upload / Version Modals */
+.ai-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5);
+  z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.ai-modal { background: var(--card-bg,#fff); border-radius: 16px; padding: 24px;
+  max-width: 520px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.ai-modal h4 { margin: 0 0 12px; font-size: 1.1rem; }
+.ai-modal .ai-explanation { background: #f8fafc; border-radius: 8px; padding: 12px;
+  margin-bottom: 16px; font-size: .9rem; line-height: 1.5; }
+.ai-modal .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.ai-confidence { font-size: .85rem; color: var(--muted,#64748b); margin-bottom: 8px; }
