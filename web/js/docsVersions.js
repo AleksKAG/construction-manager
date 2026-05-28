@@ -3,7 +3,7 @@
  */
 export class VersionHistoryModal {
   _token() {
-    return localStorage.getItem('authToken') || localStorage.getItem('token') || '';
+    return localStorage.getItem('cm_token') || localStorage.getItem('authToken') || localStorage.getItem('token') || '';
   }
 
   _api(path, opts = {}) {
