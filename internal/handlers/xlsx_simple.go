@@ -267,3 +267,47 @@ func stylesXML() string {
   <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellXfs>
 </styleSheet>`
 }
+
+func buildSimplePDF(lines []string) []byte {
+	var content strings.Builder
+	content.WriteString("BT\n/F1 11 Tf\n50 790 Td\n")
+	for i, line := range lines {
+		if i > 0 {
+			content.WriteString("0 -18 Td\n")
+		}
+		content.WriteString("(")
+		content.WriteString(pdfEscape(line))
+		content.WriteString(") Tj\n")
+	}
+	content.WriteString("ET\n")
+	stream := content.String()
+	objects := []string{
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+		fmt.Sprintf("5 0 obj\n<< /Length %d >>\nstream\n%sendstream\nendobj\n", len(stream), stream),
+	}
+	var out strings.Builder
+	out.WriteString("%PDF-1.4\n")
+	offsets := []int{0}
+	for _, obj := range objects {
+		offsets = append(offsets, out.Len())
+		out.WriteString(obj)
+	}
+	xref := out.Len()
+	out.WriteString(fmt.Sprintf("xref\n0 %d\n", len(objects)+1))
+	out.WriteString("0000000000 65535 f \n")
+	for i := 1; i < len(offsets); i++ {
+		out.WriteString(fmt.Sprintf("%010d 00000 n \n", offsets[i]))
+	}
+	out.WriteString(fmt.Sprintf("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xref))
+	return []byte(out.String())
+}
+
+func pdfEscape(s string) string {
+	s = strings.ReplaceAll(s, `\\`, `\\\\`)
+	s = strings.ReplaceAll(s, "(", `\(`)
+	s = strings.ReplaceAll(s, ")", `\)`)
+	return s
+}

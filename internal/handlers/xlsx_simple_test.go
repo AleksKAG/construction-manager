@@ -29,3 +29,13 @@ func TestSimpleXLSXRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected row value: %q", parsed[2][2])
 	}
 }
+
+func TestBuildSimplePDF(t *testing.T) {
+	data := buildSimplePDF([]string{"Dashboard", "Project: Test"})
+	if !bytes.HasPrefix(data, []byte("%PDF-1.4")) {
+		t.Fatalf("expected PDF header, got %q", data[:8])
+	}
+	if !bytes.Contains(data, []byte("Project: Test")) {
+		t.Fatal("expected PDF content to include project line")
+	}
+}

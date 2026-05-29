@@ -26,6 +26,7 @@ type DocumentRegistry struct {
 	SyncedStatus   string     `gorm:"type:text" json:"synced_status,omitempty"`
 	LinkedTaskID   *string    `gorm:"type:text;index" json:"linked_task_id,omitempty"`
 	LastSyncedAt   *time.Time `json:"last_synced_at,omitempty"`
+	LinkReferences JSONMap    `gorm:"type:jsonb;serializer:json" json:"link_references,omitempty"`
 	CreatedAt      time.Time  `gorm:"autoCreateTime" json:"created_at,omitempty"`
 	UpdatedAt      time.Time  `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
 }

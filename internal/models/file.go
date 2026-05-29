@@ -40,26 +40,26 @@ func (j *JSONMap) Scan(src any) error {
 
 // File — центральная запись файла в FMS
 type File struct {
-	ID              string     `gorm:"primaryKey;type:text" json:"id"`
-	ProjectID       string     `gorm:"type:text;not null;index:idx_files_project" json:"project_id"`
-	FolderPath      string     `gorm:"type:text;not null;default:'/'" json:"folder_path"`
-	Name            string     `gorm:"type:text;not null" json:"name"`
-	OriginalName    string     `gorm:"type:text;not null" json:"original_name"`
-	StorageKey      string     `gorm:"type:text;uniqueIndex" json:"storage_key,omitempty"`
-	TempStorageKey  string     `gorm:"type:text" json:"temp_storage_key,omitempty"`
-	SizeBytes       int64      `gorm:"not null;default:0" json:"size_bytes"`
-	ContentType     string     `gorm:"type:varchar(100)" json:"content_type,omitempty"`
-	Status          string     `gorm:"type:varchar(30);not null;default:'pending'" json:"status"`
-	Version         int        `gorm:"not null;default:1" json:"version"`
-	DocType         string     `gorm:"type:varchar(50)" json:"doc_type,omitempty"`
-	Designation     string     `gorm:"type:varchar(255)" json:"designation,omitempty"`
-	UploadedBy      string     `gorm:"type:text" json:"uploaded_by,omitempty"`
-	ApprovedBy      string     `gorm:"type:text" json:"approved_by,omitempty"`
-	ApprovedAt      *time.Time `json:"approved_at,omitempty"`
-	AIMetadata      JSONMap    `gorm:"type:jsonb;serializer:json" json:"ai_metadata,omitempty"`
-	IdempotencyKey  string     `gorm:"type:text;uniqueIndex" json:"idempotency_key,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID             string     `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID      string     `gorm:"type:text;not null;index:idx_files_project" json:"project_id"`
+	FolderPath     string     `gorm:"type:text;not null;default:'/'" json:"folder_path"`
+	Name           string     `gorm:"type:text;not null" json:"name"`
+	OriginalName   string     `gorm:"type:text;not null" json:"original_name"`
+	StorageKey     string     `gorm:"type:text;uniqueIndex" json:"storage_key,omitempty"`
+	TempStorageKey string     `gorm:"type:text" json:"temp_storage_key,omitempty"`
+	SizeBytes      int64      `gorm:"not null;default:0" json:"size_bytes"`
+	ContentType    string     `gorm:"type:varchar(100)" json:"content_type,omitempty"`
+	Status         string     `gorm:"type:varchar(30);not null;default:'pending'" json:"status"`
+	Version        int        `gorm:"not null;default:1" json:"version"`
+	DocType        string     `gorm:"type:varchar(50)" json:"doc_type,omitempty"`
+	Designation    string     `gorm:"type:varchar(255)" json:"designation,omitempty"`
+	UploadedBy     string     `gorm:"type:text" json:"uploaded_by,omitempty"`
+	ApprovedBy     string     `gorm:"type:text" json:"approved_by,omitempty"`
+	ApprovedAt     *time.Time `json:"approved_at,omitempty"`
+	AIMetadata     JSONMap    `gorm:"type:jsonb;serializer:json" json:"ai_metadata,omitempty"`
+	IdempotencyKey string     `gorm:"type:text;uniqueIndex" json:"idempotency_key,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 func (File) TableName() string { return "files" }
@@ -75,6 +75,7 @@ type FileVersion struct {
 	UploadedBy string    `gorm:"type:text" json:"uploaded_by,omitempty"`
 	Comment    string    `gorm:"type:text" json:"comment,omitempty"`
 	IsCurrent  bool      `gorm:"not null;default:false" json:"is_current"`
+	IsArchived bool      `gorm:"not null;default:false" json:"is_archived"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
@@ -92,15 +93,15 @@ func (FileLock) TableName() string { return "file_locks" }
 
 // AIAnalysisResult — результат AI-анализа файла
 type AIAnalysisResult struct {
-	ID                  string     `gorm:"primaryKey;type:text" json:"id"`
-	FileID              string     `gorm:"type:text;not null" json:"file_id"`
-	Confidence          float32    `json:"confidence"`
-	SuggestedFolder     string     `gorm:"type:text" json:"suggested_folder,omitempty"`
-	VersionAction       string     `gorm:"type:varchar(20)" json:"version_action,omitempty"` // new | update | archive
-	ExplanationForUser  string     `gorm:"type:text" json:"explanation_for_user,omitempty"`
-	RequiresHumanReview bool       `gorm:"not null;default:true" json:"requires_human_review"`
-	RawResponse         JSONMap    `gorm:"type:jsonb;serializer:json" json:"raw_response,omitempty"`
-	CreatedAt           time.Time  `json:"created_at"`
+	ID                  string    `gorm:"primaryKey;type:text" json:"id"`
+	FileID              string    `gorm:"type:text;not null" json:"file_id"`
+	Confidence          float32   `json:"confidence"`
+	SuggestedFolder     string    `gorm:"type:text" json:"suggested_folder,omitempty"`
+	VersionAction       string    `gorm:"type:varchar(20)" json:"version_action,omitempty"` // new | update | archive
+	ExplanationForUser  string    `gorm:"type:text" json:"explanation_for_user,omitempty"`
+	RequiresHumanReview bool      `gorm:"not null;default:true" json:"requires_human_review"`
+	RawResponse         JSONMap   `gorm:"type:jsonb;serializer:json" json:"raw_response,omitempty"`
+	CreatedAt           time.Time `json:"created_at"`
 }
 
 func (AIAnalysisResult) TableName() string { return "ai_analysis_results" }
@@ -114,7 +115,7 @@ type FileTreeNode struct {
 	Children []FileTreeNode `json:"children,omitempty"`
 
 	// Поля файла (заполняются при type == "file")
-	Status   string `json:"status,omitempty"`
-	DocType  string `json:"doc_type,omitempty"`
-	Version  int    `json:"version,omitempty"`
+	Status  string `json:"status,omitempty"`
+	DocType string `json:"doc_type,omitempty"`
+	Version int    `json:"version,omitempty"`
 }

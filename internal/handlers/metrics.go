@@ -3,7 +3,7 @@ package handlers
 import (
 	"math"
 	"net/http"
-	
+
 	"strconv"
 	"strings"
 
@@ -78,13 +78,16 @@ var tepIndicatorToKey = map[string]string{
 func GetTEPByProject(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("projectId")
-		
+		if projectID == "" {
+			projectID = c.Param("id")
+		}
+
 		// Проверка на пустой projectID
 		if projectID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "project_id is required"})
 			return
 		}
-		
+
 		project, err := repo.GetProjectByIDLegacy(c.Request.Context(), projectID)
 		if err != nil {
 			// При отсутствии проекта возвращаем 200 OK с флагом projectNotFound
@@ -165,13 +168,13 @@ func PatchTEPRow(repo repository.Repository) gin.HandlerFunc {
 func GetEstimateSummary(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("projectId")
-		
+
 		// Проверка на пустой projectID
 		if projectID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "project_id is required"})
 			return
 		}
-		
+
 		rows, err := repo.ListTemplateRows(c.Request.Context(), projectID, "summary_estimate")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -190,13 +193,13 @@ func GetEstimateSummary(repo repository.Repository) gin.HandlerFunc {
 func GetDashboardMetrics(repo repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		projectID := c.Param("projectId")
-		
+
 		// Проверка на пустой projectID
 		if projectID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "project_id is required"})
 			return
 		}
-		
+
 		project, err := repo.GetProjectByIDLegacy(c.Request.Context(), projectID)
 		if err != nil {
 			// При отсутствии проекта возвращаем 200 OK с флагом projectNotFound
@@ -426,5 +429,3 @@ func firstNonEmpty(values ...string) string {
 func round2(v float64) float64 {
 	return math.Round(v*100) / 100
 }
-
-

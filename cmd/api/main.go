@@ -197,13 +197,6 @@ func main() {
 		// Auth — публичный логин (БЕЗ JWT middleware)
 		api.POST("/auth/login", handlers.Login(db))
 
-		// Projects — верхний уровень
-		api.GET("/projects", handlers.ListProjects(repo))
-		api.POST("/projects", handlers.CreateProject(repo))
-		api.GET("/projects/:id", handlers.GetProject(repo))
-		api.PUT("/projects/:id", handlers.UpdateProject(repo))
-		api.DELETE("/projects/:id", handlers.DeleteProject(repo))
-
 		// Все защищённые роуты — под JWT
 		secured := api.Group("/")
 		secured.Use(middleware.JWTAuthMiddleware())
@@ -213,6 +206,13 @@ func main() {
 			secured.POST("/users", middleware.RequireRoles("admin"), handlers.CreateUser(db))
 			secured.PUT("/users/:id", middleware.RequireRoles("admin"), handlers.UpdateUser(db))
 			secured.DELETE("/users/:id", middleware.RequireRoles("admin"), handlers.DeleteUser(db))
+
+			// Projects — верхний уровень (RBAC)
+			secured.GET("/projects", middleware.RequireRoles("viewer", "editor", "admin", "tech_client", "designer", "gip", "estimator", "contractor"), handlers.ListProjects(repo))
+			secured.POST("/projects", middleware.RequireRoles("admin", "tech_client"), handlers.CreateProject(repo))
+			secured.GET("/projects/:id", middleware.RequireRoles("viewer", "editor", "admin", "tech_client", "designer", "gip", "estimator", "contractor"), handlers.GetProject(repo))
+			secured.PUT("/projects/:id", middleware.RequireRoles("admin", "tech_client"), handlers.UpdateProject(repo))
+			secured.DELETE("/projects/:id", middleware.RequireRoles("admin"), handlers.DeleteProject(repo))
 
 			// Шаблоны и ИРД
 			secured.GET("/templates", middleware.RequireRoles("viewer", "editor", "admin"), handlers.ListTemplates(repo))
@@ -234,6 +234,11 @@ func main() {
 			secured.DELETE("/ird-rows/:rowId", middleware.RequireRoles("admin"), handlers.DeleteIrdAsTemplateRow(repo))
 
 			// Dashboard & Agent
+			secured.GET("/projects/:id/dashboard", middleware.RequireRoles("viewer", "editor", "admin", "tech_client", "designer", "gip", "estimator", "contractor"), handlers.GetProjectDashboard(repo))
+			secured.GET("/projects/:id/dashboard/layout", middleware.RequireRoles("viewer", "editor", "admin", "tech_client", "designer", "gip", "estimator", "contractor"), handlers.GetDashboardLayout(repo))
+			secured.PUT("/projects/:id/dashboard/layout", middleware.RequireRoles("viewer", "editor", "admin", "tech_client", "designer", "gip", "estimator", "contractor"), handlers.PutDashboardLayout(repo))
+			secured.PUT("/projects/:id/status", middleware.RequireRoles("admin", "tech_client"), handlers.UpdateProjectStatus(repo))
+			secured.GET("/projects/:id/tep", middleware.RequireRoles("viewer", "editor", "admin", "tech_client", "designer", "gip", "estimator", "contractor"), handlers.GetTEPByProject(repo))
 			secured.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
 			secured.GET("/dashboard/metrics/:projectId", handlers.GetDashboardMetrics(repo))
 			secured.POST("/agent/summary", handlers.GetAgentSummary(repo))
@@ -242,6 +247,7 @@ func main() {
 			secured.GET("/tep/:projectId", handlers.GetTEPByProject(repo))
 			secured.PATCH("/tep/:id", handlers.PatchTEPRow(repo))
 			secured.GET("/dashboard/upcoming-tasks", handlers.GetUpcomingTasks(repo))
+			secured.POST("/dashboard/export", middleware.RequireRoles("editor", "admin", "tech_client", "estimator"), handlers.ExportDashboardReport(repo))
 
 			// Docs Stage P
 			secured.GET("/projects/:id/docs/p", handlers.ListDocsP(repo))

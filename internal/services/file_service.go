@@ -2,10 +2,15 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/AleksKAG/construction-manager/internal/integration/s3"
 	"github.com/AleksKAG/construction-manager/internal/models"
@@ -27,8 +32,10 @@ func NewFileService(s3Client *s3.Client, repo repository.FileRepository, db *gor
 
 // RequestUpload — создаёт временную запись файла и возвращает presigned PUT URL
 func (s *FileService) RequestUpload(ctx context.Context, projectID, name, contentType string, size int64, idempotencyKey string) (map[string]any, error) {
+	projectID = strings.TrimSpace(projectID)
+	name = sanitizeFileName(name)
 	if projectID == "" || name == "" {
-		return nil, fmt.Errorf("project_id and name are required")
+		return nil, fmt.Errorf("project_id and safe file name are required")
 	}
 
 	// Идемпотентность: если уже есть такой ключ — вернуть существующий
@@ -44,6 +51,7 @@ func (s *FileService) RequestUpload(ctx context.Context, projectID, name, conten
 				"file_id":     existing.ID,
 				"upload_url":  uploadURL,
 				"storage_key": existing.TempStorageKey,
+				"ttl_seconds": int(ttl.Seconds()),
 			}, nil
 		}
 	}
@@ -52,8 +60,8 @@ func (s *FileService) RequestUpload(ctx context.Context, projectID, name, conten
 	tempKey := fmt.Sprintf("temp/%s/%s/%s", projectID, fileID, name)
 
 	var uploadURL string
+	ttl := presignedTTL()
 	if s.s3Client != nil {
-		ttl := presignedTTL()
 		var err error
 		uploadURL, err = s.s3Client.GetPresignedPUTURL(ctx, tempKey, contentType, ttl)
 		if err != nil {
@@ -85,6 +93,7 @@ func (s *FileService) RequestUpload(ctx context.Context, projectID, name, conten
 		"file_id":     fileID,
 		"upload_url":  uploadURL,
 		"storage_key": tempKey,
+		"ttl_seconds": int(ttl.Seconds()),
 	}, nil
 }
 
@@ -95,80 +104,94 @@ func (s *FileService) ConfirmUpload(ctx context.Context, fileID, action, folderP
 		return nil, fmt.Errorf("file not found: %w", err)
 	}
 
-	if folderPath == "" {
-		folderPath = f.FolderPath
-	}
-	if folderPath == "" {
-		folderPath = "/"
+	action = normalizeConfirmAction(action)
+	if action == "" {
+		return nil, fmt.Errorf("action must be one of: new, update, archive, archive_as_previous")
 	}
 
-	// Определяем целевой storage_key
+	folderPath = normalizeFolderPath(firstNonEmpty(folderPath, f.FolderPath))
 	newStorageKey := fmt.Sprintf("projects/%s%s/%s", f.ProjectID, folderPath, f.Name)
 
-	// Перенести объект в S3 (если клиент доступен и есть temp_key)
+	// S3 не транзакционный, поэтому сначала выполняем перенос объекта. DB-часть ниже
+	// атомарно обновляет files, file_versions, link_references и file_activity.
 	if s.s3Client != nil && f.TempStorageKey != "" && f.TempStorageKey != newStorageKey {
 		if err := s.s3Client.MoveObject(ctx, f.TempStorageKey, newStorageKey); err != nil {
-			// Если MoveObject не поддерживается, просто обновляем ключ
-			_ = err
+			return nil, fmt.Errorf("move object: %w", err)
 		}
 	}
 
-	// Статус на основе action
-	newStatus := "approved"
-	switch action {
-	case "archive":
-		newStatus = "archived"
-	case "update":
-		newStatus = "approved"
-	}
-
-	// Обновляем запись
 	now := time.Now().UTC()
-	updates := map[string]any{
-		"storage_key":      newStorageKey,
-		"temp_storage_key": "",
-		"folder_path":      folderPath,
-		"status":           newStatus,
-		"approved_at":      now,
-		"updated_at":       now,
-	}
-	if err := s.db.Model(&models.File{}).Where("id = ?", fileID).Updates(updates).Error; err != nil {
-		return nil, fmt.Errorf("update file: %w", err)
+	newStatus := "approved"
+	isArchived := false
+	if action == "archive" || action == "archive_as_previous" {
+		newStatus = "archived"
+		isArchived = true
 	}
 
-	// Создать версию
-	fv := &models.FileVersion{
-		ID:         uuid.NewString(),
-		FileID:     fileID,
-		Version:    f.Version,
-		StorageKey: newStorageKey,
-		SizeBytes:  f.SizeBytes,
-		IsCurrent:  true,
+	linkRef := map[string]any{
+		"file_id":     f.ID,
+		"version":     f.Version,
+		"storage_key": newStorageKey,
+		"status":      newStatus,
+		"linked_at":   now.Format(time.RFC3339),
+		"ai_verified": f.AIMetadata != nil,
 	}
-	_ = s.repo.CreateVersion(fv)
 
-	// Перечитаем обновлённый файл
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		updates := map[string]any{
+			"storage_key":      newStorageKey,
+			"temp_storage_key": "",
+			"folder_path":      folderPath,
+			"status":           newStatus,
+			"approved_at":      now,
+			"updated_at":       now,
+		}
+		if err := tx.Model(&models.File{}).Where("id = ?", fileID).Updates(updates).Error; err != nil {
+			return fmt.Errorf("update file: %w", err)
+		}
+
+		if err := tx.Model(&models.FileVersion{}).Where("file_id = ?", fileID).Updates(map[string]any{"is_current": false}).Error; err != nil {
+			return fmt.Errorf("mark previous versions: %w", err)
+		}
+		fv := &models.FileVersion{
+			ID:         uuid.NewString(),
+			FileID:     fileID,
+			Version:    f.Version,
+			StorageKey: newStorageKey,
+			SizeBytes:  f.SizeBytes,
+			IsCurrent:  !isArchived,
+			IsArchived: isArchived,
+		}
+		if err := tx.Create(fv).Error; err != nil {
+			return fmt.Errorf("create file version: %w", err)
+		}
+
+		if f.Designation != "" {
+			if err := tx.Model(&models.DocumentRegistry{}).
+				Where("project_id = ? AND designation = ?", f.ProjectID, f.Designation).
+				Updates(map[string]any{"link_references": models.JSONMap(linkRef), "updated_at": now}).Error; err != nil {
+				return fmt.Errorf("update link references: %w", err)
+			}
+		}
+
+		details := map[string]any{"action": action, "folder_path": folderPath, "storage_key": newStorageKey}
+		if f.AIMetadata != nil {
+			details["ai_metadata"] = f.AIMetadata
+		}
+		if err := insertFileActivity(tx, f, "confirm_upload", action, details, now); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	f.StorageKey = newStorageKey
+	f.TempStorageKey = ""
 	f.FolderPath = folderPath
 	f.Status = newStatus
 	f.ApprovedAt = &now
-
-	// Фаза 4: Если у файла есть designation — обновить link_references в registries
-	if f.Designation != "" {
-		linkRef := map[string]any{
-			"file_id":     f.ID,
-			"version":     f.Version,
-			"storage_key": f.StorageKey,
-			"status":      "approved",
-			"linked_at":   now,
-		}
-		data, _ := json.Marshal(linkRef)
-		s.db.Exec(
-			`UPDATE document_registries SET link_references = ?::jsonb, updated_at = NOW() WHERE project_id = ? AND designation = ?`,
-			string(data), f.ProjectID, f.Designation,
-		)
-	}
-
 	return f, nil
 }
 
@@ -223,8 +246,77 @@ func (s *FileService) SetAIMeta(ctx context.Context, fileID string, meta map[str
 
 func presignedTTL() time.Duration {
 	ttl, _ := time.ParseDuration(os.Getenv("S3_PREP_URL_TTL"))
-	if ttl == 0 {
-		ttl = time.Hour
+	if ttl <= 0 || ttl > 15*time.Minute {
+		return 15 * time.Minute
 	}
 	return ttl
+}
+
+func sanitizeFileName(name string) string {
+	name = strings.TrimSpace(path.Base(strings.ReplaceAll(name, "\\", "/")))
+	name = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == '/' || r == '\\' {
+			return -1
+		}
+		return r
+	}, name)
+	name = strings.Trim(name, " .")
+	if name == "" || name == "." {
+		return ""
+	}
+	return name
+}
+
+func normalizeFolderPath(folderPath string) string {
+	folderPath = strings.TrimSpace(strings.ReplaceAll(folderPath, "\\", "/"))
+	if folderPath == "" || folderPath == "." {
+		return "/"
+	}
+	clean := path.Clean("/" + strings.TrimPrefix(folderPath, "/"))
+	if clean == "." {
+		return "/"
+	}
+	return clean
+}
+
+func normalizeConfirmAction(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "", "new", "update":
+		return firstNonEmpty(strings.ToLower(strings.TrimSpace(action)), "new")
+	case "archive", "archive_as_previous":
+		return strings.ToLower(strings.TrimSpace(action))
+	default:
+		return ""
+	}
+}
+
+func insertFileActivity(tx *gorm.DB, f *models.File, action, userDecision string, details map[string]any, now time.Time) error {
+	if !tx.Migrator().HasTable("file_activity") {
+		return nil
+	}
+	detailsJSON, _ := json.Marshal(details)
+	promptHash, responseHash := hashJSON(details["ai_metadata"]), hashJSON(details)
+	return tx.Exec(
+		`INSERT INTO file_activity (id, project_id, resource_id, action, details, user_decision, prompt_hash, response_hash, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		uuid.NewString(), f.ProjectID, f.ID, action, string(detailsJSON), userDecision, promptHash, responseHash, now,
+	).Error
+}
+
+func hashJSON(v any) string {
+	if v == nil {
+		return ""
+	}
+	data, _ := json.Marshal(v)
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

@@ -243,3 +243,16 @@ button { font: inherit; }
   margin-bottom: 16px; font-size: .9rem; line-height: 1.5; }
 .ai-modal .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
 .ai-confidence { font-size: .85rem; color: var(--muted,#64748b); margin-bottom: 8px; }
+
+.card-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-right: 22px; }
+.dashboard-card.dragging { opacity: .55; outline: 2px dashed var(--primary); }
+.widget-list { display: grid; gap: 8px; margin-top: 10px; }
+.widget-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: #f8fbff; }
+.widget-row small { display: block; color: var(--muted); margin-top: 2px; }
+.widget-status { border-radius: 999px; padding: 3px 8px; font-size: 11px; white-space: nowrap; }
+.widget-status.ok { background: #e8f7ef; color: #16794a; }
+.widget-status.warn { background: #fff7e6; color: #ad6800; }
+button[disabled].mini { opacity: .45; cursor: not-allowed; }
+.project-switcher { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-left: auto; }
+.project-switcher select { min-width: 220px; max-width: 340px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; background: #fff; color: var(--text); }
+@media (max-width: 760px) { .project-switcher { order: 3; width: 100%; margin-left: 0; } .project-switcher select { flex: 1; min-width: 0; } }

@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,11 @@ type Project struct {
 	Name           string     `gorm:"type:text;not null" json:"name"`
 	CustomerName   string     `gorm:"type:text" json:"customer_name,omitempty"`
 	Location       string     `gorm:"type:text" json:"location,omitempty"`
+	Address        string     `gorm:"type:text" json:"address,omitempty"`
+	BudgetTotal    float64    `gorm:"type:real;default:0" json:"budget_total,omitempty"`
+	RegionCode     string     `gorm:"type:text;index" json:"region_code,omitempty"`
+	Latitude       float64    `gorm:"type:real" json:"latitude,omitempty"`
+	Longitude      float64    `gorm:"type:real" json:"longitude,omitempty"`
 	Status         string     `gorm:"type:text;default:'draft';index" json:"status"`
 	StartDate      *time.Time `json:"start_date,omitempty"`
 	PlannedEndDate *time.Time `json:"planned_end_date,omitempty"`
@@ -31,6 +37,9 @@ func (p *Project) BeforeCreate(tx *gorm.DB) error {
 	}
 	if p.Status == "" {
 		p.Status = "draft"
+	}
+	if p.Code == "" {
+		p.Code = "PRJ-" + strings.ReplaceAll(p.ID, "-", "")[:8]
 	}
 	return nil
 }

@@ -155,6 +155,10 @@ func CreateTask(repo repository.Repository) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "object_id is required"})
 			return
 		}
+		if project, err := repo.GetProjectByID(c.Request.Context(), task.ObjectID); err == nil && project.Status == "completed" {
+			c.JSON(http.StatusConflict, gin.H{"error": "completed project is locked for new tasks"})
+			return
+		}
 
 		if err := repo.CreateTask(c.Request.Context(), &task); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -233,7 +237,6 @@ func DeleteTask(repo repository.Repository) gin.HandlerFunc {
 }
 
 // Helper function to parse ID from URL parameter
-
 
 func objMin(a, b int) int {
 	if a < b {
