@@ -97,12 +97,15 @@ func (r *GormRepository) CreateProjectLegacy(ctx context.Context, project *model
 			Columns:   []clause.Column{{Name: "id"}},
 			DoNothing: true,
 		}).Create(map[string]any{
-			"id":         project.ProjectID,
-			"code":       projectCode,
-			"name":       project.Name,
-			"status":     "active",
-			"created_at": now,
-			"updated_at": now,
+			"id":           project.ProjectID,
+			"code":         projectCode,
+			"name":         project.Name,
+			"address":      project.Address,
+			"location":     project.Address,
+			"budget_total": project.Budget,
+			"status":       "draft",
+			"created_at":   now,
+			"updated_at":   now,
 		}).Error; err != nil {
 			return err
 		}

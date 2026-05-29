@@ -56,7 +56,7 @@ class ConstructionManagerUI {
 
     this.currentView = 'home';
     this.objects = [];
-    this.selectedObjectId = null;
+    this.selectedObjectId = localStorage.getItem('cm_last_active_project') || null;
     this.modalMode = null;
     this.currentTemplateCode = null;
     this.currentTemplateName = null;
@@ -72,8 +72,10 @@ class ConstructionManagerUI {
     this.projectMenus = {};
     this.dashboardTimer = null;
     this.projectsTimer = null;
+    this.dashboardLayoutSaveTimer = null;
     this.touchStartX = null;
     this.dashboardMetrics = {};
+    this.projectDashboardSnapshots = {};
     this.isCreatingProject = false; // Флаг для блокировки повторных кликов при создании проекта
     this.templateEditModes = {};
     this.registryEditModes = { 'phase-p': false, 'phase-r': false };
@@ -158,11 +160,13 @@ class ConstructionManagerUI {
     }
 
     await this.loadObjects();
+    await this.loadDashboardLayout();
     if (this.selectedObjectId) {
       this.expandedProjects.add(String(this.selectedObjectId));
       await this.loadProjectMenu(this.selectedObjectId);
     }
     if (!this.state.dashboards.length) this.seedDashboards();
+    await this.refreshDashboardMetrics();
     this.renderProjectTree();
     this.applySidebarState();
     this.bindConnectivity();
@@ -227,6 +231,7 @@ class ConstructionManagerUI {
 
     document.getElementById('primaryBtn')?.addEventListener('click', () => this.handlePrimaryAction());
     document.getElementById('secondaryBtn')?.addEventListener('click', () => this.handleSecondaryAction());
+    document.getElementById('projectSwitcher')?.addEventListener('change', (e) => this.setActiveProject(e.target.value));
     document.getElementById('saveEntity')?.addEventListener('click', () => this.handleSaveModal());
     document.querySelectorAll('[data-close="true"]').forEach((el) => el.addEventListener('click', () => this.handleModalCancel()));
 
@@ -319,15 +324,80 @@ class ConstructionManagerUI {
     this.persistDashboards();
   }
 
-  persistDashboards() {
+  persistDashboards(options = {}) {
     localStorage.setItem('cm_dashboards', JSON.stringify(this.state.dashboards));
+    if (options.sync === false) return;
+    this.scheduleDashboardLayoutSave();
+  }
+
+  scheduleDashboardLayoutSave() {
+    clearTimeout(this.dashboardLayoutSaveTimer);
+    this.dashboardLayoutSaveTimer = setTimeout(() => this.saveDashboardLayout(), 500);
+  }
+
+  async loadDashboardLayout() {
+    if (!this.selectedObjectId) return;
+    try {
+      const payload = await api(`/projects/${this.selectedObjectId}/dashboard/layout`);
+      if (Array.isArray(payload?.layout) && payload.layout.length) {
+        this.state.dashboards = payload.layout.map((item) => ({
+          id: item.id || crypto.randomUUID(),
+          projectId: item.projectId || item.project_id,
+          projectName: item.projectName || item.project_name || '',
+          type: item.type || 'basic',
+          title: item.title || '',
+        })).filter((item) => item.projectId);
+        this.persistDashboards({ sync: false });
+      }
+    } catch (e) {
+      console.warn('Dashboard layout load skipped:', e.message || e);
+    }
+  }
+
+  async saveDashboardLayout() {
+    if (!this.selectedObjectId || !localStorage.getItem('cm_token')) return;
+    try {
+      await api(`/projects/${this.selectedObjectId}/dashboard/layout`, 'PUT', {
+        layout: this.state.dashboards,
+        filters: { refresh_seconds: this.state.dashboardRefreshSeconds },
+      });
+    } catch (e) {
+      console.warn('Dashboard layout save skipped:', e.message || e);
+    }
   }
 
   async loadObjects() {
     const payload = await api('/objects?page=1&page_size=200');
     this.objects = Array.isArray(payload) ? payload : (payload?.data || []);
-    if (!this.selectedObjectId && this.objects.length) this.selectedObjectId = this.objects[0].id;
+    if (this.selectedObjectId && !this.objects.some((o) => String(o.id) === String(this.selectedObjectId))) {
+      this.selectedObjectId = null;
+      localStorage.removeItem('cm_last_active_project');
+    }
+    if (!this.selectedObjectId && this.objects.length) this.setActiveProject(this.objects[0].id, { render: false });
+    this.renderProjectSwitcher();
     await this.refreshDashboardMetrics();
+  }
+
+  setActiveProject(projectId, options = {}) {
+    if (!projectId) return;
+    this.selectedObjectId = String(projectId);
+    localStorage.setItem('cm_last_active_project', this.selectedObjectId);
+    this.expandedProjects.add(this.selectedObjectId);
+    this.renderProjectSwitcher();
+    if (options.render === false) return;
+    this.loadProjectMenu(this.selectedObjectId).then(async () => {
+      await this.loadDashboardLayout();
+      await this.refreshDashboardMetrics();
+      this.renderProjectTree();
+      this.renderContent();
+    });
+  }
+
+  renderProjectSwitcher() {
+    const select = document.getElementById('projectSwitcher');
+    if (!select) return;
+    select.innerHTML = this.objects.map((o) => `<option value="${o.id}" ${String(o.id) === String(this.selectedObjectId) ? 'selected' : ''}>${o.name}</option>`).join('');
+    select.disabled = this.objects.length === 0;
   }
 
   currentProject() {
@@ -385,10 +455,9 @@ class ConstructionManagerUI {
     tree.querySelectorAll('[data-project]').forEach((row) => {
       row.addEventListener('click', async () => {
         const pid = String(row.dataset.project);
-        this.selectedObjectId = pid;
         this.expandedProjects.clear();
-        this.expandedProjects.add(pid);
         this.expandedMenuNodes.clear();
+        this.setActiveProject(pid, { render: false });
         await this.loadProjectMenu(pid);
         this.renderProjectTree();
         this.renderContent();
@@ -631,16 +700,22 @@ class ConstructionManagerUI {
   }
 
   metricDataFor(project) {
+    const snapshot = this.projectDashboardSnapshots[String(project?.id)] || null;
     const metrics = this.dashboardMetrics[String(project?.id)] || {};
-    const plan = Number(metrics?.progress?.plan_percent || 0);
-    const fact = Number(metrics?.progress?.fact_percent || 0);
+    const progressWidget = this.dashboardWidget(snapshot, 'construction_progress');
+    const budgetWidget = this.dashboardWidget(snapshot, 'budget_evm');
+    const tepWidget = this.dashboardWidget(snapshot, 'tep');
+    const plan = Number(progressWidget?.data?.plan_percent ?? metrics?.progress?.plan_percent ?? 0);
+    const fact = Number(progressWidget?.data?.fact_percent ?? metrics?.progress?.fact_percent ?? 0);
     const deviation = fact - plan;
-    const cost = Number(metrics?.cost?.value || project?.budget || 0);
+    let cost = Number(budgetWidget?.data?.eac ?? metrics?.cost?.value ?? project?.budget_total ?? project?.budget ?? 0);
+    if (!cost) cost = Number(project?.budget_total ?? project?.budget ?? 0);
     const spent = cost * (Math.max(0, Math.min(100, fact)) / 100);
     const remainder = Math.max(0, cost - spent);
     return {
-      address: project?.address || "—",
-      area: Number(metrics?.area?.total_area_m2 || 0),
+      snapshot,
+      address: snapshot?.project?.address || project?.address || "—",
+      area: Number(tepWidget?.data?.total_area_m2 ?? metrics?.area?.total_area_m2 ?? 0),
       cost,
       plan,
       fact,
@@ -648,22 +723,40 @@ class ConstructionManagerUI {
       milestones: ["Разрешение", "Фундамент", "Каркас", "Фасад", "Отделка"].slice(0, 3 + ((project?.name?.length || 0) % 3)),
       spent,
       remainder,
-      eac: cost ? cost * (100 / Math.max(1, fact || 1)) : 0,
+      eac: Number(budgetWidget?.data?.eac || (cost ? cost * (100 / Math.max(1, fact || 1)) : 0)),
     };
   }
 
-  async refreshDashboardMetrics() {
-    const ids = [...new Set(this.state.dashboards.map((d) => String(d.projectId)))];
+  async refreshDashboardMetrics(projectIds = null) {
+    const ids = projectIds || [...new Set(this.state.dashboards.map((d) => String(d.projectId)))];
     if (!ids.length) return;
+    const role = this.currentDashboardRole();
     const entries = await Promise.all(ids.map(async (id) => {
       try {
-        const payload = await api(`/dashboard/metrics/${id}`);
-        return [id, payload];
+        const snapshot = await api(`/projects/${id}/dashboard?role=${encodeURIComponent(role)}`);
+        return [id, { snapshot }];
       } catch (_) {
-        return [id, null];
+        try {
+          const metrics = await api(`/dashboard/metrics/${id}`);
+          return [id, { metrics }];
+        } catch (__) {
+          return [id, null];
+        }
       }
     }));
-    entries.forEach(([id, payload]) => { if (payload) this.dashboardMetrics[id] = payload; });
+    entries.forEach(([id, payload]) => {
+      if (!payload) return;
+      if (payload.snapshot) this.projectDashboardSnapshots[id] = payload.snapshot;
+      if (payload.metrics) this.dashboardMetrics[id] = payload.metrics;
+    });
+  }
+
+  currentDashboardRole() {
+    return localStorage.getItem('cm_role') || this.currentUser?.role || 'viewer';
+  }
+
+  dashboardWidget(snapshot, code) {
+    return (snapshot?.widgets || []).find((w) => w.code === code) || null;
   }
 
   statusClass(fact) {
@@ -677,22 +770,38 @@ class ConstructionManagerUI {
     if (!project) return '';
     const m = this.metricDataFor(project);
     const statusClass = this.statusClass(m.fact);
+    const snapshot = m.snapshot;
+    const widgets = snapshot?.widgets || [];
+    const readonly = snapshot?.readonly ? '<span class="tag">read-only</span>' : '';
+    const generated = snapshot?.generated_at ? new Date(snapshot.generated_at).toLocaleTimeString('ru-RU') : '—';
 
     const common = `
       <div class="kv"><span>Адрес:</span><strong>${m.address}</strong></div>
       <div class="kv"><span>Площадь:</span><strong>${m.area.toLocaleString('ru-RU')} м²</strong></div>
-      <div class="kv"><span>Стоимость:</span><strong>${m.cost.toLocaleString('ru-RU')} руб.</strong></div>
+      <div class="kv"><span>Стоимость/EAC:</span><strong>${m.cost.toLocaleString('ru-RU')} руб.</strong></div>
       <div class="kv"><span>План:</span><strong>${m.plan}%</strong></div>
       <div class="kv"><span>Факт:</span><strong>${m.fact}%</strong></div>
       <div class="kv"><span>Отклонение:</span><strong>${m.deviation > 0 ? '+' : ''}${m.deviation}%</strong></div>
-      <div class="progress"><span style="width:${m.fact}%"></span></div>
+      <div class="progress"><span style="width:${Math.max(0, Math.min(100, m.fact))}%"></span></div>
       <span class="status-pill ${statusClass}">${statusClass === 'ok' ? 'Зеленый статус' : statusClass === 'warn' ? 'Желтый статус' : 'Красный статус'}</span>
     `;
+
+    const widgetList = widgets.length ? `
+      <div class="widget-list">
+        ${widgets.map((w) => `
+          <div class="widget-row">
+            <div><strong>${w.title || w.code}</strong><small>${(w.filters || []).join(' / ') || 'без фильтров'}</small></div>
+            <span class="widget-status ${w.status === 'ok' ? 'ok' : 'warn'}">${w.status || 'ok'}</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : '<div class="notice">Snapshot ещё не загружен или недоступен.</div>';
 
     const extended = `
       <div class="notice" style="margin-top:8px">Мини-Гант: ${m.milestones.join(' → ')}</div>
       <div class="kv"><span>Бюджет план/факт:</span><strong>${Math.round(m.plan)}% / ${Math.round(m.fact)}%</strong></div>
       <div class="mini-chart">${Array.from({ length: 10 }, (_, i) => `<span style="height:${10 + ((i * 7 + m.fact) % 24)}px"></span>`).join('')}</div>
+      ${widgetList}
     `;
     const financial = `
       <div class="kv"><span>Освоено:</span><strong>${m.spent.toLocaleString('ru-RU')} руб. (${m.fact}%)</strong></div>
@@ -701,12 +810,14 @@ class ConstructionManagerUI {
     `;
 
     return `
-      <article class="card dashboard-card">
+      <article class="card dashboard-card" draggable="true" data-dashboard-card="${d.id}">
         <button class="card-remove" data-remove-dashboard="${d.id}" title="Удалить">✕</button>
-        <h3>${project.name}</h3>
+        <div class="card-title-row"><h3>${project.name}</h3>${readonly}</div>
+        <div class="kv"><span>Snapshot:</span><strong>${generated} · TTL ${snapshot?.snapshot_ttl_seconds || 900} сек.</strong></div>
         ${common}
         ${d.type === 'extended' ? extended : ''}
         ${d.type === 'financial' ? financial : ''}
+        <button class="mini" data-refresh-dashboard-project="${project.id}">Обновить snapshot</button>
       </article>
     `;
   }
@@ -715,6 +826,7 @@ class ConstructionManagerUI {
     const total = this.objects.length;
     const inProgress = this.objects.filter((o) => ['planning', 'design', 'construction'].includes((o.status || '').toLowerCase())).length;
     const lastUpdate = new Date().toLocaleTimeString('ru-RU');
+    const role = this.currentDashboardRole();
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-4"><span class="tag">Всего проектов</span><h3>${total}</h3></article>
@@ -724,6 +836,8 @@ class ConstructionManagerUI {
           <h3>Дашборды проектов</h3>
           <div class="row-actions">
             <button class="mini" id="openAgentSummary">AI-сводка</button>
+            <button class="mini" id="exportDashboardXlsx">Экспорт XLSX</button>
+            <button class="mini" id="exportDashboardPdf">Экспорт PDF</button>
             <label class="metric">Интервал (сек)
               <input id="dashboardRefreshInput" type="number" min="15" value="${this.state.dashboardRefreshSeconds}" style="width:88px;margin-left:6px;">
             </label>
@@ -732,6 +846,7 @@ class ConstructionManagerUI {
         </div>
         <div class="status-line">
           <span>Обновлено: ${lastUpdate}</span>
+          <span>Роль snapshot: ${role}</span>
           <span class="connection ${navigator.onLine ? 'online' : 'offline'}">${navigator.onLine ? 'online' : 'offline'}</span>
           <span class="spinner ${this.state.dashboardRefreshing ? '' : 'hidden'}"></span>
         </div>
@@ -748,9 +863,41 @@ class ConstructionManagerUI {
       this.setupAutoRefresh();
     });
     document.getElementById('openAgentSummary')?.addEventListener('click', () => this.openAgentSummaryForm());
+    document.getElementById('exportDashboardXlsx')?.addEventListener('click', () => this.exportDashboardReport('xlsx'));
+    document.getElementById('exportDashboardPdf')?.addEventListener('click', () => this.exportDashboardReport('pdf'));
 
     document.querySelectorAll('[data-remove-dashboard]').forEach((btn) => {
       btn.addEventListener('click', () => this.removeDashboard(btn.dataset.removeDashboard));
+    });
+    document.querySelectorAll('[data-refresh-dashboard-project]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        await this.refreshDashboardMetrics([String(btn.dataset.refreshDashboardProject)]);
+        btn.disabled = false;
+        this.renderHome();
+      });
+    });
+    this.bindDashboardDragAndDrop();
+  }
+
+  bindDashboardDragAndDrop() {
+    let draggingId = null;
+    document.querySelectorAll('[data-dashboard-card]').forEach((card) => {
+      card.addEventListener('dragstart', () => { draggingId = card.dataset.dashboardCard; card.classList.add('dragging'); });
+      card.addEventListener('dragend', () => { card.classList.remove('dragging'); draggingId = null; });
+      card.addEventListener('dragover', (e) => e.preventDefault());
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const targetId = card.dataset.dashboardCard;
+        if (!draggingId || draggingId === targetId) return;
+        const from = this.state.dashboards.findIndex((d) => d.id === draggingId);
+        const to = this.state.dashboards.findIndex((d) => d.id === targetId);
+        if (from < 0 || to < 0) return;
+        const [item] = this.state.dashboards.splice(from, 1);
+        this.state.dashboards.splice(to, 0, item);
+        this.persistDashboards();
+        this.renderHome();
+      });
     });
   }
 
@@ -769,19 +916,58 @@ class ConstructionManagerUI {
     return map[String(status || "").toLowerCase()] || (status || "—");
   }
 
+  canManageProjects() {
+    return ['admin', 'tech_client'].includes(this.currentDashboardRole());
+  }
+
+  nextProjectStatus(status) {
+    const normalized = this.normalizeProjectStatus(status);
+    const flow = ['draft', 'design', 'construction', 'commissioning', 'completed'];
+    const idx = flow.indexOf(normalized);
+    return idx >= 0 && idx + 1 < flow.length ? flow[idx + 1] : '';
+  }
+
+  normalizeProjectStatus(status) {
+    const raw = String(status || '').toLowerCase();
+    if (raw === 'planning') return 'draft';
+    if (raw === 'active') return 'design';
+    if (raw === 'complete') return 'completed';
+    return raw || 'draft';
+  }
+
+  async advanceProjectStatus(projectId, currentStatus) {
+    const next = this.nextProjectStatus(currentStatus);
+    if (!next) return this.showToast('Для текущего статуса нет следующего шага', 'info');
+    if (!confirm(`Перевести проект в статус «${this.localizeProjectStatus(next)}»?`)) return;
+    try {
+      await api(`/projects/${projectId}/status`, 'PUT', { status: next });
+      this.showToast('Статус проекта обновлён', 'success');
+      await this.loadObjects();
+      this.renderProjects();
+      this.renderProjectTree();
+    } catch (e) {
+      this.showToast(e.message || 'Не удалось сменить статус', 'error');
+    }
+  }
+
   renderProjects() {
-    const rows = this.objects.map((o) => `
+    const canManage = this.canManageProjects();
+    const rows = this.objects.map((o) => {
+      const next = this.nextProjectStatus(o.status);
+      return `
       <tr>
         <td>${o.name}</td>
         <td>${o.address || '—'}</td>
         <td>${this.localizeProjectStatus(o.status)}</td>
-        <td>${(Number(o.budget) || 0).toLocaleString('ru-RU')}</td>
+        <td>${(Number(o.budget_total ?? o.budget) || 0).toLocaleString('ru-RU')}</td>
         <td>
-          <button class="mini" data-edit-project="${o.id}">✏️</button>
-          <button class="mini danger" data-delete-project="${o.id}">🗑</button>
+          <button class="mini" data-open-dashboard-project="${o.id}">📊</button>
+          <button class="mini" data-edit-project="${o.id}" ${canManage ? '' : 'disabled'}>✏️</button>
+          <button class="mini" data-advance-project="${o.id}" data-current-status="${o.status || ''}" ${canManage && next ? '' : 'disabled'}>${next ? `→ ${this.localizeProjectStatus(next)}` : 'Финал'}</button>
+          <button class="mini danger" data-delete-project="${o.id}" ${this.currentDashboardRole() === 'admin' ? '' : 'disabled'}>🗑</button>
         </td>
-      </tr>
-    `).join('') || '<tr><td colspan="5">Нет проектов</td></tr>';
+      </tr>`;
+    }).join('') || '<tr><td colspan="5">Нет проектов</td></tr>';
 
     document.getElementById('contentArea').innerHTML = `
       <article class="card col-12">
@@ -799,12 +985,28 @@ class ConstructionManagerUI {
       </article>
     `;
 
+    document.querySelectorAll('[data-open-dashboard-project]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!this.state.dashboards.some((d) => String(d.projectId) === String(btn.dataset.openDashboardProject))) {
+          const project = this.objects.find((o) => String(o.id) === String(btn.dataset.openDashboardProject));
+          this.state.dashboards.push({ id: crypto.randomUUID(), projectId: project.id, projectName: project.name, type: 'extended', title: `${project.name} • Dashboard` });
+          this.persistDashboards();
+        }
+        await this.refreshDashboardMetrics([String(btn.dataset.openDashboardProject)]);
+        this.switchView('home', 'Дашборды');
+      });
+    });
+
     document.querySelectorAll('[data-edit-project]').forEach((btn) => {
-      btn.addEventListener('click', () => this.openProjectEditForm(btn.dataset.editProject));
+      btn.addEventListener('click', () => { if (!btn.disabled) this.openProjectEditForm(btn.dataset.editProject); });
+    });
+
+    document.querySelectorAll('[data-advance-project]').forEach((btn) => {
+      btn.addEventListener('click', () => { if (!btn.disabled) this.advanceProjectStatus(btn.dataset.advanceProject, btn.dataset.currentStatus); });
     });
 
     document.querySelectorAll('[data-delete-project]').forEach((btn) => {
-      btn.addEventListener('click', () => this.deleteProject(btn.dataset.deleteProject));
+      btn.addEventListener('click', () => { if (!btn.disabled) this.deleteProject(btn.dataset.deleteProject); });
     });
   }
 
@@ -1713,14 +1915,22 @@ class ConstructionManagerUI {
     document.getElementById('modalBody').innerHTML = `
       <div class="form-grid">
         <label>Наименование *<input data-project-field="name" type="text"></label>
-        <label>Адрес<input data-project-field="address" type="text"></label>
-        <label>Бюджет<input data-project-field="budget" type="number" min="0"></label>
+        <label>Адрес *<input data-project-field="address" type="text" required></label>
+        <div class="form-grid two">
+          <label>Дата начала *<input data-project-field="start_date" type="date" required></label>
+          <label>Плановая дата конца *<input data-project-field="planned_end_date" type="date" required></label>
+        </div>
+        <div class="form-grid two">
+          <label>Бюджет *<input data-project-field="budget" type="number" min="0" required></label>
+          <label>Код региона *<input data-project-field="region_code" value="59" placeholder="59"></label>
+        </div>
         <label>Статус
           <select data-project-field="status">
-            <option value="planning">Черновик</option>
-            <option value="design">Активный</option>
-            <option value="construction">На паузе</option>
-            <option value="complete">Завершен</option>
+            <option value="draft">Черновик</option>
+            <option value="design">Проектирование</option>
+            <option value="construction">Строительство</option>
+            <option value="commissioning">Ввод в эксплуатацию</option>
+            <option value="completed">Завершен</option>
           </select>
         </label>
       </div>
@@ -1758,10 +1968,11 @@ class ConstructionManagerUI {
           <label>Бюджет проекта<input data-project-field="budget" type="number" min="0" value="${p.budget || 0}"></label>
           <label>Статус
             <select data-project-field="status">
-              <option value="planning" ${(p.status || '') === 'planning' ? 'selected' : ''}>Черновик</option>
-              <option value="design" ${(p.status || '') === 'design' ? 'selected' : ''}>Активный</option>
-              <option value="construction" ${(p.status || '') === 'construction' ? 'selected' : ''}>На паузе</option>
-              <option value="complete" ${(p.status || '') === 'complete' ? 'selected' : ''}>Завершен</option>
+              <option value="draft" ${this.normalizeProjectStatus(p.status) === 'draft' ? 'selected' : ''}>Черновик</option>
+              <option value="design" ${this.normalizeProjectStatus(p.status) === 'design' ? 'selected' : ''}>Проектирование</option>
+              <option value="construction" ${this.normalizeProjectStatus(p.status) === 'construction' ? 'selected' : ''}>Строительство</option>
+              <option value="commissioning" ${this.normalizeProjectStatus(p.status) === 'commissioning' ? 'selected' : ''}>Ввод в эксплуатацию</option>
+              <option value="completed" ${this.normalizeProjectStatus(p.status) === 'completed' ? 'selected' : ''}>Завершен</option>
             </select>
           </label>
           <h4>Ответственные</h4>
@@ -1800,11 +2011,40 @@ class ConstructionManagerUI {
   validateProjectForm(data, isEdit = false) {
     if (!data.name) return 'Наименование обязательно';
     if (!data.address) return 'Адрес обязателен';
+    if (!isEdit && !data.start_date) return 'Дата начала обязательна';
+    if (!isEdit && !data.planned_end_date) return 'Плановая дата конца обязательна';
+    if (!isEdit && !data.region_code) return 'Код региона обязателен';
+    if (!isEdit && (!data.budget || Number(data.budget) <= 0)) return 'Бюджет должен быть > 0';
     if (data.budget && Number(data.budget) < 0) return 'Бюджет должен быть >= 0';
     if (data.start_date && data.planned_end_date && new Date(data.start_date) > new Date(data.planned_end_date)) return 'Дата начала должна быть раньше даты окончания';
     const duplicate = this.objects.find((o) => o.name.toLowerCase() === data.name.toLowerCase() && (!isEdit || String(o.id) !== String(this.state.editProjectId)));
     if (duplicate) return 'Проект с таким наименованием уже существует';
     return null;
+  }
+
+  buildProjectPayload(data, fallback = {}) {
+    return {
+      code: fallback.code || undefined,
+      name: data.name || fallback.name || '',
+      address: data.address || fallback.address || '',
+      location: data.address || fallback.location || fallback.address || '',
+      budget_total: Number(data.budget || fallback.budget_total || fallback.budget || 0),
+      region_code: data.region_code || fallback.region_code || '59',
+      start_date: data.start_date || fallback.start_date || new Date().toISOString().slice(0, 10),
+      planned_end_date: data.planned_end_date || fallback.planned_end_date || new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
+      status: this.normalizeProjectStatus(data.status || fallback.status || 'draft'),
+    };
+  }
+
+  async syncTopLevelProject(projectId, data, fallback = {}) {
+    if (!projectId) return;
+    const payload = this.buildProjectPayload(data, fallback);
+    try {
+      await api(`/projects/${projectId}`, 'PUT', payload);
+    } catch (e) {
+      // Legacy object screens remain usable even if top-level project sync is forbidden for the current role.
+      console.warn('Top-level project sync skipped:', e.message || e);
+    }
   }
 
   validateIrdDates(data) {
@@ -2405,6 +2645,37 @@ class ConstructionManagerUI {
     await this.renderSvorMain();
   }
 
+  async exportDashboardReport(format = 'xlsx') {
+    const project = this.currentProject() || this.objects[0];
+    if (!project) return this.showToast('Выберите проект для экспорта', 'error');
+    const token = localStorage.getItem('cm_token');
+    try {
+      const response = await fetch('/api/v1/dashboard/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ project_id: project.id, role: this.currentDashboardRole(), format }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || `Ошибка ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `dashboard_${String(project.name || project.id).replace(/\s+/g, '_')}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      this.showToast(e.message || 'Ошибка экспорта дашборда', 'error');
+    }
+  }
+
   openDashboardForm() {
     this.modalMode = 'addDashboard';
     document.getElementById('modalTitle').textContent = 'Добавить дашборд';
@@ -2558,9 +2829,10 @@ class ConstructionManagerUI {
       }
       
       try {
-        await api('/objects', 'POST', { name: data.name, address: data.address, budget: Number(data.budget || 0), status: data.status || 'planning' });
+        const created = await api('/objects', 'POST', { name: data.name, address: data.address, budget: Number(data.budget || 0), status: this.normalizeProjectStatus(data.status || 'draft') });
+        await this.syncTopLevelProject(created?.id || created?.project_id, data, created || {});
         await this.loadObjects();
-        this.selectedObjectId = this.objects.at(-1)?.id || this.selectedObjectId;
+        this.setActiveProject(created?.id || this.objects.at(-1)?.id || this.selectedObjectId, { render: false });
         this.closeModal();
         this.renderProjectTree();
         this.switchView('projects', 'Проекты');
@@ -2592,11 +2864,12 @@ class ConstructionManagerUI {
           name: data.name,
           address: data.address,
           budget: Number(data.budget || 0),
-          status: data.status || 'planning',
+          status: this.normalizeProjectStatus(data.status || 'draft'),
           start_date: data.start_date || null,
           planned_end_date: data.planned_end_date || null,
           description: data.description || '',
         });
+        await this.syncTopLevelProject(this.state.editProjectId, data, this.currentProject() || {});
         this.showToast('Сохранено', 'success');
         await this.loadObjects();
         this.renderProjectTree();
