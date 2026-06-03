@@ -1,8 +1,5 @@
-# AI-система управления строительством
+# Система управления строительством
 AI-система управления строительством — это интеллектуальное приложение на базе Go для автоматизации процессов в строительстве. Оно помогает управлять проектами, оптимизировать ресурсы и минимизировать риски. Проект разработан как pet-project для демонстрации.
-
-<img width="1536" height="1024" alt="Мониторинг строительства в дополненной реальности" src="https://github.com/user-attachments/assets/596fe410-6c69-428a-be58-b0fea31c9019" />
-<img width="1536" height="1024" alt="Проверка труб на строительном объекте" src="https://github.com/user-attachments/assets/e4c9bc4b-a15a-4a0a-82fb-b9852a0f7ba7" />
 
 Возможности
 - проектирование стадия П и Р: актуальный архив исходных данных, проектной и рабочей документации объекта
@@ -16,7 +13,6 @@ AI-система управления строительством — это �
 
 ![image](https://github.com/user-attachments/assets/a8c36882-3b2f-488f-8006-97c514431c61)
 
-
  Архитектура
 - Микросервисная архитектура: Разделена на модули (сметы, графики, ресурсы, риски), каждый как отдельный сервис в Go.
 - Backend: Go с использованием Gin для API, GORM для ORM (база данных PostgreSQL).
@@ -26,7 +22,8 @@ AI-система управления строительством — это �
 - Развертывание: Docker для контейнеризации, Kubernetes для оркестрации в продакшене.
 
 ![Wow6w](https://github.com/user-attachments/assets/0ce081b5-5dfb-4e2f-aa21-7c4999170200)
-
+<img width="1536" height="1024" alt="Мониторинг строительства в дополненной реальности" src="https://github.com/user-attachments/assets/596fe410-6c69-428a-be58-b0fea31c9019" />
+<img width="1536" height="1024" alt="Проверка труб на строительном объекте" src="https://github.com/user-attachments/assets/e4c9bc4b-a15a-4a0a-82fb-b9852a0f7ba7" />
 
  Инструменты и технологии
 - Язык: Go 1.22+
@@ -40,37 +37,6 @@ AI-система управления строительством — это �
 ![wTuKd](https://github.com/user-attachments/assets/c7be690b-54f6-46cb-a4ae-621fa30dfe56)
 
 
- Установка
-1. Клонировать репозиторий
-[https://github.com/AleksKAG/AI-construction-manager.git](https://github.com/AleksKAG/AI-construction-manager.git)
-cd AI-construction-manager
-2. Настроить окружение
-cp .env.example .env
-Отредактировать .env: БД, Telegram токен, Yandex API ключи
-3. Запустить через Docker Compose
-docker-compose -f deployments/docker-compose.yml up --build
-4. Или локально (требуется PostgreSQL)
-go mod tidy
-go run cmd/api/main.go
-5. Примеры запросов
-curl -X POST http://localhost:8080/api/v1/projects \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Жилой дом","address":"Москва, Ленина 10","budget":15000000}'
-
-curl -X POST http://localhost:8080/api/v1/projects/1/schedule \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tasks": [
-      {"id":1, "name":"Земляные работы", "duration_days":5, "dependencies":[]},
-      {"id":2, "name":"Фундамент", "duration_days":7, "dependencies":[1]},
-      {"id":3, "name":"Стены", "duration_days":14, "dependencies":[2]}
-    ]
-  }'
-
-curl -X POST http://localhost:8080/api/v1/projects/1/estimate \
-  -H "Content-Type: application/json" \
-  -d '{"tasks": [...]}'
-  
 
 ## Что обновлено (S3 + документооборот)
 
