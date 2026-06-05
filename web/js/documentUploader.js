@@ -8,7 +8,21 @@ function getPickedProjectId() {
   return (select?.value || manual?.value || '').trim();
 }
 
+function isDocumentationView() {
+  const activeView = document.querySelector('.menu-item[data-view].active')?.dataset.view;
+  return activeView === 'fileManager' || window.ui?.currentView === 'fileManager';
+}
+
+function syncUploaderVisibility() {
+  if (!isDocumentationView()) {
+    document.getElementById('s3UploaderCard')?.remove();
+    return;
+  }
+  ensureUploaderUI();
+}
+
 function ensureUploaderUI() {
+  if (!isDocumentationView()) return;
   if (document.getElementById('s3UploaderCard')) return;
   const content = document.getElementById('contentArea');
   if (!content) return;
@@ -18,6 +32,10 @@ function ensureUploaderUI() {
   card.innerHTML = `
     <h3>Проверка S3 загрузки</h3>
     <div class="notice" style="margin-bottom:12px;">Выберите проект и файл: загрузка идёт напрямую в S3, затем подтверждается на backend.</div>
+    <div id="s3Dropzone" style="border:2px dashed var(--line,#cbd5e1);border-radius:10px;padding:18px;text-align:center;margin-bottom:12px;background:#f8fafc;cursor:pointer;">
+      <strong>Перетащите документ сюда</strong><br>
+      <span class="muted">или нажмите на область для выбора файла. Если обозначение пустое, оно будет взято из имени файла.</span>
+    </div>
     <div class="form-grid two">
       <label>Проект (рекомендуется из списка)
         <select id="s3ProjectSelect"><option value="">Загрузка списка проектов...</option></select>
@@ -46,6 +64,23 @@ function ensureUploaderUI() {
   content.prepend(card);
 
   card.querySelector('#s3UploadBtn').addEventListener('click', startUpload);
+  const dropzone = card.querySelector('#s3Dropzone');
+  const fileInput = card.querySelector('#s3FileInput');
+  dropzone?.addEventListener('click', () => fileInput?.click());
+  dropzone?.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.style.background = 'var(--accent-light,#eff6ff)'; });
+  dropzone?.addEventListener('dragleave', () => { dropzone.style.background = '#f8fafc'; });
+  dropzone?.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.style.background = '#f8fafc';
+    const [file] = Array.from(e.dataTransfer?.files || []);
+    if (!file || !fileInput) return;
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    fileInput.files = transfer.files;
+    const designationInput = document.getElementById('s3Designation');
+    if (designationInput && !designationInput.value.trim()) designationInput.value = file.name.replace(/\.[^.]+$/, '');
+    startUpload();
+  });
   card.querySelector('#s3CompareBtn').addEventListener('click', loadVersions);
   card.querySelector('#s3ProjectSelect').addEventListener('change', (e) => {
     const manual = document.getElementById('s3ProjectId');
@@ -187,6 +222,6 @@ async function loadVersions() {
   }
 }
 
-const observer = new MutationObserver(() => ensureUploaderUI());
+const observer = new MutationObserver(() => syncUploaderVisibility());
 observer.observe(document.body, { childList: true, subtree: true });
-ensureUploaderUI();
+syncUploaderVisibility();

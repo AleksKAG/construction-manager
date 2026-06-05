@@ -105,6 +105,8 @@ func main() {
 			&models.DocStageRRevision{},
 			&models.SvorRecord{},
 			&models.SvorHistory{},
+			&models.AIConversation{},
+			&models.AIMessage{},
 		); err != nil {
 			logger.Fatal("Minimum migration failed: ", err)
 		}
@@ -242,7 +244,13 @@ func main() {
 			secured.GET("/dashboard/progress/:id", handlers.GetDashboardProgress(repo))
 			secured.GET("/dashboard/metrics/:projectId", handlers.GetDashboardMetrics(repo))
 			secured.POST("/agent/summary", handlers.GetAgentSummary(repo))
-			secured.POST("/ai/chat", handlers.GetAIChatStream(repo))
+			secured.POST("/ai/chat", handlers.GetAIChatStream(repo, db))
+			secured.GET("/ai/conversations", handlers.ListAIConversations(db))
+			secured.POST("/ai/conversations", handlers.CreateAIConversation(db))
+			secured.PATCH("/ai/conversations/:id", handlers.UpdateAIConversation(db))
+			secured.DELETE("/ai/conversations/:id", handlers.DeleteAIConversation(db))
+			secured.GET("/ai/conversations/:id/messages", handlers.ListAIMessages(db))
+			secured.POST("/ai/conversations/:id/messages", handlers.CreateAIMessage(db))
 			secured.GET("/estimates/:projectId/summary", handlers.GetEstimateSummary(repo))
 			secured.GET("/tep/:projectId", handlers.GetTEPByProject(repo))
 			secured.PATCH("/tep/:id", handlers.PatchTEPRow(repo))

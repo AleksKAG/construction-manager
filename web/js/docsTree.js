@@ -21,7 +21,7 @@ export class DocsTree {
     el.className = 'fms-tree';
     el.innerHTML = '<span class="muted">📂 Загрузка дерева...</span>';
     try {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token') || '';
+      const token = localStorage.getItem('cm_token') || localStorage.getItem('authToken') || localStorage.getItem('token') || '';
       const res = await fetch(`/api/v1/files/tree?project_id=${encodeURIComponent(this.projectId)}&path=${encodeURIComponent(path)}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
