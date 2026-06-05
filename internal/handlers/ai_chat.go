@@ -1,18 +1,22 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/AleksKAG/construction-manager/internal/models"
 	"github.com/AleksKAG/construction-manager/internal/repository"
 	"github.com/AleksKAG/construction-manager/internal/services"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type aiChatRequest struct {
 	Message        string `json:"message" binding:"required"`
+	ConversationID string `json:"conversation_id"`
 	Screenshot     string `json:"screenshot"`
 	ScreenshotName string `json:"screenshot_name"`
 	Context        struct {
@@ -22,7 +26,7 @@ type aiChatRequest struct {
 	} `json:"context"`
 }
 
-func GetAIChatStream(repo repository.Repository) gin.HandlerFunc {
+func GetAIChatStream(repo repository.Repository, db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Content-Type", "text/event-stream")
 		c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -75,6 +79,11 @@ func GetAIChatStream(repo repository.Repository) gin.HandlerFunc {
 			flusher.Flush()
 			time.Sleep(12 * time.Millisecond)
 		}
+		if convID := strings.TrimSpace(req.ConversationID); convID != "" && db != nil {
+			if userID := currentUserID(c); userID != "" && conversationBelongsToUser(c.Request.Context(), db, convID, userID) {
+				_ = saveAIStreamMessages(c.Request.Context(), db, convID, userID, req, answer)
+			}
+		}
 		fmt.Fprint(c.Writer, "event: done\ndata: {\"status\":\"ok\"}\n\n")
 		flusher.Flush()
 	}
@@ -110,4 +119,40 @@ func defaultIfEmpty(v, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+func saveAIStreamMessages(ctx context.Context, db *gorm.DB, conversationID, userID string, req aiChatRequest, answer string) error {
+	now := time.Now().UTC()
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		userMsg := models.AIMessage{
+			ConversationID: conversationID,
+			UserID:         userID,
+			Role:           "user",
+			Text:           strings.TrimSpace(req.Message),
+			Metadata: models.JSONMap{
+				"route":           req.Context.Route,
+				"selected_doc":    req.Context.SelectedDoc,
+				"screenshot_name": req.ScreenshotName,
+				"has_screenshot":  strings.TrimSpace(req.Screenshot) != "",
+			},
+		}
+		if err := tx.Create(&userMsg).Error; err != nil {
+			return err
+		}
+		assistantMsg := models.AIMessage{
+			ConversationID: conversationID,
+			UserID:         userID,
+			Role:           "assistant",
+			Text:           strings.TrimSpace(answer),
+			Metadata: models.JSONMap{
+				"route": req.Context.Route,
+			},
+		}
+		if err := tx.Create(&assistantMsg).Error; err != nil {
+			return err
+		}
+		return tx.Model(&models.AIConversation{}).
+			Where("id = ? AND user_id = ?", conversationID, userID).
+			Updates(map[string]any{"updated_at": now}).Error
+	})
 }

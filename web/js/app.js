@@ -647,6 +647,7 @@ class ConstructionManagerUI {
       svorMain: { primary: '+ Создать СВОР', secondary: 'Экспорт отчета XLSX' },
       svorHistory: { primary: 'Обновить', secondary: '' },
       svorDashboard: { primary: 'Обновить', secondary: '' },
+      aiAssistant: { primary: '', secondary: '' },
       auth: { primary: '+ Добавить пользователя', secondary: 'Обновить' },
     };
 
@@ -658,6 +659,7 @@ class ConstructionManagerUI {
         : { primary: '+ Добавить строку', secondary: 'Экспорт в CSV' };
     }
     primary.textContent = cfg.primary;
+    primary.style.display = cfg.primary ? '' : 'none';
     if (cfg.secondary) {
       secondary.style.display = 'inline-block';
       secondary.textContent = cfg.secondary;
@@ -668,6 +670,7 @@ class ConstructionManagerUI {
     this.renderNonce += 1;
     this.configureHeader();
     if (this.currentView === 'fileManager') return this.renderFileManager();
+    if (this.currentView === 'aiAssistant') return this.renderAIChatView();
     if (this.currentView === 'projects') return this.renderProjects();
     if (this.currentView === 'designSchedule') return this.renderTemplateScreen('design_schedule', 'График ПД');
     if (this.currentView === 'tep') return this.renderTemplateScreen('tep', 'ТЭП');
@@ -3595,12 +3598,256 @@ class ConstructionManagerUI {
 
   isKnownView(view) {
     return [
-      'home', 'projects', 'auth', 'tep', 'designSchedule', 'designScheduleR', 'smrSchedule', 'estimate',
+      'home', 'projects', 'auth', 'aiAssistant', 'tep', 'designSchedule', 'designScheduleR', 'smrSchedule', 'estimate',
       'docsStageP', 'docsStageR', 'registryP', 'registryR', 'workforceDaily',
       'protocolInternal', 'protocolDesign', 'protocolSMR',
       'docsArchiveIrd', 'docsArchiveSurvey', 'docsArchiveStageP', 'docsArchiveExpertise', 'docsArchiveStageR', 'docsTemplates',
       'svorMain', 'svorHistory', 'svorDashboard',
     ].includes(view);
+  }
+
+  getAIChatStorageKey() {
+    const userId = this.currentUser?.id || localStorage.getItem('cm_user_id') || 'anonymous';
+    return `cm_ai_conversations:${userId}`;
+  }
+
+  loadLocalAIConversations() {
+    try {
+      return JSON.parse(localStorage.getItem(this.getAIChatStorageKey()) || '[]');
+    } catch (_) {
+      return [];
+    }
+  }
+
+  saveLocalAIConversations(conversations) {
+    localStorage.setItem(this.getAIChatStorageKey(), JSON.stringify(conversations));
+  }
+
+  async loadAIConversations() {
+    try {
+      const payload = await api('/ai/conversations');
+      return { rows: payload.data || [], backend: true };
+    } catch (error) {
+      return { rows: this.loadLocalAIConversations(), backend: false, error };
+    }
+  }
+
+  async loadAIConversationMessages(conversationId, backend) {
+    if (!conversationId) return [];
+    if (!backend) {
+      return this.loadLocalAIConversations().find((c) => c.id === conversationId)?.messages || [];
+    }
+    try {
+      const payload = await api(`/ai/conversations/${conversationId}/messages`);
+      return payload.data || [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  currentProjectName() {
+    const project = this.objects.find((o) => String(o.id) === String(this.selectedObjectId));
+    return project?.name || project?.title || 'Без проекта';
+  }
+
+  async ensureActiveAIConversation(conversations, backend) {
+    if (!conversations.length) {
+      const draft = {
+        title: 'Новая беседа',
+        project_id: String(this.selectedObjectId || ''),
+        project_name: this.currentProjectName(),
+        messages: [],
+        updated_at: new Date().toISOString(),
+      };
+      if (backend) {
+        try {
+          const created = await api('/ai/conversations', 'POST', draft);
+          conversations.push(created);
+          localStorage.setItem('cm_ai_active_conversation', created.id);
+          return created.id;
+        } catch (_) {}
+      }
+      const id = `conv_${Date.now()}`;
+      conversations.push({ id, ...draft });
+      this.saveLocalAIConversations(conversations);
+      localStorage.setItem('cm_ai_active_conversation', id);
+      return id;
+    }
+    const savedId = localStorage.getItem('cm_ai_active_conversation');
+    return conversations.find((c) => c.id === savedId)?.id || conversations[0].id;
+  }
+
+  async renderAIChatView() {
+    const content = document.getElementById('contentArea');
+    if (!content) return;
+    content.innerHTML = '<article class="card col-12"><div class="notice">Загрузка истории ИИ-ассистента...</div></article>';
+
+    let { rows: conversations, backend, error } = await this.loadAIConversations();
+    const activeId = await this.ensureActiveAIConversation(conversations, backend);
+    ({ rows: conversations, backend, error } = await this.loadAIConversations());
+    const active = conversations.find((c) => c.id === activeId) || conversations[0];
+    const activeMessages = await this.loadAIConversationMessages(active?.id, backend);
+    if (active) active.messages = activeMessages;
+
+    const groups = conversations.reduce((acc, conv) => {
+      const key = conv.project_name || 'Без проекта';
+      (acc[key] ||= []).push(conv);
+      return acc;
+    }, {});
+    const groupedHtml = Object.entries(groups).map(([projectName, rows]) => `
+      <div class="ai-chat-project">
+        <div class="section-title">${this.escapeHtml(projectName)}</div>
+        ${rows.map((conv) => `
+          <button class="menu-item ai-chat-conv ${conv.id === active?.id ? 'active' : ''}" data-ai-conversation="${conv.id}">
+            <span>${this.escapeHtml(conv.title || 'Беседа')}</span>
+            <small>${conv.updated_at ? new Date(conv.updated_at).toLocaleString('ru') : ''}</small>
+          </button>`).join('')}
+      </div>`).join('');
+    const messages = (active?.messages || []).map((m) => `
+      <div class="ai-msg ${m.role}"><div class="ai-bubble">${this.escapeHtml(m.text || '')}</div></div>
+    `).join('');
+
+    content.innerHTML = `
+      <article class="card col-12 ai-chat-page">
+        <div class="docs-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;">
+          <div>
+            <h3>🤖 ИИ ассистент</h3>
+            <p class="muted" style="margin:4px 0 0;">История хранится на сервере по пользователю и группируется по выбранному строительному объекту.</p>
+          </div>
+          <button class="primary" id="aiNewConversationBtn">+ Новая беседа</button>
+        </div>
+        ${backend ? '' : `<div class="notice" style="margin-bottom:12px;">Серверная история временно недоступна${error?.message ? `: ${this.escapeHtml(error.message)}` : ''}. Используется локальный резерв.</div>`}
+        <div class="ai-chat-layout" style="display:grid;grid-template-columns:minmax(220px,280px) 1fr;gap:16px;align-items:start;">
+          <aside class="card" style="box-shadow:none;margin:0;max-height:62vh;overflow:auto;">
+            ${groupedHtml || '<div class="notice">Бесед пока нет.</div>'}
+          </aside>
+          <section class="card" style="box-shadow:none;margin:0;min-height:62vh;display:flex;flex-direction:column;">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px;">
+              <div><b>${this.escapeHtml(active?.title || 'Беседа')}</b><br><span class="muted">Проект: ${this.escapeHtml(active?.project_name || this.currentProjectName())}</span></div>
+              <button class="ghost" id="aiDeleteConversationBtn">Удалить</button>
+            </div>
+            <div id="aiChatPageMessages" class="ai-messages" style="flex:1;max-height:50vh;overflow:auto;">${messages || '<div class="notice">Задайте вопрос по выбранному строительному объекту.</div>'}</div>
+            <div class="ai-input-row" style="margin-top:12px;">
+              <input id="aiChatPageInput" class="ai-input" placeholder="Спросите по проекту, документации, ИРД, ведомостям...">
+              <button id="aiChatPageSendBtn" class="primary">➤</button>
+            </div>
+          </section>
+        </div>
+      </article>`;
+
+    document.querySelectorAll('[data-ai-conversation]').forEach((btn) => btn.addEventListener('click', () => {
+      localStorage.setItem('cm_ai_active_conversation', btn.dataset.aiConversation);
+      this.renderAIChatView();
+    }));
+    document.getElementById('aiNewConversationBtn')?.addEventListener('click', async () => {
+      const draft = { title: 'Новая беседа', project_id: String(this.selectedObjectId || ''), project_name: this.currentProjectName() };
+      if (backend) {
+        try {
+          const created = await api('/ai/conversations', 'POST', draft);
+          localStorage.setItem('cm_ai_active_conversation', created.id);
+          this.renderAIChatView();
+          return;
+        } catch (_) {}
+      }
+      const next = this.loadLocalAIConversations();
+      const id = `conv_${Date.now()}`;
+      next.unshift({ id, ...draft, messages: [], updated_at: new Date().toISOString() });
+      this.saveLocalAIConversations(next);
+      localStorage.setItem('cm_ai_active_conversation', id);
+      this.renderAIChatView();
+    });
+    document.getElementById('aiDeleteConversationBtn')?.addEventListener('click', async () => {
+      if (!active?.id) return;
+      if (backend) {
+        try { await api(`/ai/conversations/${active.id}`, 'DELETE'); } catch (_) {}
+      } else {
+        this.saveLocalAIConversations(this.loadLocalAIConversations().filter((c) => c.id !== active.id));
+      }
+      localStorage.removeItem('cm_ai_active_conversation');
+      this.renderAIChatView();
+    });
+    const send = () => this.sendAIChatPageMessage(active?.id, backend, active);
+    document.getElementById('aiChatPageSendBtn')?.addEventListener('click', send);
+    document.getElementById('aiChatPageInput')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    const box = document.getElementById('aiChatPageMessages');
+    if (box) box.scrollTop = box.scrollHeight;
+  }
+
+  renderAIChatMessages(conversation) {
+    const box = document.getElementById('aiChatPageMessages');
+    if (!box || !conversation) return;
+    box.innerHTML = (conversation.messages || []).map((m) => `
+      <div class="ai-msg ${m.role}"><div class="ai-bubble">${this.escapeHtml(m.text || '')}</div></div>
+    `).join('') || '<div class="notice">Задайте вопрос по выбранному строительному объекту.</div>';
+    box.scrollTop = box.scrollHeight;
+  }
+
+  saveLocalAIMessage(conversationId, role, text) {
+    const conversations = this.loadLocalAIConversations();
+    const conv = conversations.find((c) => c.id === conversationId);
+    if (!conv) return;
+    conv.messages ||= [];
+    conv.messages.push({ role, text, created_at: new Date().toISOString() });
+    if (role === 'user' && conv.title === 'Новая беседа') conv.title = text.slice(0, 48);
+    conv.updated_at = new Date().toISOString();
+    this.saveLocalAIConversations(conversations);
+  }
+
+  async sendAIChatPageMessage(conversationId, backend, activeConversation) {
+    const input = document.getElementById('aiChatPageInput');
+    const text = input?.value.trim();
+    if (!text || !conversationId || !activeConversation) return;
+    input.value = '';
+
+    activeConversation.messages ||= [];
+    activeConversation.messages.push({ role: 'user', text });
+    activeConversation.messages.push({ role: 'assistant', text: '' });
+    this.renderAIChatMessages(activeConversation);
+    if (!backend) this.saveLocalAIMessage(conversationId, 'user', text);
+
+    const token = localStorage.getItem('cm_token');
+    let assistantText = '';
+    try {
+      const res = await fetch('/api/v1/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          conversation_id: backend ? conversationId : '',
+          message: text,
+          context: { project_id: activeConversation.project_id || String(this.selectedObjectId || ''), route: 'aiAssistant' },
+        }),
+      });
+      if (!res.ok || !res.body) throw new Error(`AI недоступен (${res.status})`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        for (const evt of events) {
+          const eventMatch = evt.match(/event:\s*(\w+)/);
+          const eventType = eventMatch?.[1] || 'token';
+          if (eventType !== 'token') continue;
+          const dataMatch = evt.match(/data:\s*(.*)/);
+          const data = dataMatch?.[1] || '{}';
+          try { assistantText += JSON.parse(data).text || ''; } catch (_) { assistantText += data; }
+          activeConversation.messages[activeConversation.messages.length - 1].text = assistantText;
+          this.renderAIChatMessages(activeConversation);
+        }
+      }
+      if (!backend) this.saveLocalAIMessage(conversationId, 'assistant', assistantText);
+      if (backend && activeConversation.title === 'Новая беседа') {
+        try { await api(`/ai/conversations/${conversationId}`, 'PATCH', { title: text.slice(0, 48) }); } catch (_) {}
+      }
+    } catch (error) {
+      const msg = error?.message || 'Не удалось получить ответ.';
+      activeConversation.messages[activeConversation.messages.length - 1].text = msg;
+      this.renderAIChatMessages(activeConversation);
+      if (!backend) this.saveLocalAIMessage(conversationId, 'assistant', msg);
+    }
   }
 
   async renderFileManager() {
@@ -3654,7 +3901,7 @@ class ConstructionManagerUI {
     const tbody = document.getElementById('fmsTableBody');
     if (!tbody || !this.selectedObjectId) return;
     try {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token') || '';
+      const token = localStorage.getItem('cm_token') || localStorage.getItem('authToken') || localStorage.getItem('token') || '';
       const res = await fetch(`/api/v1/files?project_id=${encodeURIComponent(this.selectedObjectId)}&path=${encodeURIComponent(path)}`,
         { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       const data = res.ok ? await res.json() : [];

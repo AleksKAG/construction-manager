@@ -256,3 +256,18 @@ button[disabled].mini { opacity: .45; cursor: not-allowed; }
 .project-switcher { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-left: auto; }
 .project-switcher select { min-width: 220px; max-width: 340px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; background: #fff; color: var(--text); }
 @media (max-width: 760px) { .project-switcher { order: 3; width: 100%; margin-left: 0; } .project-switcher select { flex: 1; min-width: 0; } }
+.ai-chat-page .ai-chat-conv {
+  width: 100%;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0;
+  text-align: left;
+}
+.ai-chat-page .ai-chat-conv small {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+@media (max-width: 820px) {
+  .ai-chat-page .ai-chat-layout { grid-template-columns: 1fr !important; }
+}
