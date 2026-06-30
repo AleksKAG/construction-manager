@@ -31,7 +31,7 @@ func NewFileService(s3Client *s3.Client, repo repository.FileRepository, db *gor
 }
 
 // RequestUpload — создаёт временную запись файла и возвращает presigned PUT URL
-func (s *FileService) RequestUpload(ctx context.Context, projectID, name, contentType string, size int64, idempotencyKey string) (map[string]any, error) {
+func (s *FileService) RequestUpload(ctx context.Context, projectID, name, contentType string, size int64, idempotencyKey, designation, targetRegistry string) (map[string]any, error) {
 	projectID = strings.TrimSpace(projectID)
 	name = sanitizeFileName(name)
 	if projectID == "" || name == "" {
@@ -82,6 +82,8 @@ func (s *FileService) RequestUpload(ctx context.Context, projectID, name, conten
 		ContentType:    contentType,
 		Status:         "pending",
 		Version:        1,
+		DocType:        strings.TrimSpace(targetRegistry),
+		Designation:    strings.TrimSpace(designation),
 		IdempotencyKey: idempotencyKey,
 	}
 
@@ -196,11 +198,9 @@ func (s *FileService) ConfirmUpload(ctx context.Context, fileID, action, folderP
 }
 
 // GetTree — возвращает дерево папок/файлов
-func (s *FileService) GetTree(ctx context.Context, projectID, path string) ([]models.FileTreeNode, error) {
-	if path == "" {
-		path = "/"
-	}
-	return s.repo.GetTree(projectID, path)
+func (s *FileService) GetTree(ctx context.Context, projectID, folderPath string) ([]models.FileTreeNode, error) {
+	folderPath = normalizeFolderPath(folderPath)
+	return s.repo.GetTree(projectID, folderPath)
 }
 
 // GetVersions — история версий файла
@@ -210,10 +210,30 @@ func (s *FileService) GetVersions(ctx context.Context, fileID string) ([]models.
 
 // MoveFile — переместить файл в другую папку
 func (s *FileService) MoveFile(ctx context.Context, fileID, newPath string) error {
-	if newPath == "" {
-		return fmt.Errorf("new_path is required")
-	}
+	newPath = normalizeFolderPath(newPath)
 	return s.repo.MoveFile(fileID, newPath)
+}
+
+// CreateFolder — создать пустую папку FMS.
+func (s *FileService) CreateFolder(ctx context.Context, projectID, parentPath, name, createdBy string) (*models.FileFolder, error) {
+	projectID = strings.TrimSpace(projectID)
+	parentPath = normalizeFolderPath(parentPath)
+	name = sanitizeFolderName(name)
+	if projectID == "" || name == "" {
+		return nil, fmt.Errorf("project_id and folder name are required")
+	}
+	return s.repo.CreateFolder(projectID, parentPath, name, createdBy)
+}
+
+// MoveFolder — переместить папку вместе с дочерними папками и файлами.
+func (s *FileService) MoveFolder(ctx context.Context, projectID, folderPath, newParentPath string) error {
+	projectID = strings.TrimSpace(projectID)
+	folderPath = normalizeFolderPath(folderPath)
+	newParentPath = normalizeFolderPath(newParentPath)
+	if projectID == "" || folderPath == "/" || strings.HasPrefix(newParentPath+"/", strings.TrimRight(folderPath, "/")+"/") {
+		return fmt.Errorf("invalid folder move")
+	}
+	return s.repo.MoveFolder(projectID, folderPath, newParentPath)
 }
 
 // DeleteFile — мягкое или жёсткое удаление
@@ -226,10 +246,8 @@ func (s *FileService) DeleteFile(ctx context.Context, fileID string, hard bool) 
 
 // ListFiles — список файлов проекта (опционально фильтр по пути)
 func (s *FileService) ListFiles(ctx context.Context, projectID, path string) ([]models.File, error) {
-	if path != "" && path != "/" {
-		return s.repo.GetByProjectAndPath(projectID, path)
-	}
-	return s.repo.GetByProject(projectID)
+	path = normalizeFolderPath(path)
+	return s.repo.GetByProjectAndPath(projectID, path)
 }
 
 // SetStatus — обновить статус файла
@@ -250,6 +268,17 @@ func presignedTTL() time.Duration {
 		return 15 * time.Minute
 	}
 	return ttl
+}
+
+func sanitizeFolderName(name string) string {
+	name = strings.TrimSpace(path.Base(strings.ReplaceAll(name, "\\", "/")))
+	name = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == '/' || r == '\\' {
+			return -1
+		}
+		return r
+	}, name)
+	return strings.Trim(name, " .")
 }
 
 func sanitizeFileName(name string) string {
