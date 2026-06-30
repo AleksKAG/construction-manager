@@ -59,6 +59,45 @@ func (h *FileHandler) ListFiles(c *gin.Context) {
 	c.JSON(http.StatusOK, files)
 }
 
+// CreateFolder godoc
+// POST /api/v1/files/folders
+func (h *FileHandler) CreateFolder(c *gin.Context) {
+	var req struct {
+		ProjectID  string `json:"project_id" binding:"required"`
+		ParentPath string `json:"parent_path"`
+		Name       string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	folder, err := h.service.CreateFolder(c.Request.Context(), req.ProjectID, req.ParentPath, req.Name, c.GetString("user_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, folder)
+}
+
+// MoveFolder godoc
+// PATCH /api/v1/files/folders/move
+func (h *FileHandler) MoveFolder(c *gin.Context) {
+	var req struct {
+		ProjectID     string `json:"project_id" binding:"required"`
+		FolderPath    string `json:"folder_path" binding:"required"`
+		NewParentPath string `json:"new_parent_path" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.service.MoveFolder(c.Request.Context(), req.ProjectID, req.FolderPath, req.NewParentPath); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 // RequestUpload godoc
 // POST /api/v1/files/upload
 func (h *FileHandler) RequestUpload(c *gin.Context) {
@@ -68,6 +107,8 @@ func (h *FileHandler) RequestUpload(c *gin.Context) {
 		ContentType    string `json:"content_type"`
 		Size           int64  `json:"size"`
 		IdempotencyKey string `json:"idempotency_key"`
+		Designation    string `json:"designation"`
+		TargetRegistry string `json:"target_registry"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -77,7 +118,7 @@ func (h *FileHandler) RequestUpload(c *gin.Context) {
 		req.ContentType = "application/octet-stream"
 	}
 
-	result, err := h.service.RequestUpload(c.Request.Context(), req.ProjectID, req.Name, req.ContentType, req.Size, req.IdempotencyKey)
+	result, err := h.service.RequestUpload(c.Request.Context(), req.ProjectID, req.Name, req.ContentType, req.Size, req.IdempotencyKey, req.Designation, req.TargetRegistry)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -112,20 +153,20 @@ func (h *FileHandler) StreamEvents(c *gin.Context) {
 			return false
 		case <-timer.C:
 			aiResult := map[string]any{
-				"confidence":           0.85,
-				"suggested_folder":     "/documents/stage-p",
-				"version_action":       "new",
-				"explanation_for_user": "Документ распознан как проектная документация. Рекомендуется разместить в папке /documents/stage-p.",
+				"confidence":            0.85,
+				"suggested_folder":      "/documents/stage-p",
+				"version_action":        "new",
+				"explanation_for_user":  "Документ распознан как проектная документация. Рекомендуется разместить в папке /documents/stage-p.",
 				"requires_human_review": true,
 			}
 			data, _ := json.Marshal(aiResult)
 
 			// Обновляем статус на requires_confirmation
 			aiMeta := map[string]any{
-				"confidence":           0.85,
-				"suggested_folder":     "/documents/stage-p",
-				"version_action":       "new",
-				"explanation_for_user": "Документ распознан как проектная документация. Рекомендуется разместить в папке /documents/stage-p.",
+				"confidence":            0.85,
+				"suggested_folder":      "/documents/stage-p",
+				"version_action":        "new",
+				"explanation_for_user":  "Документ распознан как проектная документация. Рекомендуется разместить в папке /documents/stage-p.",
 				"requires_human_review": true,
 			}
 			_ = h.service.SetStatus(c.Request.Context(), fileID, "requires_confirmation")

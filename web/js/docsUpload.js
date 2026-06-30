@@ -30,6 +30,20 @@ export class AIUploadModal {
     overlay.innerHTML = `
       <div class="ai-modal">
         <h4>⬆️ Загрузить документ</h4>
+        <div class="form-grid two" style="margin-bottom:16px;">
+          <label>Обозначение (шифр)
+            <input id="aiDesignation" class="input" placeholder="ПЕР-ОНК-РД-23-1-КР1">
+          </label>
+          <label>Целевой реестр
+            <select id="aiTargetRegistry" class="input">
+              <option value="ird">ИРД</option>
+              <option value="pd">Ведомость ПД</option>
+              <option value="rd">Ведомость РД</option>
+              <option value="estimate">Сметы</option>
+              <option value="other">Прочее</option>
+            </select>
+          </label>
+        </div>
         <div id="aiUploadDropzone" style="border:2px dashed var(--line,#cbd5e1);border-radius:10px;
           padding:32px;text-align:center;cursor:pointer;margin-bottom:16px;transition:background .2s;">
           <div style="font-size:2rem;">📄</div>
@@ -70,6 +84,9 @@ export class AIUploadModal {
     statusEl.innerHTML = `<div class="ai-explanation">⏳ Получение presigned URL для <b>${file.name}</b>...</div>`;
 
     try {
+      const designation = this._overlay?.querySelector('#aiDesignation')?.value?.trim() || file.name.replace(/\.[^.]+$/, '');
+      const targetRegistry = this._overlay?.querySelector('#aiTargetRegistry')?.value || 'other';
+
       // 1. Запрос presigned URL
       const res = await this._api('/files/upload', {
         method: 'POST',
@@ -79,6 +96,8 @@ export class AIUploadModal {
           name: file.name,
           content_type: file.type || 'application/octet-stream',
           size: file.size,
+          designation,
+          target_registry: targetRegistry,
           idempotency_key: `${Date.now()}-${file.name}`
         })
       });
@@ -182,16 +201,19 @@ export class AIUploadModal {
 
     const actions = this._overlay?.querySelector('.modal-actions');
     if (!actions) return;
+    const archiveLabel = data.version_action === 'archive_as_previous'
+      ? 'Сохранить как архив'
+      : '📦 Архив';
     actions.innerHTML = `
       <button class="primary" id="aiActionNew">📄 Новый файл</button>
       <button class="secondary" id="aiActionUpdate">🔄 Новая версия</button>
-      <button class="ghost" id="aiActionArchive">📦 Архив</button>
+      <button class="ghost" id="aiActionArchive">${archiveLabel}</button>
       <button class="ghost" id="aiCancelBtn2">Отмена</button>`;
 
     const getFolder = () => this._overlay?.querySelector('#aiTargetFolder')?.value || '/documents';
     actions.querySelector('#aiActionNew').addEventListener('click', () => this._confirm(fileId, 'new', getFolder()));
     actions.querySelector('#aiActionUpdate').addEventListener('click', () => this._confirm(fileId, 'update', getFolder()));
-    actions.querySelector('#aiActionArchive').addEventListener('click', () => this._confirm(fileId, 'archive', getFolder()));
+    actions.querySelector('#aiActionArchive').addEventListener('click', () => this._confirm(fileId, data.version_action === 'archive_as_previous' ? 'archive_as_previous' : 'archive', getFolder()));
     actions.querySelector('#aiCancelBtn2').addEventListener('click', () => this._removeOverlay());
   }
 

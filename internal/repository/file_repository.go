@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AleksKAG/construction-manager/internal/models"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -15,6 +16,8 @@ type FileRepository interface {
 	GetByProject(projectID string) ([]models.File, error)
 	GetByProjectAndPath(projectID, folderPath string) ([]models.File, error)
 	GetTree(projectID, path string) ([]models.FileTreeNode, error)
+	CreateFolder(projectID, parentPath, name, createdBy string) (*models.FileFolder, error)
+	MoveFolder(projectID, folderPath, newParentPath string) error
 	UpdateStatus(id, status string, aiMeta map[string]any) error
 	UpdateStorageKey(id, storageKey, tempKey string) error
 	MoveFile(id, newPath string) error
@@ -68,8 +71,18 @@ func (r *fileRepo) GetTree(projectID, path string) ([]models.FileTreeNode, error
 		return nil, err
 	}
 
-	// Строим дерево папок
 	folderSet := map[string]bool{}
+	var folders []models.FileFolder
+	if r.db.Migrator().HasTable(&models.FileFolder{}) {
+		if err := r.db.Where("project_id = ?", projectID).Order("path").Find(&folders).Error; err != nil {
+			return nil, err
+		}
+		for _, folder := range folders {
+			folderSet[folder.Path] = true
+		}
+	}
+
+	// Добавляем виртуальные папки из путей файлов для обратной совместимости.
 	for _, f := range files {
 		parts := strings.Split(strings.Trim(f.FolderPath, "/"), "/")
 		cumPath := ""
@@ -86,28 +99,19 @@ func (r *fileRepo) GetTree(projectID, path string) ([]models.FileTreeNode, error
 		}
 	}
 
-	// Если path == "/" — возвращаем корневые папки и файлы
 	var nodes []models.FileTreeNode
-
-	// Добавляем подпапки
 	for folder := range folderSet {
-		parent := parentPath(folder)
-		if parent == path {
-			nodes = append(nodes, models.FileTreeNode{
-				Type: "folder",
-				Name: lastName(folder),
-				Path: folder,
-			})
+		if parentPath(folder) == path {
+			nodes = append(nodes, models.FileTreeNode{Type: "folder", Name: lastName(folder), Path: folder})
 		}
 	}
 
-	// Добавляем файлы в текущей папке
 	for _, f := range files {
 		if f.FolderPath == path {
 			nodes = append(nodes, models.FileTreeNode{
 				Type:    "file",
 				Name:    f.Name,
-				Path:    f.FolderPath + "/" + f.Name,
+				Path:    strings.TrimRight(f.FolderPath, "/") + "/" + f.Name,
 				FileID:  f.ID,
 				Status:  f.Status,
 				DocType: f.DocType,
@@ -117,6 +121,64 @@ func (r *fileRepo) GetTree(projectID, path string) ([]models.FileTreeNode, error
 	}
 
 	return nodes, nil
+}
+
+func (r *fileRepo) CreateFolder(projectID, parentPath, name, createdBy string) (*models.FileFolder, error) {
+	folderPath := strings.TrimRight(parentPath, "/") + "/" + strings.Trim(name, " /")
+	if parentPath == "/" {
+		folderPath = "/" + strings.Trim(name, " /")
+	}
+	folder := &models.FileFolder{
+		ID:         uuid.NewString(),
+		ProjectID:  projectID,
+		ParentPath: parentPath,
+		Path:       folderPath,
+		Name:       strings.Trim(name, " /"),
+		CreatedBy:  createdBy,
+	}
+	err := r.db.Where("project_id = ? AND path = ?", projectID, folder.Path).FirstOrCreate(folder).Error
+	return folder, err
+}
+
+func (r *fileRepo) MoveFolder(projectID, folderPath, newParentPath string) error {
+	newPath := strings.TrimRight(newParentPath, "/") + "/" + lastName(folderPath)
+	if newParentPath == "/" {
+		newPath = "/" + lastName(folderPath)
+	}
+	oldPrefix := strings.TrimRight(folderPath, "/") + "/"
+	newPrefix := strings.TrimRight(newPath, "/") + "/"
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.FileFolder{}).Where("project_id = ? AND path = ?", projectID, folderPath).Updates(map[string]any{"parent_path": newParentPath, "path": newPath, "updated_at": time.Now().UTC()}).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(`
+			UPDATE file_folders
+			SET
+				parent_path = CASE
+					WHEN parent_path = ? THEN ?
+					WHEN parent_path LIKE ? THEN ? || substring(parent_path from ?)
+					ELSE parent_path
+				END,
+				path = ? || substring(path from ?),
+				updated_at = ?
+			WHERE project_id = ? AND path LIKE ?`,
+			folderPath, newPath, oldPrefix+"%", newPrefix, len(oldPrefix)+1,
+			newPrefix, len(oldPrefix)+1, time.Now().UTC(), projectID, oldPrefix+"%",
+		).Error; err != nil {
+			return err
+		}
+		return tx.Exec(`
+			UPDATE files
+			SET
+				folder_path = CASE
+					WHEN folder_path = ? THEN ?
+					ELSE ? || substring(folder_path from ?)
+				END,
+				updated_at = ?
+			WHERE project_id = ? AND (folder_path = ? OR folder_path LIKE ?)`,
+			folderPath, newPath, newPrefix, len(oldPrefix)+1, time.Now().UTC(), projectID, folderPath, oldPrefix+"%",
+		).Error
+	})
 }
 
 func (r *fileRepo) UpdateStatus(id, status string, aiMeta map[string]any) error {

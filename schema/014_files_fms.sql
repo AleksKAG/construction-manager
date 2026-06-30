@@ -69,3 +69,17 @@ CREATE TABLE IF NOT EXISTS ai_analysis_results (
 
 -- Добавить link_references в document_registries если не существует
 ALTER TABLE document_registries ADD COLUMN IF NOT EXISTS link_references JSONB;
+
+-- file_folders — явные пустые папки FMS для drill-down навигации
+CREATE TABLE IF NOT EXISTS file_folders (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    project_id TEXT NOT NULL,
+    parent_path TEXT NOT NULL DEFAULT '/',
+    path TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_by TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(project_id, path)
+);
+CREATE INDEX IF NOT EXISTS idx_file_folders_project_parent ON file_folders(project_id, parent_path);

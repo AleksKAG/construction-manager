@@ -3853,17 +3853,22 @@ class ConstructionManagerUI {
   async renderFileManager() {
     const content = document.getElementById('contentArea');
     if (!content) return;
+    this.fmsCurrentPath = this.fmsCurrentPath || '/';
     content.innerHTML = `
       <article class="card col-12">
-        <div class="docs-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h3>📄 Документация</h3>
-          <div style="display:flex;gap:8px;">
-            <button class="primary" id="fmsUploadBtn">⬆️ Загрузить</button>
+        <div class="docs-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+          <div>
+            <h3 style="margin-bottom:6px;">📄 Документация</h3>
+            <div id="fmsBreadcrumbs" class="muted"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="primary" id="fmsUploadBtn">⬆️ Загрузить документ</button>
+            <button class="secondary" id="fmsCreateFolderBtn">➕ Создать папку</button>
             <button class="ghost" id="fmsRefreshBtn">🔄</button>
             <input id="fmsSearch" class="input" placeholder="🔍 Поиск..." style="width:200px;">
           </div>
         </div>
-        <div id="fmsTree" style="margin-bottom:16px;"></div>
+        <div class="notice" style="margin-bottom:12px;">Навигация работает в стиле File Explorer: откройте папку кликом по названию, используйте хлебные крошки для возврата.</div>
         <div class="table-wrap">
           <table class="table">
             <thead><tr>
@@ -3875,20 +3880,31 @@ class ConstructionManagerUI {
         </div>
       </article>`;
     if (this.selectedObjectId) {
-      const { DocsTree } = await import('./docsTree.js');
-      const tree = new DocsTree(this.selectedObjectId, 'fmsTree', (path) => this.loadFmsFiles(path));
-      await tree.loadNode('/');
-      await this.loadFmsFiles('/');
+      await this.loadFmsFiles(this.fmsCurrentPath);
     } else {
       const tbody = document.getElementById('fmsTableBody');
       if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="muted">Выберите проект для работы с документацией</td></tr>';
     }
     document.getElementById('fmsUploadBtn')?.addEventListener('click', async () => {
       const { AIUploadModal } = await import('./docsUpload.js');
-      const modal = new AIUploadModal(this.selectedObjectId, () => this.renderFileManager());
+      const modal = new AIUploadModal(this.selectedObjectId, () => this.loadFmsFiles(this.fmsCurrentPath || '/'));
       modal.show();
     });
-    document.getElementById('fmsRefreshBtn')?.addEventListener('click', () => this.renderFileManager());
+    document.getElementById('fmsCreateFolderBtn')?.addEventListener('click', async () => {
+      const name = prompt('Название папки');
+      if (!name) return;
+      try {
+        await api('/files/folders', 'POST', {
+          project_id: this.selectedObjectId,
+          parent_path: this.fmsCurrentPath || '/',
+          name,
+        });
+        await this.loadFmsFiles(this.fmsCurrentPath || '/');
+      } catch (e) {
+        alert('Не удалось создать папку: ' + e.message);
+      }
+    });
+    document.getElementById('fmsRefreshBtn')?.addEventListener('click', () => this.loadFmsFiles(this.fmsCurrentPath || '/'));
     document.getElementById('fmsSearch')?.addEventListener('input', (e) => {
       const q = e.target.value.toLowerCase();
       document.querySelectorAll('#fmsTableBody tr').forEach(tr => {
@@ -3897,32 +3913,79 @@ class ConstructionManagerUI {
     });
   }
 
+  renderFmsBreadcrumbs(path = '/') {
+    const el = document.getElementById('fmsBreadcrumbs');
+    if (!el) return;
+    const parts = String(path || '/').split('/').filter(Boolean);
+    const crumbs = [{ label: 'Проект', path: '/' }];
+    let acc = '';
+    parts.forEach((part) => { acc += '/' + part; crumbs.push({ label: part, path: acc }); });
+    el.innerHTML = crumbs.map((c, i) => `<button class="ghost sm" data-fms-crumb="${this.escapeHtml(c.path)}">${this.escapeHtml(c.label)}</button>${i < crumbs.length - 1 ? ' › ' : ''}`).join('');
+    el.querySelectorAll('[data-fms-crumb]').forEach(btn => btn.addEventListener('click', () => this.loadFmsFiles(btn.dataset.fmsCrumb || '/')));
+  }
+
   async loadFmsFiles(path = '/') {
     const tbody = document.getElementById('fmsTableBody');
     if (!tbody || !this.selectedObjectId) return;
+    this.fmsCurrentPath = path || '/';
+    this.renderFmsBreadcrumbs(this.fmsCurrentPath);
     try {
       const token = localStorage.getItem('cm_token') || localStorage.getItem('authToken') || localStorage.getItem('token') || '';
-      const res = await fetch(`/api/v1/files?project_id=${encodeURIComponent(this.selectedObjectId)}&path=${encodeURIComponent(path)}`,
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      const data = res.ok ? await res.json() : [];
-      const rows = Array.isArray(data) ? data : (data?.items || []);
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="muted">Файлов нет</td></tr>';
-        return;
-      }
-      tbody.innerHTML = rows.map(f => `
-        <tr>
-          <td>${f.name}</td>
-          <td><span class="tag">${f.doc_type || '—'}</span></td>
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const [treeRes, filesRes] = await Promise.all([
+        fetch(`/api/v1/files/tree?project_id=${encodeURIComponent(this.selectedObjectId)}&path=${encodeURIComponent(this.fmsCurrentPath)}`, { headers }),
+        fetch(`/api/v1/files?project_id=${encodeURIComponent(this.selectedObjectId)}&path=${encodeURIComponent(this.fmsCurrentPath)}`, { headers }),
+      ]);
+      if (treeRes.status === 401 || filesRes.status === 401) throw new Error('Сессия истекла, войдите снова');
+      const treeData = treeRes.ok ? await treeRes.json() : [];
+      const fileData = filesRes.ok ? await filesRes.json() : [];
+      const nodes = Array.isArray(treeData) ? treeData : (treeData?.nodes || treeData?.items || []);
+      const folders = nodes.filter(n => n.type === 'folder');
+      const files = Array.isArray(fileData) ? fileData : (fileData?.items || []);
+      const rowsHtml = [];
+      folders.forEach(folder => rowsHtml.push(`
+        <tr data-kind="folder">
+          <td><button class="ghost sm" data-fms-folder="${this.escapeHtml(folder.path)}">📁 ${this.escapeHtml(folder.name)}</button></td>
+          <td><span class="tag">Папка</span></td><td>—</td><td>—</td><td>—</td><td>—</td>
+          <td><button class="ghost sm" data-fms-move-folder="${this.escapeHtml(folder.path)}">Переместить</button></td>
+        </tr>`));
+      files.forEach(f => rowsHtml.push(`
+        <tr data-kind="file">
+          <td><button class="ghost sm" data-fms-open="${this.escapeHtml(f.id)}">📄 ${this.escapeHtml(f.name)}</button></td>
+          <td><span class="tag">${this.escapeHtml(f.doc_type || '—')}</span></td>
           <td>${formatBytes(f.size_bytes)}</td>
           <td>v${f.version}</td>
-          <td><span class="tag tag-${f.status}">${statusLabel(f.status)}</span></td>
+          <td><span class="tag tag-${this.escapeHtml(f.status)}">${statusLabel(f.status)}</span></td>
           <td>${f.updated_at ? new Date(f.updated_at).toLocaleDateString('ru') : '—'}</td>
           <td>
-            <button class="ghost sm" data-fms-download="${f.id}">📥</button>
-            <button class="ghost sm" data-fms-versions="${f.id}" data-name="${f.name}">📜</button>
+            <button class="ghost sm" data-fms-download="${this.escapeHtml(f.id)}">📥</button>
+            <button class="ghost sm" data-fms-move="${this.escapeHtml(f.id)}">Переместить</button>
+            <button class="ghost sm" data-fms-versions="${this.escapeHtml(f.id)}" data-name="${this.escapeHtml(f.name)}">Подробно</button>
           </td>
-        </tr>`).join('');
+        </tr>`));
+      tbody.innerHTML = rowsHtml.length ? rowsHtml.join('') : '<tr><td colspan="7" class="muted">В папке нет файлов</td></tr>';
+      tbody.querySelectorAll('[data-fms-folder]').forEach(btn => btn.addEventListener('click', () => this.loadFmsFiles(btn.dataset.fmsFolder || '/')));
+      tbody.querySelectorAll('[data-fms-move-folder]').forEach(btn => btn.addEventListener('click', async () => {
+        const newParentPath = prompt('Новая родительская директория', '/');
+        if (!newParentPath) return;
+        try {
+          await api('/files/folders/move', 'PATCH', {
+            project_id: this.selectedObjectId,
+            folder_path: btn.dataset.fmsMoveFolder,
+            new_parent_path: newParentPath,
+          });
+          await this.loadFmsFiles(this.fmsCurrentPath || '/');
+        } catch (e) {
+          alert('Не удалось переместить папку: ' + e.message);
+        }
+      }));
+      tbody.querySelectorAll('[data-fms-open]').forEach(btn => btn.addEventListener('click', () => alert('Превью будет открыто для файла ' + btn.dataset.fmsOpen)));
+      tbody.querySelectorAll('[data-fms-move]').forEach(btn => btn.addEventListener('click', async () => {
+        const newPath = prompt('Новая директория', this.fmsCurrentPath || '/');
+        if (!newPath) return;
+        await api(`/files/${btn.dataset.fmsMove}/move`, 'PATCH', { new_path: newPath });
+        await this.loadFmsFiles(this.fmsCurrentPath || '/');
+      }));
       tbody.querySelectorAll('[data-fms-versions]').forEach(btn => {
         btn.addEventListener('click', async () => {
           const { VersionHistoryModal } = await import('./docsVersions.js');
@@ -3931,7 +3994,7 @@ class ConstructionManagerUI {
         });
       });
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="7" class="muted">Ошибка: ${e.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="muted">Ошибка: ${this.escapeHtml(e.message)}</td></tr>`;
     }
   }
 

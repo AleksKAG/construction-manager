@@ -87,6 +87,7 @@ func main() {
 			&models.SvorHistory{},
 			&models.IrdDocument{},
 			&models.Document{},
+			&models.FileFolder{},
 		); err != nil {
 			logger.Fatal("Migration failed: ", err)
 		}
@@ -107,6 +108,7 @@ func main() {
 			&models.SvorHistory{},
 			&models.AIConversation{},
 			&models.AIMessage{},
+			&models.FileFolder{},
 		); err != nil {
 			logger.Fatal("Minimum migration failed: ", err)
 		}
@@ -326,6 +328,8 @@ func main() {
 			files := secured.Group("/files")
 			{
 				files.GET("/tree", fileHandler.GetTree)
+				files.POST("/folders", fileHandler.CreateFolder)
+				files.PATCH("/folders/move", fileHandler.MoveFolder)
 				files.GET("", fileHandler.ListFiles)
 				files.POST("/upload", fileHandler.RequestUpload)
 				files.GET("/events/:id", fileHandler.StreamEvents)

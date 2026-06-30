@@ -64,6 +64,20 @@ type File struct {
 
 func (File) TableName() string { return "files" }
 
+// FileFolder — явная папка FMS, чтобы поддерживать пустые директории и хлебные крошки.
+type FileFolder struct {
+	ID         string    `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID  string    `gorm:"type:text;not null;index:idx_file_folders_project_path,unique" json:"project_id"`
+	ParentPath string    `gorm:"type:text;not null;default:'/'" json:"parent_path"`
+	Path       string    `gorm:"type:text;not null;index:idx_file_folders_project_path,unique" json:"path"`
+	Name       string    `gorm:"type:text;not null" json:"name"`
+	CreatedBy  string    `gorm:"type:text" json:"created_by,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+func (FileFolder) TableName() string { return "file_folders" }
+
 // FileVersion — история версий файла
 type FileVersion struct {
 	ID         string    `gorm:"primaryKey;type:text" json:"id"`
